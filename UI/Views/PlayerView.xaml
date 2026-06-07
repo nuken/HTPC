@@ -1,0 +1,9 @@
+<UserControl x:Class="HTPC.UI.Views.PlayerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:HTPC.UI.Controls"
+             Background="Black">
+    <Grid>
+        <controls:MpvVideoHost x:Name="VideoSurface" />
+    </Grid>
+</UserControl>
