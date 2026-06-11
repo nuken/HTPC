@@ -4,6 +4,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using HTPC.Core.Models;
+using HTPC.Services;
+using HTPC.UI.Controls;
 
 namespace HTPC.UI.Views;
 
@@ -11,60 +13,99 @@ public partial class PlayerView : UserControl
 {
     public event EventHandler? OnBackRequested;
 
+    private readonly MpvPlaybackService _mpvService;
+    private readonly MpvVideoHost _videoHost;
     private readonly DispatcherTimer _uiHideTimer;
+    
     private MediaItem? _currentMedia;
     private bool _isPlaying = false;
     private bool _isDragging = false;
+    private bool _isMpvAttached = false;
 
-    public PlayerView()
+    public PlayerView(MpvPlaybackService mpvService)
     {
         InitializeComponent();
+        _mpvService = mpvService;
 
-        // Initialize the 3-second auto-hide timer
+        _videoHost = new MpvVideoHost();
+        VideoSurface.Children.Add(_videoHost);
+
+        this.Loaded += OnLoaded;
+        
+        // THE FIX: Listen to every single layout update to guarantee positioning
+        this.LayoutUpdated += PlayerView_LayoutUpdated;
+
         _uiHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _uiHideTimer.Tick += UiHideTimer_Tick;
     }
 
-    // Matches your existing MainWindow call!
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (!_isMpvAttached)
+        {
+            _mpvService.AttachToWindow(_videoHost.Handle);
+            _isMpvAttached = true;
+        }
+    }
+
+    // THE MASTER SIZING LOGIC
+    private void PlayerView_LayoutUpdated(object? sender, EventArgs e)
+    {
+        if (RootGrid.ActualHeight > 0 && BottomBar.ActualHeight > 0)
+        {
+            // 1. Force the invisible overlay to match the video surface EXACTLY
+            ControlsOverlay.Width = RootGrid.ActualWidth;
+            ControlsOverlay.Height = RootGrid.ActualHeight;
+
+            // 2. UNBREAKABLE MATH: Push the bottom bar down from the TOP of the screen.
+            // Screen Height - Bar Height - 40px Margin = Perfect Bottom Placement!
+            double exactTopMargin = RootGrid.ActualHeight - BottomBar.ActualHeight - 40;
+            
+            if (exactTopMargin > 0)
+            {
+                BottomBar.Margin = new Thickness(40, exactTopMargin, 40, 0);
+            }
+        }
+    }
+
     public void StartPlayback(MediaItem media)
     {
         _currentMedia = media;
         
-        // Update UI Titles
         ShowTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? "" : media.Title;
         MediaTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? media.Title : media.CurrentShowTitle;
 
-        // TODO: Initialize MPV here using media.StreamUrl
-        // _mpvPlayer.Load(media.StreamUrl);
-        // _mpvPlayer.Play();
+        _mpvService.PlayMedia(media);
 
         _isPlaying = true;
         PlayPauseButton.Content = "⏸";
 
+        ControlsPopup.IsOpen = true;
         ShowControls();
     }
 
-    // Matches your existing MainWindow Escape Key logic!
     public void StopPlayback()
     {
-        // TODO: Stop MPV playback and clear memory
-        // _mpvPlayer.Stop();
+        _mpvService.Stop();
         
+        ControlsPopup.IsOpen = false;
         _uiHideTimer.Stop();
+        
         this.Cursor = Cursors.Arrow;
     }
 
     // --- AUTO-HIDE LOGIC ---
 
-    private void UserControl_MouseMove(object sender, MouseEventArgs e)
+    private void ControlsOverlay_MouseMove(object sender, MouseEventArgs e)
     {
         ShowControls();
     }
 
     private void ShowControls()
     {
-        ControlsOverlay.Visibility = Visibility.Visible;
-        this.Cursor = Cursors.Arrow;
+        TopBar.Visibility = Visibility.Visible;
+        BottomBar.Visibility = Visibility.Visible;
+        ControlsOverlay.Cursor = Cursors.Arrow;
         
         _uiHideTimer.Stop();
         _uiHideTimer.Start();
@@ -74,11 +115,11 @@ public partial class PlayerView : UserControl
     {
         _uiHideTimer.Stop();
         
-        // Only hide if we aren't actively dragging the timeline
         if (!_isDragging)
         {
-            ControlsOverlay.Visibility = Visibility.Collapsed;
-            this.Cursor = Cursors.None;
+            TopBar.Visibility = Visibility.Collapsed;
+            BottomBar.Visibility = Visibility.Collapsed;
+            ControlsOverlay.Cursor = Cursors.None;
         }
     }
 
@@ -88,13 +129,13 @@ public partial class PlayerView : UserControl
     {
         if (_isPlaying)
         {
-            // Pause MPV
+            _mpvService.Pause();
             _isPlaying = false;
             PlayPauseButton.Content = "▶";
         }
         else
         {
-            // Play MPV
+            _mpvService.Resume();
             _isPlaying = true;
             PlayPauseButton.Content = "⏸";
         }
@@ -116,8 +157,6 @@ public partial class PlayerView : UserControl
     private void Timeline_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
         _isDragging = false;
-        // Tell MPV to seek to TimelineSlider.Value
-        
-        ShowControls(); // Restart the hide timer
+        ShowControls(); 
     }
 }
