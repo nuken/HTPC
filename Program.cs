@@ -65,11 +65,12 @@ public class Program
                 services.AddHttpClient();
                 
                 services.AddSingleton<MediaLibraryService>();
-                
+                services.AddTransient<HTPC.UI.Views.MoviesView>();
                 services.AddTransient<HTPC.UI.Views.DashboardView>();
                 services.AddTransient<HTPC.UI.Views.PlayerView>();
                 services.AddTransient<HTPC.UI.Views.SettingsView>();
                 services.AddSingleton<HTPC.UI.Windows.MainWindow>();
+				services.AddTransient<HTPC.UI.Views.GuideView>();
             });
 
         using var host = hostBuilder.Build();

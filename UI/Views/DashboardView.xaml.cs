@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using HTPC.Core.Models;
 using HTPC.Services;
+using System.Windows.Input;
 
 namespace HTPC.UI.Views;
 
@@ -12,6 +13,8 @@ public partial class DashboardView : UserControl
     public event EventHandler<MediaItem>? OnPlayRequested;
     public event EventHandler? OnExitRequested;
     public event EventHandler? OnSettingsRequested;
+	public event EventHandler? OnGuideRequested;
+	public event EventHandler? OnMoviesRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -20,6 +23,8 @@ public partial class DashboardView : UserControl
     // ObservableCollection automatically notifies the UI when items are added/removed
     public ObservableCollection<MediaItem> FeaturedMovies { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> LiveChannels { get; set; } = new ObservableCollection<MediaItem>();
+	public ObservableCollection<MediaItem> RecentEpisodes { get; set; } = new ObservableCollection<MediaItem>();
+    public ObservableCollection<MediaItem> RecentVideos { get; set; } = new ObservableCollection<MediaItem>();
 
     public DashboardView(MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -32,6 +37,15 @@ public partial class DashboardView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+		var activeServer = _serverManager.GetActiveServer();
+        
+        // Redirect to settings if the database is empty or missing a server IP
+        if (activeServer == null || string.IsNullOrWhiteSpace(activeServer.IpAddress))
+        {
+            OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+            return; // Stop trying to load the dashboard!
+        } 
+		
         if (FeaturedMovies.Count > 0) return;
 
         // 1. Fetch Collections
@@ -43,7 +57,6 @@ public partial class DashboardView : UserControl
         CollectionDropdown.ItemsSource = collections;
 
         // 2. Select the saved collection from the database
-        var activeServer = _serverManager.GetActiveServer();
         var savedCollection = collections.FirstOrDefault(c => c.Id == activeServer?.DefaultCollectionId);
         
         CollectionDropdown.SelectedItem = savedCollection ?? allChannels;
@@ -54,6 +67,16 @@ public partial class DashboardView : UserControl
         
         var movies = await _libraryService.GetFeaturedMoviesAsync();
         foreach (var movie in movies) FeaturedMovies.Add(movie);
+		
+		// Load Recent Episodes
+            var episodes = await _libraryService.GetRecentEpisodesAsync(15);
+            RecentEpisodes.Clear();
+            foreach (var ep in episodes) RecentEpisodes.Add(ep);
+
+            // Load Recent Videos
+            var videos = await _libraryService.GetRecentVideosAsync(15);
+            RecentVideos.Clear();
+            foreach (var vid in videos) RecentVideos.Add(vid);
     }
 
     private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -77,6 +100,11 @@ public partial class DashboardView : UserControl
             LiveChannels.Add(channel);
         }
     }
+	
+	private void Guide_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        OnGuideRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     private void ExitApp_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
@@ -86,6 +114,11 @@ public partial class DashboardView : UserControl
     private void Settings_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+    }
+	
+	private void Movies_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     }
 
     // --- NATIVE NAVIGATION FIXES ---
@@ -132,6 +165,34 @@ public partial class DashboardView : UserControl
                 // Jump right by roughly 3 posters
                 viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset + 600);
             }
+        }
+    }
+	
+	private void HorizontalList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // If the user holds Shift, scroll the horizontal row
+        if (Keyboard.Modifiers == ModifierKeys.Shift)
+        {
+            if (sender is ListBox listBox)
+            {
+                var viewer = GetScrollViewer(listBox);
+                if (viewer != null)
+                {
+                    viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - e.Delta);
+                    e.Handled = true;
+                }
+            }
+        }
+        else
+        {
+            // Otherwise, pass the scroll event UP to the Main ScrollViewer so the whole page moves naturally!
+            e.Handled = true;
+            var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+            {
+                RoutedEvent = UIElement.MouseWheelEvent,
+                Source = sender
+            };
+            MainScroll.RaiseEvent(eventArg);
         }
     }
 

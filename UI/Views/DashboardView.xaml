@@ -4,7 +4,7 @@
              Background="#0F0F0F" Foreground="White">
 
     <UserControl.Resources>
-	    <Style TargetType="ComboBox">
+        <Style TargetType="ComboBox">
             <Setter Property="Background" Value="#2A2A2A"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -33,11 +33,9 @@
                                     </ControlTemplate>
                                 </ToggleButton.Template>
                             </ToggleButton>
-                            
                             <ContentPresenter IsHitTestVisible="False" Margin="15,10,35,10" VerticalAlignment="Center" TextElement.Foreground="White"
                                               Content="{TemplateBinding SelectionBoxItem}" 
                                               ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
-                            
                             <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
                                 <Border Background="#1E1E1E" CornerRadius="8" Margin="0,5,0,0" MinWidth="{TemplateBinding ActualWidth}" Padding="0,5">
                                     <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Auto">
@@ -50,26 +48,31 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
         <Style x:Key="ScrollButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#E6000000"/>
+            <Setter Property="Background" Value="#99000000"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontSize" Value="30"/>
-            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="46"/>
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bgBorder" Background="{TemplateBinding Background}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border x:Name="bgBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="23">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-4,0,0"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bgBorder" Property="Background" Value="#404040"/> 
+                                <Setter TargetName="bgBorder" Property="Background" Value="#CC202020"/>
+                                <Setter TargetName="bgBorder" Property="BorderBrush" Value="#88FFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bgBorder" Property="Background" Value="#202020"/>
+                                <Setter TargetName="bgBorder" Property="Background" Value="#E6000000"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -78,36 +81,43 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="40">
+    <Grid Margin="0,40,0,0">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>    </Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,30">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30">
             <Border Background="White" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand">
                 <TextBlock Text="Home" Foreground="Black" FontWeight="Bold" FontSize="16"/>
             </Border>
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand">
+            
+            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Guide_Click">
+                <TextBlock Text="Guide" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
+            </Border>
+
+            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Movies_Click">
                 <TextBlock Text="Movies" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
             </Border>
+			
             <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Settings_Click">
                 <TextBlock Text="Settings" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
             </Border>
+			
             <Border Background="#8B0000" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="ExitApp_Click">
                 <TextBlock Text="Exit HTPC" Foreground="White" FontWeight="Bold" FontSize="16"/>
             </Border>
         </StackPanel>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-            <StackPanel>
+        <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <StackPanel Margin="0,0,0,60">
                 
-                <Grid Margin="0,0,0,15">
+                <Grid Margin="40,0,40,15">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    
-                    <TextBlock Grid.Column="0" Text="Live TV" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0"/>
-                    
+                    <TextBlock Grid.Column="0" Text="Fav TV" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0"/>
                     <ComboBox x:Name="CollectionDropdown" Grid.Column="1" Width="220" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold"
                               DisplayMemberPath="Name" SelectionChanged="CollectionDropdown_SelectionChanged">
                         <ComboBox.ItemContainerStyle>
@@ -136,12 +146,14 @@
                     </ComboBox>
                 </Grid>
                 
-                <Grid Margin="0,0,0,40">
+                <Grid Margin="0,0,0,60">
                     <ListBox x:Name="LiveTvList" ItemsSource="{Binding LiveChannels}" Background="Transparent" BorderThickness="0" 
-                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                             PreviewMouseWheel="HorizontalList_PreviewMouseWheel">
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <VirtualizingStackPanel Orientation="Horizontal" IsVirtualizing="True" VirtualizationMode="Recycling"/>
+                                <VirtualizingStackPanel Orientation="Horizontal" Margin="40,15,40,25"/>
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
                         <ListBox.ItemContainerStyle>
@@ -156,7 +168,7 @@
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="FocusRing" BorderThickness="4" BorderBrush="Transparent" CornerRadius="12" Padding="2">
+                                            <Border x:Name="FocusRing" BorderThickness="4" BorderBrush="Transparent" CornerRadius="16" Padding="2">
                                                 <ContentPresenter/>
                                             </Border>
                                             <ControlTemplate.Triggers>
@@ -171,19 +183,22 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Width="200" Height="300" Background="#1E1E1E" CornerRadius="8" Cursor="Hand">
+                                <Border Width="200" Height="300" Background="#1E1E1E" CornerRadius="12" Cursor="Hand">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
+                                    </Border.Effect>
                                     <Grid>
-                                        <Image Source="{Binding CurrentShowPosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True" Opacity="0.8">
+                                        <Image Source="{Binding CurrentShowPosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True" Opacity="0.9">
                                             <Image.Clip>
-                                                <RectangleGeometry Rect="0,0,200,300" RadiusX="8" RadiusY="8"/>
+                                                <RectangleGeometry Rect="0,0,200,300" RadiusX="12" RadiusY="12"/>
                                             </Image.Clip>
                                         </Image>
                                         
-                                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Background="#B3000000" CornerRadius="8,0,8,0" Padding="5">
+                                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Background="#CCEEEEEE" CornerRadius="12,0,12,0" Padding="8">
                                             <Image Source="{Binding PosterUrl, IsAsync=True}" Width="40" Height="40" Stretch="Uniform"/>
                                         </Border>
                                         
-                                        <Border VerticalAlignment="Bottom" Background="#CC000000" Padding="10">
+                                        <Border VerticalAlignment="Bottom" Background="#CC0F0F0F" Padding="12" CornerRadius="0,0,12,12">
                                             <TextBlock Text="{Binding CurrentShowTitle}" Foreground="White" FontWeight="Bold" FontSize="14" TextWrapping="Wrap" MaxHeight="60" TextTrimming="CharacterEllipsis"/>
                                         </Border>
                                     </Grid>
@@ -191,18 +206,19 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-
-                    <Button Content="&lt;" Width="50" HorizontalAlignment="Left" Style="{StaticResource ScrollButtonStyle}" Click="ScrollLeft_Click" Tag="{Binding ElementName=LiveTvList}"/>
-                    <Button Content="&gt;" Width="50" HorizontalAlignment="Right" Style="{StaticResource ScrollButtonStyle}" Click="ScrollRight_Click" Tag="{Binding ElementName=LiveTvList}"/>
+                    <Button Content="&lt;" HorizontalAlignment="Left" Margin="15,0,0,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollLeft_Click" Tag="{Binding ElementName=LiveTvList}"/>
+                    <Button Content="&gt;" HorizontalAlignment="Right" Margin="0,0,15,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollRight_Click" Tag="{Binding ElementName=LiveTvList}"/>
                 </Grid>              
 
-                <TextBlock Text="Featured Movies" FontSize="22" FontWeight="Bold" Margin="0,0,0,15"/>
-                <Grid Margin="0,0,0,40">
+                <TextBlock Text="Recent Movies" FontSize="24" FontWeight="Bold" Margin="40,0,0,10"/>
+                <Grid Margin="0,0,0,60">
                     <ListBox x:Name="MoviesList" ItemsSource="{Binding FeaturedMovies}" Background="Transparent" BorderThickness="0" 
-                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                             PreviewMouseWheel="HorizontalList_PreviewMouseWheel">
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <VirtualizingStackPanel Orientation="Horizontal" IsVirtualizing="True" VirtualizationMode="Recycling"/>
+                                <VirtualizingStackPanel Orientation="Horizontal" Margin="40,15,40,25"/>
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
                         <ListBox.ItemContainerStyle>
@@ -217,7 +233,7 @@
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="FocusRing" BorderThickness="4" BorderBrush="Transparent" CornerRadius="12" Padding="2">
+                                            <Border x:Name="FocusRing" BorderThickness="4" BorderBrush="Transparent" CornerRadius="16" Padding="2">
                                                 <ContentPresenter/>
                                             </Border>
                                             <ControlTemplate.Triggers>
@@ -232,14 +248,17 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Width="200" Height="300" Background="#1E1E1E" CornerRadius="8" Cursor="Hand">
+                                <Border Width="200" Height="300" Background="#1E1E1E" CornerRadius="12" Cursor="Hand">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
+                                    </Border.Effect>
                                     <Grid>
                                         <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True">
                                             <Image.Clip>
-                                                <RectangleGeometry Rect="0,0,200,300" RadiusX="8" RadiusY="8"/>
+                                                <RectangleGeometry Rect="0,0,200,300" RadiusX="12" RadiusY="12"/>
                                             </Image.Clip>
                                         </Image>
-                                        <Border VerticalAlignment="Bottom" Background="#B3000000" Padding="10">
+                                        <Border VerticalAlignment="Bottom" Background="#B3000000" Padding="12" CornerRadius="0,0,12,12">
                                             <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                         </Border>
                                     </Grid>
@@ -247,9 +266,134 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+                    <Button Content="&lt;" HorizontalAlignment="Left" Margin="15,0,0,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollLeft_Click" Tag="{Binding ElementName=MoviesList}"/>
+                    <Button Content="&gt;" HorizontalAlignment="Right" Margin="0,0,15,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollRight_Click" Tag="{Binding ElementName=MoviesList}"/>
+                </Grid>
 
-                    <Button Content="&lt;" Width="50" HorizontalAlignment="Left" Style="{StaticResource ScrollButtonStyle}" Click="ScrollLeft_Click" Tag="{Binding ElementName=MoviesList}"/>
-                    <Button Content="&gt;" Width="50" HorizontalAlignment="Right" Style="{StaticResource ScrollButtonStyle}" Click="ScrollRight_Click" Tag="{Binding ElementName=MoviesList}"/>
+                <TextBlock Text="Recent Episodes" FontSize="24" FontWeight="Bold" Margin="40,0,0,10"/>
+                <Grid Margin="0,0,0,60">
+                    <ListBox x:Name="EpisodesList" ItemsSource="{Binding RecentEpisodes}" Background="Transparent" BorderThickness="0" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                             PreviewMouseWheel="HorizontalList_PreviewMouseWheel">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel Orientation="Horizontal" Margin="40,15,40,25"/>
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,20,0"/>
+                                <EventSetter Event="PreviewKeyDown" Handler="ListBoxItem_PreviewKeyDown"/>
+                                <EventSetter Event="MouseLeftButtonUp" Handler="ListBoxItem_MouseUp"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="FocusRing" BorderThickness="4" BorderBrush="Transparent" CornerRadius="16" Padding="2">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                    <Setter TargetName="FocusRing" Property="BorderBrush" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="300" Height="170" Background="#1E1E1E" CornerRadius="12" Cursor="Hand">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
+                                    </Border.Effect>
+                                    <Grid>
+                                        <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True" Opacity="0.9">
+                                            <Image.Clip>
+                                                <RectangleGeometry Rect="0,0,300,170" RadiusX="12" RadiusY="12"/>
+                                            </Image.Clip>
+                                        </Image>
+                                        <Border VerticalAlignment="Bottom" Background="#CC0F0F0F" Padding="12" CornerRadius="0,0,12,12">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" Foreground="#AAAAAA" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding CurrentShowTitle}" Foreground="White" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Content="&lt;" HorizontalAlignment="Left" Margin="15,0,0,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollLeft_Click" Tag="{Binding ElementName=EpisodesList}"/>
+                    <Button Content="&gt;" HorizontalAlignment="Right" Margin="0,0,15,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollRight_Click" Tag="{Binding ElementName=EpisodesList}"/>
+                </Grid>
+
+                <TextBlock Text="Recent Videos" FontSize="24" FontWeight="Bold" Margin="40,0,0,10"/>
+                <Grid Margin="0,0,0,40">
+                    <ListBox x:Name="VideosList" ItemsSource="{Binding RecentVideos}" Background="Transparent" BorderThickness="0" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                             PreviewMouseWheel="HorizontalList_PreviewMouseWheel">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel Orientation="Horizontal" Margin="40,15,40,25"/>
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,20,0"/>
+                                <EventSetter Event="PreviewKeyDown" Handler="ListBoxItem_PreviewKeyDown"/>
+                                <EventSetter Event="MouseLeftButtonUp" Handler="ListBoxItem_MouseUp"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="FocusRing" BorderThickness="4" BorderBrush="Transparent" CornerRadius="16" Padding="2">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                    <Setter TargetName="FocusRing" Property="BorderBrush" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="300" Height="170" Background="#1E1E1E" CornerRadius="12" Cursor="Hand">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
+                                    </Border.Effect>
+                                    <Grid>
+                                        <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True" Opacity="0.9">
+                                            <Image.Clip>
+                                                <RectangleGeometry Rect="0,0,300,170" RadiusX="12" RadiusY="12"/>
+                                            </Image.Clip>
+                                        </Image>
+                                        <Border VerticalAlignment="Bottom" Background="#CC0F0F0F" Padding="12" CornerRadius="0,0,12,12">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" Foreground="#AAAAAA" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding CurrentShowTitle}" Foreground="White" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Content="&lt;" HorizontalAlignment="Left" Margin="15,0,0,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollLeft_Click" Tag="{Binding ElementName=VideosList}"/>
+                    <Button Content="&gt;" HorizontalAlignment="Right" Margin="0,0,15,10" Style="{StaticResource ScrollButtonStyle}" Click="ScrollRight_Click" Tag="{Binding ElementName=VideosList}"/>
                 </Grid>
 
             </StackPanel>

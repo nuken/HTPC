@@ -1,38 +1,123 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
-using HTPC.Services;
-using HTPC.Core.Models; // Fixes the missing MediaItem reference
+using System.Windows.Input;
+using System.Windows.Threading;
+using HTPC.Core.Models;
 
 namespace HTPC.UI.Views;
 
 public partial class PlayerView : UserControl
 {
-    private readonly MpvPlaybackService _playbackService;
-    private bool _isHwndBound = false;
+    public event EventHandler? OnBackRequested;
 
-    public PlayerView(MpvPlaybackService playbackService)
+    private readonly DispatcherTimer _uiHideTimer;
+    private MediaItem? _currentMedia;
+    private bool _isPlaying = false;
+    private bool _isDragging = false;
+
+    public PlayerView()
     {
         InitializeComponent();
-        _playbackService = playbackService;
-        Loaded += OnLoaded;
+
+        // Initialize the 3-second auto-hide timer
+        _uiHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _uiHideTimer.Tick += UiHideTimer_Tick;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    // Matches your existing MainWindow call!
+    public void StartPlayback(MediaItem media)
     {
-        if (!_isHwndBound)
+        _currentMedia = media;
+        
+        // Update UI Titles
+        ShowTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? "" : media.Title;
+        MediaTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? media.Title : media.CurrentShowTitle;
+
+        // TODO: Initialize MPV here using media.StreamUrl
+        // _mpvPlayer.Load(media.StreamUrl);
+        // _mpvPlayer.Play();
+
+        _isPlaying = true;
+        PlayPauseButton.Content = "⏸";
+
+        ShowControls();
+    }
+
+    // Matches your existing MainWindow Escape Key logic!
+    public void StopPlayback()
+    {
+        // TODO: Stop MPV playback and clear memory
+        // _mpvPlayer.Stop();
+        
+        _uiHideTimer.Stop();
+        this.Cursor = Cursors.Arrow;
+    }
+
+    // --- AUTO-HIDE LOGIC ---
+
+    private void UserControl_MouseMove(object sender, MouseEventArgs e)
+    {
+        ShowControls();
+    }
+
+    private void ShowControls()
+    {
+        ControlsOverlay.Visibility = Visibility.Visible;
+        this.Cursor = Cursors.Arrow;
+        
+        _uiHideTimer.Stop();
+        _uiHideTimer.Start();
+    }
+
+    private void UiHideTimer_Tick(object? sender, EventArgs e)
+    {
+        _uiHideTimer.Stop();
+        
+        // Only hide if we aren't actively dragging the timeline
+        if (!_isDragging)
         {
-            _playbackService.AttachToWindow(VideoSurface.Handle);
-            _isHwndBound = true;
+            ControlsOverlay.Visibility = Visibility.Collapsed;
+            this.Cursor = Cursors.None;
         }
     }
 
-    public void StartPlayback(MediaItem media)
+    // --- TRANSPORT CONTROLS ---
+
+    private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
-        _playbackService.PlayMedia(media);
+        if (_isPlaying)
+        {
+            // Pause MPV
+            _isPlaying = false;
+            PlayPauseButton.Content = "▶";
+        }
+        else
+        {
+            // Play MPV
+            _isPlaying = true;
+            PlayPauseButton.Content = "⏸";
+        }
     }
 
-    public void StopPlayback()
+    private void Back_Click(object sender, RoutedEventArgs e)
     {
-        _playbackService.Stop();
+        StopPlayback();
+        OnBackRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    // --- TIMELINE LOGIC ---
+
+    private void Timeline_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
+    {
+        _isDragging = true;
+    }
+
+    private void Timeline_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        _isDragging = false;
+        // Tell MPV to seek to TimelineSlider.Value
+        
+        ShowControls(); // Restart the hide timer
     }
 }
