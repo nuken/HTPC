@@ -16,6 +16,7 @@ public partial class MoviesView : UserControl
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
+	public event EventHandler? OnShowsRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly DispatcherTimer _typingTimer;

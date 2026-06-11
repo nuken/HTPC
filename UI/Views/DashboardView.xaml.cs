@@ -15,6 +15,7 @@ public partial class DashboardView : UserControl
     public event EventHandler? OnSettingsRequested;
 	public event EventHandler? OnGuideRequested;
 	public event EventHandler? OnMoviesRequested;
+	public event EventHandler? OnShowsRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -117,6 +118,11 @@ public partial class DashboardView : UserControl
     }
 	
 	private void Movies_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        OnShowsRequested?.Invoke(this, EventArgs.Empty);
+    }
+	
+	private void Shows_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     }

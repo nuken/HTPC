@@ -101,6 +101,46 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_command_string(_mpvContext, "stop"); 
         _currentMedia = null;
     }
+	
+	// --- TIMELINE & SEEKING ---
+    
+    public double GetDuration()
+    {
+        if (_mpvContext == IntPtr.Zero) return 0;
+        // format 5 = MPV_FORMAT_DOUBLE
+        Libmpv.mpv_get_property(_mpvContext, "duration", 5, out double duration);
+        return duration;
+    }
+
+    public double GetPosition()
+    {
+        if (_mpvContext == IntPtr.Zero) return 0;
+        Libmpv.mpv_get_property(_mpvContext, "time-pos", 5, out double pos);
+        return pos;
+    }
+
+    public void SeekAbsolute(double seconds)
+    {
+        if (_mpvContext == IntPtr.Zero) return;
+        // Seek to an exact timestamp
+        Libmpv.mpv_command_string(_mpvContext, $"seek {seconds} absolute");
+    }
+
+    public void SeekRelative(double seconds)
+    {
+        if (_mpvContext == IntPtr.Zero) return;
+        // Skip forward or backward
+        Libmpv.mpv_command_string(_mpvContext, $"seek {seconds} relative");
+    }
+
+    // --- CLOSED CAPTIONS ---
+
+    public void CycleSubtitles()
+    {
+        if (_mpvContext == IntPtr.Zero) return;
+        // Cycles through available subtitle tracks (and 'none')
+        Libmpv.mpv_command_string(_mpvContext, "cycle sub");
+    }
 
     private void SaveCurrentPosition(object? state)
     {

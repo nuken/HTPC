@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private readonly SettingsView _settingsView;
     private readonly GuideView _guideView;
 	private readonly MoviesView _moviesView;
+	private readonly ShowsView _showsView;
 
     public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView)
     {
@@ -30,7 +31,9 @@ public partial class MainWindow : Window
         _dashboardView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView; 
 		_dashboardView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _dashboardView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _dashboardView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         
+		
 		// NEW: Wire up the Guide events
         _guideView.OnBackRequested += NavigateToDashboard;
         _guideView.OnPlayRequested += PlayMedia;
@@ -39,6 +42,13 @@ public partial class MainWindow : Window
         _moviesView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _moviesView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _moviesView.OnPlayRequested += PlayMedia;
+		_moviesView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+		
+		_showsView.OnHomeRequested += NavigateToDashboard;
+        _showsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _showsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _showsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _showsView.OnPlayRequested += PlayMedia;
 		
 		_playerView.OnBackRequested += NavigateToDashboard;
 

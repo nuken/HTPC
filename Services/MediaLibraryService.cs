@@ -320,6 +320,114 @@ public class MediaLibraryService
     }
 
     public void ClearMoviesCache() => _masterMoviesCache = null;
+	
+	private List<MediaItem>? _masterEpisodesCache = null;
+
+    // 1. Download and parse every episode into memory
+    private async Task EnsureEpisodesCacheAsync()
+    {
+        if (_masterEpisodesCache != null) return;
+
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null) return;
+        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+        string apiUrl = $"{baseUrl}/api/v1/episodes";
+
+        try
+        {
+            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+            using JsonDocument doc = JsonDocument.Parse(jsonResponse);
+            _masterEpisodesCache = new List<MediaItem>();
+
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var element in doc.RootElement.EnumerateArray())
+                {
+                    string id = GetStringOrNumber(element, "id");
+                    if (string.IsNullOrEmpty(id)) continue;
+
+                    string showTitle = GetStringOrNumber(element, "title");
+                    string episodeTitle = GetStringOrNumber(element, "episode_title");
+                    string rawImageUrl = GetStringOrNumber(element, "image_url", "thumbnail_url");
+                    string summary = GetStringOrNumber(element, "summary", "full_summary");
+                    
+                    int season = element.TryGetProperty("season_number", out var sProp) && sProp.ValueKind == JsonValueKind.Number ? sProp.GetInt32() : 0;
+                    int episode = element.TryGetProperty("episode_number", out var eProp) && eProp.ValueKind == JsonValueKind.Number ? eProp.GetInt32() : 0;
+                    long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
+
+                    _masterEpisodesCache.Add(new MediaItem
+                    {
+                        Id = id,
+                        Title = string.IsNullOrEmpty(showTitle) ? "Unknown Show" : showTitle,
+                        CurrentShowTitle = episodeTitle,
+                        PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
+                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        Summary = summary,
+                        SeasonNumber = season,
+                        EpisodeNumber = episode,
+                        CreatedAt = createdAt,
+                        Genres = ParseStringArray(element, "genres")
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to fetch master episodes list: {ex.Message}");
+            _masterEpisodesCache = new List<MediaItem>();
+        }
+    }
+
+    // 2. Group the episodes by Title to generate the "Shows" Grid
+    public async Task<List<MediaItem>> GetFilteredShowsAsync(int startIndex, int chunkSize, string searchQuery, string sortOrder)
+    {
+        await EnsureEpisodesCacheAsync();
+        if (_masterEpisodesCache == null) return new List<MediaItem>();
+
+        // Group by Show Title and just grab the first episode to use as the Show's "Poster"
+        var showsQuery = _masterEpisodesCache
+            .GroupBy(e => e.Title)
+            .Select(g => g.First())
+            .AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            showsQuery = showsQuery.Where(s => s.Title.ToLower().Contains(searchLower));
+        }
+
+        // Ported Feral Logic: Strip "The ", "A ", "An " for proper alphabetical sorting
+        string StripArticles(string title)
+        {
+            string lower = title.ToLower();
+            if (lower.StartsWith("the ")) return title.Substring(4);
+            if (lower.StartsWith("a ")) return title.Substring(2);
+            if (lower.StartsWith("an ")) return title.Substring(3);
+            return title;
+        }
+
+        showsQuery = sortOrder switch
+        {
+            "Alphabetical (A-Z)" => showsQuery.OrderBy(s => StripArticles(s.Title)),
+            "Alphabetical (Z-A)" => showsQuery.OrderByDescending(s => StripArticles(s.Title)),
+            _ => showsQuery.OrderByDescending(s => s.CreatedAt) // Default to Recently Recorded
+        };
+
+        return showsQuery.Skip(startIndex).Take(chunkSize).ToList();
+    }
+
+    // 3. Instantly grab all episodes for a specific show when clicked!
+    public async Task<List<MediaItem>> GetEpisodesForShowAsync(string showTitle)
+    {
+        await EnsureEpisodesCacheAsync();
+        if (_masterEpisodesCache == null) return new List<MediaItem>();
+
+        return _masterEpisodesCache
+            .Where(e => e.Title == showTitle)
+            .OrderBy(e => e.SeasonNumber)
+            .ThenBy(e => e.EpisodeNumber)
+            .ToList();
+    }
 
     private string DetermineColor(List<string> tags)
     {

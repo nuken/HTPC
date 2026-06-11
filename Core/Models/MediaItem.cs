@@ -17,4 +17,9 @@ public class MediaItem
     public List<string> Genres { get; set; } = new List<string>();
     public List<string> Cast { get; set; } = new List<string>();
     public List<string> Directors { get; set; } = new List<string>();
+	
+	// --- NEW PROPERTIES FOR TV SHOWS ---
+    public int SeasonNumber { get; set; }
+    public int EpisodeNumber { get; set; }
+    public string Summary { get; set; } = string.Empty;
 }
