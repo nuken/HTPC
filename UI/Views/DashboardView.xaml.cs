@@ -16,6 +16,7 @@ public partial class DashboardView : UserControl
 	public event EventHandler? OnGuideRequested;
 	public event EventHandler? OnMoviesRequested;
 	public event EventHandler? OnShowsRequested;
+	public event EventHandler? OnVideosRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -119,14 +120,17 @@ public partial class DashboardView : UserControl
 	
 	private void Movies_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        OnShowsRequested?.Invoke(this, EventArgs.Empty);
-    }
-	
-	private void Shows_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
         OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     }
-
+	
+    private void Shows_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        OnShowsRequested?.Invoke(this, EventArgs.Empty);
+    }
+	private void Videos_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        OnVideosRequested?.Invoke(this, EventArgs.Empty);
+    }
     // --- NATIVE NAVIGATION FIXES ---
 
     private void ListBoxItem_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)

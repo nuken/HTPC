@@ -72,6 +72,7 @@ public class Program
                 services.AddSingleton<HTPC.UI.Windows.MainWindow>();
 				services.AddTransient<HTPC.UI.Views.GuideView>();
 				services.AddTransient<HTPC.UI.Views.ShowsView>();
+				services.AddTransient<HTPC.UI.Views.VideosView>();
             });
 
         using var host = hostBuilder.Build();

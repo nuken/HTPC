@@ -14,8 +14,10 @@ public partial class MainWindow : Window
     private readonly GuideView _guideView;
 	private readonly MoviesView _moviesView;
 	private readonly ShowsView _showsView;
+	private readonly VideosView _videosView;
+	private object? _previousView;
 
-    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView)
+    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView)
     {
         InitializeComponent();
         _dashboardView = dashboardView;
@@ -23,6 +25,8 @@ public partial class MainWindow : Window
         _settingsView = settingsView;
         _guideView = guideView;
 		_moviesView = moviesView;
+		_showsView = showsView;
+		_videosView = videosView;
         
         _settingsView.OnHomeRequested += NavigateToDashboard;
         
@@ -32,7 +36,7 @@ public partial class MainWindow : Window
 		_dashboardView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _dashboardView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _dashboardView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
-        
+        _dashboardView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
 		
 		// NEW: Wire up the Guide events
         _guideView.OnBackRequested += NavigateToDashboard;
@@ -43,14 +47,23 @@ public partial class MainWindow : Window
         _moviesView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _moviesView.OnPlayRequested += PlayMedia;
 		_moviesView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+		_moviesView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
 		
 		_showsView.OnHomeRequested += NavigateToDashboard;
         _showsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _showsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _showsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _showsView.OnPlayRequested += PlayMedia;
+		_showsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
 		
-		_playerView.OnBackRequested += NavigateToDashboard;
+		_videosView.OnHomeRequested += NavigateToDashboard;
+        _videosView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _videosView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _videosView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _videosView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _videosView.OnPlayRequested += PlayMedia;
+		
+		_playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
 
         MainShellContainer.Content = _dashboardView;
     }
@@ -62,6 +75,9 @@ public partial class MainWindow : Window
 
     private void PlayMedia(object? sender, MediaItem media)
     {
+        // THE FIX: Remember the current view before we swap to the Player
+        _previousView = MainShellContainer.Content;
+        
         MainShellContainer.Content = _playerView;
         _playerView.StartPlayback(media); 
     }
@@ -87,7 +103,9 @@ public partial class MainWindow : Window
             if (MainShellContainer.Content == _playerView)
             {
                 _playerView.StopPlayback();
-                MainShellContainer.Content = _dashboardView;
+                
+                // THE FIX: Restore the previous view instead of forcing Dashboard
+                MainShellContainer.Content = _previousView ?? _dashboardView;
             }
             else if (MainShellContainer.Content == _settingsView || MainShellContainer.Content == _guideView) 
             {

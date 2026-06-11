@@ -19,6 +19,7 @@ public partial class ShowsView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnMoviesRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
+	public event EventHandler? OnVideosRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly DispatcherTimer _typingTimer;
@@ -130,37 +131,71 @@ public partial class ShowsView : UserControl
     // OVERLAY LOGIC: User clicks a Show Poster
     private async void ShowCard_Click(object sender, MouseButtonEventArgs e)
     {
-        if (sender is ListBoxItem item && item.DataContext is MediaItem show)
+        try
         {
-            // Populate Column 0 details
-            OverlayShowTitle.Text = show.Title;
-            OverlayShowSummary.Text = string.IsNullOrEmpty(show.Summary) ? "No summary available." : show.Summary;
-            
-            // Try to set the poster URL (might require a string-to-ImageSource converter depending on setup, but WPF usually handles absolute URLs)
-            try { OverlayShowPoster.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(show.PosterUrl)); } catch { }
+            if (sender is ListBoxItem item && item.DataContext is MediaItem show)
+            {
+                // Populate Column 0 details
+                OverlayShowTitle.Text = show.Title;
+                OverlayShowSummary.Text = string.IsNullOrEmpty(show.Summary) ? "No summary available." : show.Summary;
+                
+                // Safe, crash-proof image loading!
+                try 
+                { 
+                    if (!string.IsNullOrWhiteSpace(show.PosterUrl))
+                    {
+                        var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = new Uri(show.PosterUrl, UriKind.RelativeOrAbsolute);
+                        bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; 
+                        bmp.EndInit();
+                        OverlayShowPoster.Source = bmp;
+                    }
+                    else OverlayShowPoster.Source = null;
+                } 
+                catch { OverlayShowPoster.Source = null; }
 
-            // Fetch every episode for this show
-            _allEpisodesForSelectedShow = await _libraryService.GetEpisodesForShowAsync(show.Title);
+                // THE FIX: Explicitly nuke the old UI state so WPF is forced to update!
+                SeasonsList.SelectedIndex = -1;
+                CurrentEpisodes.Clear();
+                Seasons.Clear();
 
-            // Populate Column 1 (Unique Seasons)
-            Seasons.Clear();
-            var uniqueSeasons = _allEpisodesForSelectedShow.Select(ep => ep.SeasonNumber).Distinct().OrderBy(s => s).ToList();
-            foreach (var s in uniqueSeasons) Seasons.Add(s);
+                // Fetch every episode for this show
+                _allEpisodesForSelectedShow = await _libraryService.GetEpisodesForShowAsync(show.Title) ?? new List<MediaItem>();
 
-            // Open the overlay and auto-select the first season
-            EpisodesOverlay.Visibility = Visibility.Visible;
-            if (Seasons.Count > 0) SeasonsList.SelectedIndex = 0;
+                // Populate Column 1 (Unique Seasons)
+                if (_allEpisodesForSelectedShow.Any())
+                {
+                    var uniqueSeasons = _allEpisodesForSelectedShow.Select(ep => ep.SeasonNumber).Distinct().OrderBy(s => s).ToList();
+                    foreach (var s in uniqueSeasons) Seasons.Add(s);
+                }
+
+                // Open the overlay and auto-select the first season
+                EpisodesOverlay.Visibility = Visibility.Visible;
+                if (Seasons.Count > 0) SeasonsList.SelectedIndex = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Crash Prevented!\n\nError: {ex.Message}", "Debugging Info", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     // OVERLAY LOGIC: User selects a Season Number
     private void SeasonsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (SeasonsList.SelectedItem is int selectedSeason)
+        try
         {
-            CurrentEpisodes.Clear();
-            var episodesForSeason = _allEpisodesForSelectedShow.Where(ep => ep.SeasonNumber == selectedSeason).OrderBy(ep => ep.EpisodeNumber);
-            foreach (var ep in episodesForSeason) CurrentEpisodes.Add(ep);
+            if (SeasonsList.SelectedItem is int selectedSeason)
+            {
+                CurrentEpisodes.Clear();
+                var episodesForSeason = _allEpisodesForSelectedShow.Where(ep => ep.SeasonNumber == selectedSeason).OrderBy(ep => ep.EpisodeNumber);
+                foreach (var ep in episodesForSeason) CurrentEpisodes.Add(ep);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error loading season: {ex.Message}", "Debugging Info", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -180,5 +215,6 @@ public partial class ShowsView : UserControl
     private void Home_Click(object sender, MouseButtonEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Guide_Click(object sender, MouseButtonEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, MouseButtonEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
+	private void Videos_Click(object sender, MouseButtonEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, MouseButtonEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
 }
