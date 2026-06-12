@@ -20,6 +20,9 @@ public partial class MainWindow : Window
     public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView)
     {
         InitializeComponent();
+		
+		this.PreviewKeyDown += MainWindow_PreviewKeyDown;
+		
         _dashboardView = dashboardView;
         _playerView = playerView;
         _settingsView = settingsView;
@@ -38,8 +41,11 @@ public partial class MainWindow : Window
         _dashboardView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _dashboardView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
 		
-		// NEW: Wire up the Guide events
-        _guideView.OnBackRequested += NavigateToDashboard;
+		_guideView.OnHomeRequested += NavigateToDashboard;
+        _guideView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _guideView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _guideView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _guideView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _guideView.OnPlayRequested += PlayMedia;
 		
 		_moviesView.OnHomeRequested += NavigateToDashboard;
@@ -66,6 +72,29 @@ public partial class MainWindow : Window
 		_playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
 
         MainShellContainer.Content = _dashboardView;
+    }
+	
+	private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        // Don't intercept if the player overlay is actively running!
+        if (MainShellContainer.Content is PlayerView) return;
+
+        var command = Core.Input.InputMapper.GetCommand(e.Key);
+
+        if (command == Core.Input.HtpcCommand.Home)
+        {
+            NavigateToDashboard(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+        else if (command == Core.Input.HtpcCommand.Back)
+        {
+            // If they aren't already on the Dashboard, take them back to it
+            if (MainShellContainer.Content != _dashboardView)
+            {
+                NavigateToDashboard(this, EventArgs.Empty);
+                e.Handled = true;
+            }
+        }
     }
     
     private void NavigateToDashboard(object? sender, EventArgs e)

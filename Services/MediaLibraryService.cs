@@ -197,6 +197,8 @@ public class MediaLibraryService
                                         ImageUrl = GetStringOrNumber(a, "Image"),
                                         StartTime = startTime,
                                         Duration = duration,
+                                        // THE FIX: Capture the raw file source link for virtual timelines
+                                        Source = GetStringOrNumber(a, "Source", "source"), 
                                         CategoryColor = DetermineColor(ParseStringArray(a, "Categories", "Genres"))
                                     });
                                 }
@@ -808,15 +810,9 @@ public class MediaLibraryService
             {
                 var currentAiring = c.CurrentAirings?.FirstOrDefault(a => a.IsAiringNow) ?? c.CurrentAirings?.FirstOrDefault();
 
-                mediaItems.Add(new MediaItem
-                {
-                    Id = c.Number, 
-                    Title = string.IsNullOrEmpty(c.Name) ? $"Channel {c.Number}" : c.Name,
-                    PosterUrl = c.ImageUrl,
-                    CurrentShowTitle = currentAiring?.DisplayTitle ?? "Unknown Program",
-                    CurrentShowPosterUrl = !string.IsNullOrWhiteSpace(currentAiring?.ImageUrl) ? currentAiring.ImageUrl : c.ImageUrl,
-                    StreamUrl = $"{baseUrl}/devices/ANY/channels/{c.Number}/stream.mpg?format=ts" 
-                });
+                // THE FIX: Uses the live media engine builder to safely format virtual favorites
+                var mediaItem = CreateLiveMediaItem(baseUrl, c, currentAiring);
+                mediaItems.Add(mediaItem);
             }
 
             return mediaItems;
@@ -911,5 +907,49 @@ public class MediaLibraryService
 
         // 4. Standard Relative Path Fix (e.g., "/dvr/files/123/image")
         return cleanPath.StartsWith("/") ? baseUrl.TrimEnd('/') + cleanPath : $"{baseUrl.TrimEnd('/')}/{cleanPath}";
+    }
+	
+	public MediaItem CreateLiveMediaItem(string baseUrl, Channel channel, Airing? airing)
+    {
+        var media = new MediaItem
+        {
+            Id = channel.Number ?? "0",
+            Title = string.IsNullOrEmpty(channel.Name) ? $"Channel {channel.Number}" : channel.Name,
+            CurrentShowTitle = airing?.DisplayTitle ?? "Live TV",
+            PosterUrl = channel.ImageUrl ?? "",
+            CurrentShowPosterUrl = airing?.ImageUrl ?? channel.ImageUrl ?? "",
+            
+            IsLiveTv = true,
+            // THE FIX: Map to Feral's 'StartTime' and 'Duration' properties!
+            StartTime = airing?.StartTime ?? DateTime.Now,
+            EndTime = (airing != null && airing.Duration.HasValue) 
+                        ? airing.StartTime.AddSeconds(Convert.ToDouble(airing.Duration.Value)) 
+                        : DateTime.Now.AddHours(1)
+        };
+
+        // Determine if this is a virtual loop timeline channel
+        bool isVirtualChannel = channel.Id != null && channel.Id.StartsWith("virtual", StringComparison.OrdinalIgnoreCase);
+
+        if (isVirtualChannel && airing != null && !string.IsNullOrWhiteSpace(airing.Source))
+        {
+            // Extract file ID out of the raw source path (e.g., "dvr/files/1234")
+            string fileId = airing.Source.Split('/').Last();
+            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/dvr/files/{fileId}/hls/stream.m3u8";
+            
+            // THE FIX: Ensure the offset calculator also uses Feral's StartTime
+            var airStart = airing.StartTime; 
+            if (airStart != DateTime.MinValue)
+            {
+                int offset = (int)(DateTime.Now - airStart).TotalSeconds;
+                media.StartOffsetSeconds = offset > 0 ? offset : 0;
+            }
+        }
+        else
+        {
+            // Standard Live TV Channel HLS delivery
+            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/devices/ANY/channels/{channel.Number}/hls/master.m3u8";
+        }
+
+        return media;
     }
 }

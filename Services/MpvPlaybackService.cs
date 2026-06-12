@@ -102,6 +102,15 @@ public class MpvPlaybackService : IDisposable
         _currentMedia = null;
     }
 	
+	public void SetVolume(int volume)
+    {
+        if (_mpvContext != IntPtr.Zero)
+        {
+            // Tell the MPV engine to change the volume property
+            Core.Interop.Libmpv.mpv_set_property_string(_mpvContext, "volume", volume.ToString());
+        }
+    }
+	
 	// --- TIMELINE & SEEKING ---
     
     public double GetDuration()

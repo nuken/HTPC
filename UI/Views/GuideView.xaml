@@ -25,9 +25,9 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate>
-                        <Border BorderThickness="2" BorderBrush="#007ACC" CornerRadius="6" Margin="-2">
+                        <Border BorderThickness="2" BorderBrush="White" CornerRadius="6" Margin="-2">
                             <Border.Effect>
-                                <DropShadowEffect Color="#007ACC" BlurRadius="15" ShadowDepth="0" Opacity="1" />
+                                <DropShadowEffect Color="White" BlurRadius="10" ShadowDepth="0" Opacity="0.8" />
                             </Border.Effect>
                         </Border>
                     </ControlTemplate>
@@ -36,43 +36,94 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="20">
+    <Grid Margin="0,40,0,0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/> 
             <RowDefinition Height="*"/>   
         </Grid.RowDefinitions>
 
-        <Border Background="#1E1E1E" CornerRadius="8" Padding="15" Margin="0,0,0,15">
-            <StackPanel Orientation="Horizontal">
-                <Button Content="🏠 Back" Margin="0,0,20,0" Padding="15,8" Background="#333333" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BackButton_Click"/>
-                <TextBlock Text="LIVE TV GUIDE" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
-                <TextBlock x:Name="StatusText" Margin="20,0,0,0" VerticalAlignment="Center" Foreground="#AAAAAA"/>
-            </StackPanel>
-        </Border>
-      
-        <Grid Grid.Row="1" Margin="0,0,0,5">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30">
+            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Home_Click">
+                <TextBlock Text="Home" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
+            </Border>
+            <Border Background="White" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand">
+                <TextBlock Text="Guide" Foreground="Black" FontWeight="Bold" FontSize="16"/>
+            </Border>
+            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Movies_Click">
+                <TextBlock Text="Movies" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
+            </Border>
+            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Shows_Click">
+                <TextBlock Text="Shows" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
+            </Border>
+            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Videos_Click">
+                <TextBlock Text="Videos" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
+            </Border>
+            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Settings_Click">
+                <TextBlock Text="Settings" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
+            </Border>
+        </StackPanel>
+
+       <Grid Grid.Row="1" Margin="40,0,40,5">
+            <Grid.Resources>
+                <Style TargetType="Button">
+                    <Setter Property="Background" Value="#1A1A1A"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="8">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#333333"/></Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <Style TargetType="RepeatButton">
+                    <Setter Property="Background" Value="#1A1A1A"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="RepeatButton">
+                                <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="8">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#333333"/></Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Grid.Resources>
+            
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             
-            <TextBlock Grid.Column="0" Text="CHANNELS" VerticalAlignment="Bottom" Margin="15,0,0,5" FontWeight="Bold" Foreground="#888888" FontSize="12"/>
+            <TextBlock Grid.Column="0" Text="CHANNELS" VerticalAlignment="Bottom" Margin="0,0,0,5" FontWeight="Bold" Foreground="#888888" FontSize="14"/>
             
             <Grid Grid.Column="1" Margin="0,0,0,5">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                    <Button Content="&#x25C0; Earlier" Width="90" Height="30" Background="#1E1E1E" Foreground="White" BorderThickness="0" Margin="0,0,10,0" Click="ScrollLeft_Click"/>
-                    <Button Content="Later &#x25B6;" Width="90" Height="30" Background="#1E1E1E" Foreground="White" BorderThickness="0" Click="ScrollRight_Click"/>
+                    <Button Content="◀ Earlier" Width="100" Height="34" Margin="0,0,10,0" Click="ScrollLeft_Click"/>
+                    <Button Content="Later ▶" Width="100" Height="34" Click="ScrollRight_Click"/>
                 </StackPanel>
-
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
-                    <RepeatButton Content="&#x25B2; Up" Width="90" Height="30" Background="#1E1E1E" Foreground="White" BorderThickness="0" Margin="0,0,10,0" Click="PageUp_Click"/>
-                    <RepeatButton Content="Down &#x25BC;" Width="90" Height="30" Background="#1E1E1E" Foreground="White" BorderThickness="0" Click="PageDown_Click"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <RepeatButton Content="▲ Up" Width="100" Height="34" Margin="0,0,10,0" Click="PageUp_Click"/>
+                    <RepeatButton Content="Down ▼" Width="100" Height="34" Click="PageDown_Click"/>
                 </StackPanel>
             </Grid>
         </Grid>
-
-        <Grid Grid.Row="2">
+		
+        <Grid Grid.Row="2" Margin="40,0,40,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
@@ -83,7 +134,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <Border x:Name="ChannelHeaderSpace" Grid.Row="0" Height="35" Margin="0,0,0,5" Background="#0F0F0F"/>
+                <Border x:Name="ChannelHeaderSpace" Grid.Row="0" Height="35" Margin="0,0,0,5" Background="Transparent"/>
                 
                 <ListBox x:Name="ChannelItemsControl" Grid.Row="1" Focusable="False" IsTabStop="False"
                          PreviewMouseWheel="ChannelItemsControl_PreviewMouseWheel" 
@@ -92,17 +143,17 @@
                          Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource ListBoxItemStyle}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Height="70" Background="#1E1E1E" CornerRadius="4" Margin="0,5,10,5" Padding="5">
+                            <Border Height="70" Background="#1A1A1A" CornerRadius="8" Margin="0,5,15,5" Padding="10,5">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
                                     <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center">
-                                        <TextBlock Text="{Binding Number}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="White"/>
-                                        <Image Source="{Binding ImageUrl}" Height="26" Stretch="Uniform" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Number}" FontWeight="Bold" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" Foreground="White"/>
+                                        <Image Source="{Binding ImageUrl}" Height="28" Stretch="Uniform" VerticalAlignment="Center"/>
                                     </StackPanel>
-                                    <TextBlock Grid.Row="1" Text="{Binding Name}" HorizontalAlignment="Center" VerticalAlignment="Bottom" TextTrimming="CharacterEllipsis" FontSize="11" FontWeight="SemiBold" Foreground="#AAAAAA" Margin="0,2,0,0"/>
+                                    <TextBlock Grid.Row="1" Text="{Binding Name}" HorizontalAlignment="Center" VerticalAlignment="Bottom" TextTrimming="CharacterEllipsis" FontSize="12" FontWeight="SemiBold" Foreground="#AAAAAA" Margin="0,2,0,0"/>
                                 </Grid>
                             </Border>
                         </DataTemplate>
@@ -117,7 +168,7 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <ItemsControl x:Name="TimeHeadersControl" Grid.Row="0" Height="35" Margin="0,0,0,5" Background="#0F0F0F">
+                    <ItemsControl x:Name="TimeHeadersControl" Grid.Row="0" Height="35" Margin="0,0,0,5" Background="Transparent">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal"/>
@@ -125,8 +176,8 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Width="240" BorderBrush="#333333" BorderThickness="2,0,0,0" Padding="5,0,0,5">
-                                    <TextBlock Text="{Binding}" Foreground="#AAAAAA" FontSize="14" FontWeight="SemiBold"/>
+                                <Border Width="240" BorderBrush="#333333" BorderThickness="2,0,0,0" Padding="10,0,0,5">
+                                    <TextBlock Text="{Binding}" Foreground="#AAAAAA" FontSize="15" FontWeight="SemiBold"/>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -148,21 +199,21 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Button Click="AiringBlock_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" Margin="{Binding DynamicMargin}" Padding="0" BorderThickness="0" Background="Transparent" Cursor="Hand">
+                                                <Button Click="AiringBlock_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" Margin="{Binding DynamicMargin}" Padding="0" BorderThickness="0" Background="Transparent" Cursor="Hand" Tag="{Binding}">
                                                     <Button.Template>
                                                         <ControlTemplate TargetType="Button">
-                                                            <Border x:Name="EpgBorder" MinWidth="150" Width="{Binding BlockWidth}" Height="70" Background="#2A2A2A" BorderBrush="#444444" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="1,0">
+                                                            <Border x:Name="EpgBorder" MinWidth="150" Width="{Binding BlockWidth}" Height="70" Background="#1E1E1E" BorderBrush="#333333" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="1,0">
                                                                 <Grid Margin="{Binding InnerContentMargin}">
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto"/>
                                                                         <ColumnDefinition Width="*"/>
                                                                     </Grid.ColumnDefinitions>
                                                                     
-                                                                    <Border Grid.Column="0" Width="4" Background="{Binding CategoryColor}" CornerRadius="2" Margin="0,0,6,0"/>
+                                                                    <Border Grid.Column="0" Width="4" Background="{Binding CategoryColor}" CornerRadius="2" Margin="0,0,10,0"/>
                                                                     
-                                                                    <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                                                                        <TextBlock Text="{Binding DisplayTitle}" Foreground="White" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"/>
-                                                                        <TextBlock Text="{Binding DisplaySummary}" Foreground="#AAAAAA" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding DisplayTitle}" Foreground="White" FontWeight="Bold" FontSize="14" TextTrimming="CharacterEllipsis"/>
+                                                                        <TextBlock Text="{Binding DisplaySummary}" Foreground="#AAAAAA" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
                                                                     </StackPanel>
                                                                 </Grid>
                                                             </Border>
@@ -172,11 +223,10 @@
                                                                 </Trigger>
                                                                 <Trigger Property="IsKeyboardFocused" Value="True">
                                                                     <Setter TargetName="EpgBorder" Property="Background" Value="#333333"/>
-                                                                    <Setter TargetName="EpgBorder" Property="BorderBrush" Value="#007ACC"/>
                                                                 </Trigger>
                                                                 <DataTrigger Binding="{Binding IsAiringNow}" Value="True">
-                                                                    <Setter TargetName="EpgBorder" Property="Background" Value="#102A4A"/>
-                                                                    <Setter TargetName="EpgBorder" Property="BorderBrush" Value="#007ACC"/>
+                                                                    <Setter TargetName="EpgBorder" Property="Background" Value="#1A3A5A"/>
+                                                                    <Setter TargetName="EpgBorder" Property="BorderBrush" Value="#00A4EF"/>
                                                                 </DataTrigger>
                                                             </ControlTemplate.Triggers>
                                                         </ControlTemplate>
@@ -192,5 +242,30 @@
                 </Grid>
             </ScrollViewer>
         </Grid>
+
+        <Border x:Name="ModalOverlay" Grid.RowSpan="3" Background="#F20A0A0A" Visibility="Collapsed" VerticalAlignment="Bottom" Height="300" Padding="40" CornerRadius="24,24,0,0">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/> <ColumnDefinition Width="*"/>    <ColumnDefinition Width="Auto"/> </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Width="160" Height="220" CornerRadius="12" ClipToBounds="True" Background="#1A1A1A" Margin="0,0,30,0">
+                    <Image x:Name="ModalImage" Stretch="UniformToFill"/>
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,30,0">
+                    <TextBlock x:Name="ModalTitle" Text="Show Title" FontSize="28" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                    <TextBlock x:Name="ModalTime" Text="12:00 PM - 1:00 PM" FontSize="16" FontWeight="SemiBold" Foreground="#00A4EF" Margin="0,0,0,15"/>
+                    <TextBlock x:Name="ModalSummary" FontSize="15" Foreground="#AAAAAA" TextWrapping="Wrap" LineHeight="22" MaxHeight="100" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <Button Content="▶ Watch Live" Width="180" Height="50" Background="White" Foreground="Black" FontWeight="Bold" FontSize="18" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="WatchButton_Click"/>
+                    <Button Content="Close" Width="180" Height="50" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseModal_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

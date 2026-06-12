@@ -23,6 +23,11 @@ public static class PreferencesManager
         catch { }
         return "Recently Added"; // Default
     }
+	
+	public static string LoadGuideCollection()
+    {
+        return "All"; 
+    }
 
     public static void SaveMovieSort(string sortValue)
     {

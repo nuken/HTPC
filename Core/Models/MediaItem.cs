@@ -6,6 +6,10 @@ public class MediaItem
     public string Title { get; set; } = string.Empty;
     public string PosterUrl { get; set; } = string.Empty;
     public string StreamUrl { get; set; } = string.Empty;
+	
+	public bool IsLiveTv { get; set; } = false;
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
 
     // NEW: Live TV Metadata placeholders
     public string CurrentShowTitle { get; set; } = string.Empty;
@@ -22,4 +26,5 @@ public class MediaItem
     public int SeasonNumber { get; set; }
     public int EpisodeNumber { get; set; }
     public string Summary { get; set; } = string.Empty;
+	public int StartOffsetSeconds { get; set; }
 }
