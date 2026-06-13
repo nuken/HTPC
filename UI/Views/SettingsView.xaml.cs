@@ -35,11 +35,35 @@ public partial class SettingsView : UserControl
         _isInitialized = true;
         LoadServers();
 
-        // THE FIX: Push the cursor to the first TextBox so the remote D-Pad works instantly
+        // 1. POPULATE COMBO BOXES
+        var prefs = PreferencesManager.Load();
+    for (int i = 0; i <= 30; i++)
+    {
+        string label = i == 0 ? "None" : $"{i} Min";
+        PaddingStartBox.Items.Add(label); // No more complex Tags needed!
+        PaddingEndBox.Items.Add(label);
+    }
+    PaddingStartBox.SelectedIndex = prefs.PaddingStartMinutes <= 30 ? prefs.PaddingStartMinutes : 0;
+    PaddingEndBox.SelectedIndex = prefs.PaddingEndMinutes <= 30 ? prefs.PaddingEndMinutes : 0;
+
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
             TxtName.Focus();
         }), DispatcherPriority.Input);
+    }
+
+    // 2. AUTO-SAVE ON CHANGE
+    private void Padding_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isInitialized) return;
+        
+        var prefs = PreferencesManager.Load();
+        
+        // Save the index directly as the minutes!
+        prefs.PaddingStartMinutes = Math.Max(0, PaddingStartBox.SelectedIndex);
+        prefs.PaddingEndMinutes = Math.Max(0, PaddingEndBox.SelectedIndex);
+        
+        PreferencesManager.Save(prefs);
     }
 
     private void LoadServers()
@@ -69,7 +93,7 @@ public partial class SettingsView : UserControl
         TxtName.Focus();
     }
     
-    // --- UPDATED NAVIGATION SIGNATURES (RoutedEventArgs) ---
+    // --- NAVIGATION SIGNATURES ---
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);

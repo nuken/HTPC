@@ -55,7 +55,7 @@ public partial class DashboardView : UserControl
         if (FeaturedMovies.Count > 0) 
         {
             // If already loaded, just return focus to the dropdown for the remote
-            CollectionDropdown.Focus();
+            GuideNavBtn.Focus();
             return;
         }
 
@@ -92,7 +92,7 @@ public partial class DashboardView : UserControl
         // THE FIX: Push the cursor to the Dropdown so the remote D-Pad works instantly
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
-            CollectionDropdown.Focus();
+            GuideNavBtn.Focus();
         }), DispatcherPriority.Input);
     }
 

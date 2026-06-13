@@ -65,6 +65,77 @@ public class MediaLibraryService
             _masterMoviesCache = new List<MediaItem>();
         }
     }
+	
+	public async Task<bool> CreateRecordingJobAsync(string baseUrl, string channelNumber, Airing airing, int padStartSeconds = 0, int padEndSeconds = 0)
+    {
+        if (airing == null || string.IsNullOrWhiteSpace(channelNumber)) return false;
+
+        try
+        {
+            string url = $"{baseUrl.TrimEnd('/')}/dvr/jobs/new";
+            long startTimeEpoch = new DateTimeOffset(airing.StartTime).ToUnixTimeSeconds();
+            int durationSeconds = (int)(airing.Duration ?? 3600);
+            
+            // Adjust the actual Job boundaries based on padding offsets
+            long jobStartTime = startTimeEpoch - padStartSeconds;
+            int jobDuration = durationSeconds + padStartSeconds + padEndSeconds;
+            
+            var payload = new
+            {
+                Name = !string.IsNullOrWhiteSpace(airing.Title) ? airing.Title : "Unknown Program",
+                Time = jobStartTime,
+                Duration = jobDuration,
+                Channels = new[] { channelNumber },
+                Airing = new
+                {
+                    Source = "tms", 
+                    Channel = channelNumber,
+                    Time = startTimeEpoch,
+                    Duration = durationSeconds,
+                    Title = !string.IsNullOrWhiteSpace(airing.Title) ? airing.Title : "Unknown Program",
+                    EpisodeTitle = airing.EpisodeTitle ?? "",
+                    Summary = airing.DisplaySummary ?? "",
+                    SeriesID = airing.SeriesId ?? "",
+                    ProgramID = airing.ProgramId ?? "",
+                    Image = airing.ImageUrl ?? ""
+                }
+            };
+
+            var content = new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+            var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, url) { Content = content };
+            using var client = new System.Net.Http.HttpClient();
+            var response = await client.SendAsync(request);
+            
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
+
+    public async Task<bool> CreateSeriesPassAsync(string baseUrl, string seriesId, string title, string imageUrl, int padStartSeconds = 0, int padEndSeconds = 0)
+    {
+        if (string.IsNullOrWhiteSpace(seriesId)) return false;
+
+        try
+        {
+            string url = $"{baseUrl.TrimEnd('/')}/dvr/rules/new";
+            var rulePayload = new 
+            {
+                Name = title,
+                Image = imageUrl,
+                PaddingStart = padStartSeconds,
+                PaddingEnd = padEndSeconds,
+                EQ = new { SeriesID = seriesId, Tags = "New" }
+            };
+
+            var content = new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(rulePayload), System.Text.Encoding.UTF8, "application/json");
+            var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, url) { Content = content };
+            using var client = new System.Net.Http.HttpClient();
+            var response = await client.SendAsync(request);
+            
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
 
     public MediaLibraryService(ServerManagerService serverManager, HttpClient httpClient, ILogger<MediaLibraryService> logger)
     {
@@ -199,7 +270,9 @@ public class MediaLibraryService
                                         Duration = duration,
                                         // THE FIX: Capture the raw file source link for virtual timelines
                                         Source = GetStringOrNumber(a, "Source", "source"), 
-                                        CategoryColor = DetermineColor(ParseStringArray(a, "Categories", "Genres"))
+                                        CategoryColor = DetermineColor(ParseStringArray(a, "Categories", "Genres")),
+										SeriesId = GetStringOrNumber(a, "SeriesID", "seriesid"),
+										ProgramId = GetStringOrNumber(a, "ProgramID", "programid")
                                     });
                                 }
                             }

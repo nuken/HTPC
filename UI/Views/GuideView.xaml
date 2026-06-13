@@ -1,7 +1,8 @@
 <UserControl x:Class="HTPC.UI.Views.GuideView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="#0F0F0F" Foreground="White">
+             Background="#0F0F0F" Foreground="White"
+			 Focusable="True">
 
     <UserControl.Resources>
         <Style x:Key="ListBoxItemStyle" TargetType="ListBoxItem">
@@ -285,10 +286,33 @@
                     <TextBlock x:Name="ModalSummary" FontSize="15" Foreground="#AAAAAA" TextWrapping="Wrap" LineHeight="22" MaxHeight="100" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <Button x:Name="WatchLiveBtn" Content="▶ Watch Live" Width="180" Height="50" Background="White" Foreground="Black" FontWeight="Bold" FontSize="18" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="WatchButton_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
-                    <Button Content="Close" Width="180" Height="50" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseModal_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
-                </StackPanel>
+               <StackPanel Grid.Column="2" VerticalAlignment="Center" KeyboardNavigation.DirectionalNavigation="Continue">
+    
+    <StackPanel.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </StackPanel.Resources>
+
+    <Button x:Name="RecordEpisodeButton" Content="⏺ Record" Width="160" Height="40" Background="#8B0000" Foreground="White" FontWeight="Bold" FontSize="16" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="RecordEpisode_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" Visibility="Collapsed"/>
+    <Button x:Name="RecordSeriesButton" Content="⏺ Series Pass" Width="160" Height="40" Background="#A50000" Foreground="White" FontWeight="Bold" FontSize="16" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="RecordSeries_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" Visibility="Collapsed"/>
+    
+    <Button x:Name="WatchLiveBtn" Content="▶ Watch Live" Width="160" Height="40" Background="White" Foreground="Black" FontWeight="Bold" FontSize="16" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="WatchButton_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
+    <Button Content="Close" Width="160" Height="40" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseModal_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
+</StackPanel>
             </Grid>
         </Border>
     </Grid>

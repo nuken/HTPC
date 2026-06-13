@@ -108,6 +108,32 @@
                     </ControlTemplate>
                 </Button.Template>
             </Button>
+			<TextBlock Text="Recording Preferences" FontSize="26" FontWeight="Bold" Margin="0,40,0,20"/>
+            
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                <TextBlock Text="Padding Before (Start):" Foreground="#B3B3B3" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
+                <ComboBox x:Name="PaddingStartBox" FontSize="16" Width="120" Padding="10,5" Background="#1E1E1E" Foreground="White" SelectionChanged="Padding_SelectionChanged">
+    <ComboBox.ItemContainerStyle>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="#1E1E1E"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </ComboBox.ItemContainerStyle>
+</ComboBox>
+            </StackPanel>
+            
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,30">
+                <TextBlock Text="Padding After (End):" Foreground="#B3B3B3" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
+                <ComboBox x:Name="PaddingEndBox" FontSize="16" Width="120" Padding="10,5" Background="#1E1E1E" Foreground="White" SelectionChanged="Padding_SelectionChanged">
+    <ComboBox.ItemContainerStyle>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="#1E1E1E"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </ComboBox.ItemContainerStyle>
+</ComboBox>
+            </StackPanel>
+			
         </StackPanel>
 
         <StackPanel Grid.Row="1" Grid.Column="1" KeyboardNavigation.DirectionalNavigation="Continue">

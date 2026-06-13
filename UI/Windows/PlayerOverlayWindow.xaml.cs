@@ -73,7 +73,7 @@ public partial class PlayerOverlayWindow : Window
 
         if (media.StartOffsetSeconds > 0)
         {
-            Task.Run(async () =>
+            _ = Task.Run(async () =>
             {
                 await Task.Delay(600); 
                 Application.Current.Dispatcher.Invoke(() =>
@@ -84,7 +84,7 @@ public partial class PlayerOverlayWindow : Window
         }
     }
 	
-	private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+	private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         ShowControls(); 
 
@@ -103,9 +103,9 @@ public partial class PlayerOverlayWindow : Window
                 break;
 
             case HtpcCommand.Up:
-                if (_isLiveTv && MiniGuideContainer.Visibility == Visibility.Collapsed) 
-                    _ = OpenMiniGuideAsync();
-                break;
+        if (_isLiveTv && MiniGuideContainer.Visibility == Visibility.Collapsed) 
+            await OpenMiniGuideAsync(); 
+        break;
 
             case HtpcCommand.Down:
                 if (MiniGuideContainer.Visibility == Visibility.Visible) 
@@ -125,13 +125,19 @@ public partial class PlayerOverlayWindow : Window
                 break;
 
             case HtpcCommand.Left:
-            case HtpcCommand.SkipBackward: // Maps both the Left Arrow AND the MediaPrev button!
+            case HtpcCommand.SkipBackward: 
+                // THE FIX: Let WPF's ListBox handle the Left arrow natively!
+                if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
+                
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
                     SkipBackward_Click(null!, null!);
                 break;
 
             case HtpcCommand.Right:
             case HtpcCommand.SkipForward:
+                // THE FIX: Let WPF's ListBox handle the Right arrow natively!
+                if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
+                
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
                     SkipForward_Click(null!, null!);
                 break;
@@ -166,8 +172,14 @@ public partial class PlayerOverlayWindow : Window
         if (MiniGuideList.Items.Count > 0)
         {
             MiniGuideList.SelectedIndex = 0;
-            var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(0) as ListBoxItem;
-            item?.Focus();
+            
+            // THE FIX: Wait for WPF to finish drawing the horizontal list before hunting for the container
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                MiniGuideList.UpdateLayout();
+                var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(0) as ListBoxItem;
+                item?.Focus();
+            }), DispatcherPriority.Loaded);
         }
     }
 
