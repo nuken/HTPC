@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using HTPC.Core.Input; // Required for the new InputMapper
 using HTPC.Core.Models;
 using HTPC.Services;
 
@@ -19,7 +20,7 @@ public partial class ShowsView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnMoviesRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
-	public event EventHandler? OnVideosRequested;
+    public event EventHandler? OnVideosRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly DispatcherTimer _typingTimer;
@@ -52,13 +53,41 @@ public partial class ShowsView : UserControl
         _typingTimer.Tick += TypingTimer_Tick;
 
         Loaded += OnLoaded;
+        this.PreviewKeyDown += ShowsView_PreviewKeyDown; // Master listener for the remote's Back button
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_isInitialized) return;
+        if (_isInitialized) 
+        {
+            SearchBox.Focus();
+            return;
+        }
+
         _isInitialized = true;
         await ResetAndLoadAsync();
+
+        // THE FIX: Push the cursor to the Search Box so the remote D-Pad works instantly
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            SearchBox.Focus();
+        }), DispatcherPriority.Input);
+    }
+
+    // --- MASTER REMOTE BACK HANDLER ---
+    private void ShowsView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        // If the Modal is open and the user presses Back on the remote, close the modal
+        if (EpisodesOverlay.Visibility == Visibility.Visible && command == HtpcCommand.Back)
+        {
+            CloseOverlay_Click(null!, null!);
+            
+            // Return focus to the main grid so they can keep scrolling shows
+            ShowsGrid.Focus();
+            e.Handled = true;
+        }
     }
 
     private async Task ResetAndLoadAsync()
@@ -128,52 +157,78 @@ public partial class ShowsView : UserControl
         MainScroll.RaiseEvent(eventArg);
     }
 
-    // OVERLAY LOGIC: User clicks a Show Poster
-    private async void ShowCard_Click(object sender, MouseButtonEventArgs e)
+    // THE FIX: Listen for Enter/OK on the Show Posters
+    private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem show)
+        {
+            OpenShowOverlay(show);
+            e.Handled = true;
+        }
+    }
+
+    private void ShowCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBoxItem item && item.DataContext is MediaItem show)
+        {
+            OpenShowOverlay(show);
+        }
+    }
+
+    // Unified logic for opening a show (used by both Mouse and Keyboard/Remote)
+    private async void OpenShowOverlay(MediaItem show)
     {
         try
         {
-            if (sender is ListBoxItem item && item.DataContext is MediaItem show)
-            {
-                // Populate Column 0 details
-                OverlayShowTitle.Text = show.Title;
-                OverlayShowSummary.Text = string.IsNullOrEmpty(show.Summary) ? "No summary available." : show.Summary;
-                
-                // Safe, crash-proof image loading!
-                try 
-                { 
-                    if (!string.IsNullOrWhiteSpace(show.PosterUrl))
-                    {
-                        var bmp = new System.Windows.Media.Imaging.BitmapImage();
-                        bmp.BeginInit();
-                        bmp.UriSource = new Uri(show.PosterUrl, UriKind.RelativeOrAbsolute);
-                        bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; 
-                        bmp.EndInit();
-                        OverlayShowPoster.Source = bmp;
-                    }
-                    else OverlayShowPoster.Source = null;
-                } 
-                catch { OverlayShowPoster.Source = null; }
-
-                // THE FIX: Explicitly nuke the old UI state so WPF is forced to update!
-                SeasonsList.SelectedIndex = -1;
-                CurrentEpisodes.Clear();
-                Seasons.Clear();
-
-                // Fetch every episode for this show
-                _allEpisodesForSelectedShow = await _libraryService.GetEpisodesForShowAsync(show.Title) ?? new List<MediaItem>();
-
-                // Populate Column 1 (Unique Seasons)
-                if (_allEpisodesForSelectedShow.Any())
+            // Populate Column 0 details
+            OverlayShowTitle.Text = show.Title;
+            OverlayShowSummary.Text = string.IsNullOrEmpty(show.Summary) ? "No summary available." : show.Summary;
+            
+            // Safe, crash-proof image loading!
+            try 
+            { 
+                if (!string.IsNullOrWhiteSpace(show.PosterUrl))
                 {
-                    var uniqueSeasons = _allEpisodesForSelectedShow.Select(ep => ep.SeasonNumber).Distinct().OrderBy(s => s).ToList();
-                    foreach (var s in uniqueSeasons) Seasons.Add(s);
+                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(show.PosterUrl, UriKind.RelativeOrAbsolute);
+                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; 
+                    bmp.EndInit();
+                    OverlayShowPoster.Source = bmp;
                 }
+                else OverlayShowPoster.Source = null;
+            } 
+            catch { OverlayShowPoster.Source = null; }
 
-                // Open the overlay and auto-select the first season
-                EpisodesOverlay.Visibility = Visibility.Visible;
-                if (Seasons.Count > 0) SeasonsList.SelectedIndex = 0;
+            // Explicitly nuke the old UI state so WPF is forced to update!
+            SeasonsList.SelectedIndex = -1;
+            CurrentEpisodes.Clear();
+            Seasons.Clear();
+
+            // Fetch every episode for this show
+            _allEpisodesForSelectedShow = await _libraryService.GetEpisodesForShowAsync(show.Title) ?? new List<MediaItem>();
+
+            // Populate Column 1 (Unique Seasons)
+            if (_allEpisodesForSelectedShow.Any())
+            {
+                var uniqueSeasons = _allEpisodesForSelectedShow.Select(ep => ep.SeasonNumber).Distinct().OrderBy(s => s).ToList();
+                foreach (var s in uniqueSeasons) Seasons.Add(s);
             }
+
+            // Open the overlay
+            EpisodesOverlay.Visibility = Visibility.Visible;
+            if (Seasons.Count > 0) SeasonsList.SelectedIndex = 0;
+
+            // THE FIX: Push D-Pad focus into the Seasons list so the remote works instantly
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                if (SeasonsList.Items.Count > 0)
+                {
+                    var firstSeason = SeasonsList.ItemContainerGenerator.ContainerFromIndex(0) as ListBoxItem;
+                    firstSeason?.Focus();
+                }
+            }), DispatcherPriority.Input);
         }
         catch (Exception ex)
         {
@@ -204,6 +259,17 @@ public partial class ShowsView : UserControl
         EpisodesOverlay.Visibility = Visibility.Collapsed;
     }
 
+    // THE FIX: Listen for Enter/OK on the Episode Items
+    private void EpisodeItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem episode)
+        {
+            OnPlayRequested?.Invoke(this, episode);
+            e.Handled = true;
+        }
+    }
+
     private void EpisodeCard_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is ListBoxItem item && item.DataContext is MediaItem episode)
@@ -211,10 +277,46 @@ public partial class ShowsView : UserControl
             OnPlayRequested?.Invoke(this, episode);
         }
     }
+	
+	// --- 10-FOOT UI FOCUS TRAP FIXES ---
 
-    private void Home_Click(object sender, MouseButtonEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
-    private void Guide_Click(object sender, MouseButtonEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
-    private void Movies_Click(object sender, MouseButtonEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
-	private void Videos_Click(object sender, MouseButtonEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
-    private void Settings_Click(object sender, MouseButtonEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var cb = sender as ComboBox;
+        var command = InputMapper.GetCommand(e.Key);
+
+        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list!
+        if (cb != null && !cb.IsDropDownOpen)
+        {
+            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+                cb.MoveFocus(new TraversalRequest(direction));
+                e.Handled = true; // Stop the ComboBox from stealing the input
+            }
+        }
+    }
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        // TextBoxes naturally capture Left/Right for typing, but we want Up/Down to escape!
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+    }
+
+    // --- UPDATED NAVIGATION SIGNATURES (RoutedEventArgs) ---
+    private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
+    private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
+    private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
+    private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+    private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
 }

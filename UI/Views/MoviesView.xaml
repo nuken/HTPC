@@ -4,6 +4,59 @@
              Background="#0F0F0F" Foreground="White">
 
     <UserControl.Resources>
+        
+        <Style x:Key="NavPillStyle" TargetType="Button">
+            <Setter Property="Background" Value="#2A2A2A"/>
+            <Setter Property="Foreground" Value="#B3B3B3"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Margin" Value="0,0,15,0"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="20" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="Black"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NavPillActiveStyle" TargetType="Button" BasedOn="{StaticResource NavPillStyle}">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Focusable" Value="False"/> 
+        </Style>
+
+        <Style x:Key="StandardFocusStyle" TargetType="Control">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border BorderThickness="2" BorderBrush="White" CornerRadius="8" Margin="-2">
+                            <Border.Effect>
+                                <DropShadowEffect Color="White" BlurRadius="10" ShadowDepth="0" Opacity="0.8" />
+                            </Border.Effect>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="GenrePillStyle" TargetType="RadioButton">
             <Setter Property="Background" Value="#1E1E1E"/>
             <Setter Property="Foreground" Value="#B3B3B3"/>
@@ -12,6 +65,7 @@
             <Setter Property="Margin" Value="0,0,10,0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="GroupName" Value="Genres"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
@@ -27,6 +81,10 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="BorderBrush" Value="#88FFFFFF"/>
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="White"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -39,6 +97,7 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush" Value="#333333"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
@@ -55,6 +114,11 @@
                                                 <Path Grid.Column="1" Fill="#B3B3B3" Data="M 0 0 L 5 5 L 10 0 Z" VerticalAlignment="Center" Margin="15,0,0,0"/>
                                             </Grid>
                                         </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="BgBorder" Property="Background" Value="#2A2A2A"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
                             </ToggleButton>
@@ -74,35 +138,26 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="0,40,0,0">
+    <Grid Margin="0,40,0,0" FocusManager.IsFocusScope="True" 
+          KeyboardNavigation.DirectionalNavigation="Continue" 
+          KeyboardNavigation.TabNavigation="Cycle">
+        
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30">
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Home_Click">
-                <TextBlock Text="Home" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Guide_Click">
-                <TextBlock Text="Guide" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-            <Border Background="White" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand">
-                <TextBlock Text="Movies" Foreground="Black" FontWeight="Bold" FontSize="16"/>
-            </Border>
-			<Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Shows_Click">
-                <TextBlock Text="Shows" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-			<Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Videos_Click">
-                <TextBlock Text="Videos" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Settings_Click">
-                <TextBlock Text="Settings" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
+            <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Movies" Style="{StaticResource NavPillActiveStyle}"/>
+            <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
         </StackPanel>
 
-        <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" ScrollChanged="MainScroll_ScrollChanged">
-            <StackPanel Margin="0,0,0,60">
+        <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" ScrollChanged="MainScroll_ScrollChanged" Focusable="False">
+            <StackPanel Margin="0,0,0,60" KeyboardNavigation.DirectionalNavigation="Continue">
                 
                 <Grid Margin="40,0,40,20">
                     <Grid.ColumnDefinitions>
@@ -110,8 +165,8 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Background="#1A1A1A" CornerRadius="8" Padding="15,10" Margin="0,0,20,0" BorderThickness="1" BorderBrush="#333333">
-                        <TextBox x:Name="SearchBox" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="16" 
+                    <Border Grid.Column="0" Background="#1A1A1A" CornerRadius="8" Padding="15,10" Margin="0,0,20,0" BorderThickness="1" BorderBrush="#333333" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <TextBox x:Name="SearchBox" PreviewKeyDown="SearchBox_PreviewKeyDown" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="16" 
                                  CaretBrush="White" TextChanged="SearchBox_TextChanged"/>
                     </Border>
                     <TextBlock Text="Search movies, cast, or directors..." Foreground="#555555" FontSize="16" IsHitTestVisible="False" Margin="15,12,0,0" VerticalAlignment="Top">
@@ -126,7 +181,8 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <ComboBox x:Name="SortDropdown" Grid.Column="1" Width="220" FontSize="16" FontWeight="SemiBold" SelectionChanged="SortDropdown_SelectionChanged">
+                    
+                    <ComboBox x:Name="SortDropdown" PreviewKeyDown="Dropdown_PreviewKeyDown" Grid.Column="1" Width="220" FontSize="16" FontWeight="SemiBold" SelectionChanged="SortDropdown_SelectionChanged">
                         <ComboBoxItem Content="Recently Added"/>
                         <ComboBoxItem Content="Alphabetical (A-Z)"/>
                         <ComboBoxItem Content="Alphabetical (Z-A)"/>
@@ -149,25 +205,25 @@
                     </ComboBox>
                 </Grid>
 
-                <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="40,0,0,30">
-                    <StackPanel x:Name="GenrePanel" Orientation="Horizontal">
-                        <RadioButton Content="All" Style="{StaticResource GenrePillStyle}" IsChecked="True" Checked="Genre_Checked"/>
-                        <RadioButton Content="Action" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked"/>
-                        <RadioButton Content="Comedy" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked"/>
-                        <RadioButton Content="Drama" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked"/>
-                        <RadioButton Content="Family" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked"/>
-                        <RadioButton Content="Sci-Fi" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked"/>
-                        <RadioButton Content="Horror" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked"/>
-                        <RadioButton Content="Documentary" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked"/>
+                <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="40,0,0,30" Focusable="False">
+                    <StackPanel x:Name="GenrePanel" Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Continue">
+                        <RadioButton Content="All" Style="{StaticResource GenrePillStyle}" IsChecked="True" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Action" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Comedy" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Drama" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Family" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Sci-Fi" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Horror" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Documentary" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
                     </StackPanel>
                 </ScrollViewer>
                 
                 <ListBox x:Name="MoviesGrid" ItemsSource="{Binding MovieLibrary}" Background="Transparent" BorderThickness="0"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                         PreviewMouseWheel="MoviesGrid_PreviewMouseWheel">
+                         PreviewMouseWheel="MoviesGrid_PreviewMouseWheel" KeyboardNavigation.DirectionalNavigation="Continue">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal" Margin="40,0,0,0"/>
+                            <WrapPanel Orientation="Horizontal" Margin="40,0,0,0" KeyboardNavigation.DirectionalNavigation="Continue"/>
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
                     <ListBox.ItemContainerStyle>
@@ -178,6 +234,7 @@
                             <Setter Property="Padding" Value="0"/>
                             <Setter Property="Margin" Value="0,0,20,30"/>
                             <EventSetter Event="MouseLeftButtonUp" Handler="MovieCard_Click"/>
+                            <EventSetter Event="PreviewKeyDown" Handler="ListBoxItem_PreviewKeyDown"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">

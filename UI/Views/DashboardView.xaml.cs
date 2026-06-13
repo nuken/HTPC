@@ -1,10 +1,14 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
+using HTPC.Core.Input; // Required for the new InputMapper
 using HTPC.Core.Models;
 using HTPC.Services;
-using System.Windows.Input;
 
 namespace HTPC.UI.Views;
 
@@ -13,10 +17,10 @@ public partial class DashboardView : UserControl
     public event EventHandler<MediaItem>? OnPlayRequested;
     public event EventHandler? OnExitRequested;
     public event EventHandler? OnSettingsRequested;
-	public event EventHandler? OnGuideRequested;
-	public event EventHandler? OnMoviesRequested;
-	public event EventHandler? OnShowsRequested;
-	public event EventHandler? OnVideosRequested;
+    public event EventHandler? OnGuideRequested;
+    public event EventHandler? OnMoviesRequested;
+    public event EventHandler? OnShowsRequested;
+    public event EventHandler? OnVideosRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -25,7 +29,7 @@ public partial class DashboardView : UserControl
     // ObservableCollection automatically notifies the UI when items are added/removed
     public ObservableCollection<MediaItem> FeaturedMovies { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> LiveChannels { get; set; } = new ObservableCollection<MediaItem>();
-	public ObservableCollection<MediaItem> RecentEpisodes { get; set; } = new ObservableCollection<MediaItem>();
+    public ObservableCollection<MediaItem> RecentEpisodes { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> RecentVideos { get; set; } = new ObservableCollection<MediaItem>();
 
     public DashboardView(MediaLibraryService libraryService, ServerManagerService serverManager)
@@ -39,7 +43,7 @@ public partial class DashboardView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-		var activeServer = _serverManager.GetActiveServer();
+        var activeServer = _serverManager.GetActiveServer();
         
         // Redirect to settings if the database is empty or missing a server IP
         if (activeServer == null || string.IsNullOrWhiteSpace(activeServer.IpAddress))
@@ -47,8 +51,13 @@ public partial class DashboardView : UserControl
             OnSettingsRequested?.Invoke(this, EventArgs.Empty);
             return; // Stop trying to load the dashboard!
         } 
-		
-        if (FeaturedMovies.Count > 0) return;
+        
+        if (FeaturedMovies.Count > 0) 
+        {
+            // If already loaded, just return focus to the dropdown for the remote
+            CollectionDropdown.Focus();
+            return;
+        }
 
         // 1. Fetch Collections
         var collections = await _libraryService.GetCollectionsAsync();
@@ -69,16 +78,22 @@ public partial class DashboardView : UserControl
         
         var movies = await _libraryService.GetFeaturedMoviesAsync();
         foreach (var movie in movies) FeaturedMovies.Add(movie);
-		
-		// Load Recent Episodes
-            var episodes = await _libraryService.GetRecentEpisodesAsync(15);
-            RecentEpisodes.Clear();
-            foreach (var ep in episodes) RecentEpisodes.Add(ep);
+        
+        // Load Recent Episodes
+        var episodes = await _libraryService.GetRecentEpisodesAsync(15);
+        RecentEpisodes.Clear();
+        foreach (var ep in episodes) RecentEpisodes.Add(ep);
 
-            // Load Recent Videos
-            var videos = await _libraryService.GetRecentVideosAsync(15);
-            RecentVideos.Clear();
-            foreach (var vid in videos) RecentVideos.Add(vid);
+        // Load Recent Videos
+        var videos = await _libraryService.GetRecentVideosAsync(15);
+        RecentVideos.Clear();
+        foreach (var vid in videos) RecentVideos.Add(vid);
+
+        // THE FIX: Push the cursor to the Dropdown so the remote D-Pad works instantly
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            CollectionDropdown.Focus();
+        }), DispatcherPriority.Input);
     }
 
     private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -102,47 +117,60 @@ public partial class DashboardView : UserControl
             LiveChannels.Add(channel);
         }
     }
-	
-	private void Guide_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    
+    // --- UPDATED NAVIGATION SIGNATURES (RoutedEventArgs) ---
+    private void Guide_Click(object sender, RoutedEventArgs e)
     {
         OnGuideRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ExitApp_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void ExitApp_Click(object sender, RoutedEventArgs e)
     {
         OnExitRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void Settings_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void Settings_Click(object sender, RoutedEventArgs e)
     {
         OnSettingsRequested?.Invoke(this, EventArgs.Empty);
     }
-	
-	private void Movies_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    
+    private void Movies_Click(object sender, RoutedEventArgs e)
     {
         OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     }
-	
-    private void Shows_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    
+    private void Shows_Click(object sender, RoutedEventArgs e)
     {
         OnShowsRequested?.Invoke(this, EventArgs.Empty);
     }
-	private void Videos_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+
+    private void Videos_Click(object sender, RoutedEventArgs e)
     {
         OnVideosRequested?.Invoke(this, EventArgs.Empty);
     }
+
     // --- NATIVE NAVIGATION FIXES ---
 
-    private void ListBoxItem_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == System.Windows.Input.Key.Enter && sender is ListBoxItem item && item.DataContext is MediaItem movie)
+        var command = InputMapper.GetCommand(e.Key);
+        
+        // 1. Handle OK/Enter to play the movie
+        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
             OnPlayRequested?.Invoke(this, movie);
-            e.Handled = true; // Prevent the sound/double-fire
+            e.Handled = true; 
+        }
+        // 2. THE ESCAPE HATCH: Handle Up/Down to jump between rows instantly
+        else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as ListBoxItem)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true; // Tell WPF we handled the movement, don't bounce around!
         }
     }
 
-    private void ListBoxItem_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void ListBoxItem_MouseUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
@@ -177,8 +205,8 @@ public partial class DashboardView : UserControl
             }
         }
     }
-	
-	private void HorizontalList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    
+    private void HorizontalList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         // If the user holds Shift, scroll the horizontal row
         if (Keyboard.Modifiers == ModifierKeys.Shift)
@@ -217,5 +245,40 @@ public partial class DashboardView : UserControl
             if (result != null) return result;
         }
         return null;
+    }
+	
+	// --- 10-FOOT UI FOCUS TRAP FIXES ---
+
+    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var cb = sender as ComboBox;
+        var command = InputMapper.GetCommand(e.Key);
+
+        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list!
+        if (cb != null && !cb.IsDropDownOpen)
+        {
+            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+                cb.MoveFocus(new TraversalRequest(direction));
+                e.Handled = true; // Stop the ComboBox from stealing the input
+            }
+        }
+    }
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        // TextBoxes naturally capture Left/Right for typing, but we want Up/Down to escape!
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
     }
 }

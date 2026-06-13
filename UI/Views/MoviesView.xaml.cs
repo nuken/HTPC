@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using HTPC.Core.Input; 
 using HTPC.Core.Models;
 using HTPC.Services;
 
@@ -16,8 +17,8 @@ public partial class MoviesView : UserControl
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
-	public event EventHandler? OnShowsRequested;
-	public event EventHandler? OnVideosRequested;
+    public event EventHandler? OnShowsRequested;
+    public event EventHandler? OnVideosRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly DispatcherTimer _typingTimer;
@@ -50,7 +51,11 @@ public partial class MoviesView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_isInitialized) return;
+        if (_isInitialized) 
+        {
+            SearchBox.Focus();
+            return;
+        }
 
         // Load the saved sort preference
         _currentSort = PreferencesManager.LoadMovieSort();
@@ -65,6 +70,11 @@ public partial class MoviesView : UserControl
 
         _isInitialized = true;
         await ResetAndLoadAsync();
+
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            SearchBox.Focus();
+        }), DispatcherPriority.Input);
     }
 
     private async Task ResetAndLoadAsync()
@@ -112,7 +122,6 @@ public partial class MoviesView : UserControl
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        // Reset the timer on every keystroke
         _typingTimer.Stop();
         _typingTimer.Start();
     }
@@ -133,7 +142,7 @@ public partial class MoviesView : UserControl
         if (SortDropdown.SelectedItem is ComboBoxItem item)
         {
             _currentSort = item.Content.ToString() ?? "Recently Added";
-            PreferencesManager.SaveMovieSort(_currentSort); // Save preference!
+            PreferencesManager.SaveMovieSort(_currentSort); 
             await ResetAndLoadAsync();
         }
     }
@@ -161,15 +170,74 @@ public partial class MoviesView : UserControl
         MainScroll.RaiseEvent(eventArg);
     }
 
+    private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem movie)
+        {
+            OnPlayRequested?.Invoke(this, movie);
+            e.Handled = true; 
+        }
+    }
+
     private void MovieCard_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is ListBoxItem item && item.DataContext is MediaItem movie)
             OnPlayRequested?.Invoke(this, movie);
     }
+	
+	// --- 10-FOOT UI FOCUS TRAP FIXES ---
 
-    private void Home_Click(object sender, MouseButtonEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
-    private void Guide_Click(object sender, MouseButtonEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
-    private void Shows_Click(object sender, MouseButtonEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
-	private void Videos_Click(object sender, MouseButtonEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
-	private void Settings_Click(object sender, MouseButtonEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var cb = sender as ComboBox;
+        var command = InputMapper.GetCommand(e.Key);
+
+        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list!
+        if (cb != null && !cb.IsDropDownOpen)
+        {
+            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+                cb.MoveFocus(new TraversalRequest(direction));
+                e.Handled = true; // Stop the ComboBox from stealing the input
+            }
+        }
+    }
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        // TextBoxes naturally capture Left/Right for typing, but we want Up/Down to escape!
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+    }
+	
+	private void GenrePill_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        // If the user pushes Up or Down on a genre pill, force the focus to jump!
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as RadioButton)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+    }
+
+    private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
+    private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
+    private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
+    private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+    private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
 }

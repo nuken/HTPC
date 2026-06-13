@@ -5,6 +5,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
+using HTPC.Core.Input; 
 using HTPC.Core.Models;
 using HTPC.Services;
 
@@ -12,7 +14,6 @@ namespace HTPC.UI.Views;
 
 public partial class GuideView : UserControl
 {
-    // Global Navigation Events
     public event EventHandler? OnHomeRequested;
     public event EventHandler? OnMoviesRequested;
     public event EventHandler? OnShowsRequested;
@@ -36,6 +37,7 @@ public partial class GuideView : UserControl
         GuideItemsControl.ItemsSource = DisplayedChannels;
         
         this.Loaded += OnLoaded;
+        this.PreviewKeyDown += GuideView_PreviewKeyDown; 
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -55,7 +57,75 @@ public partial class GuideView : UserControl
         }
     }
 
-    // --- MODAL OVERLAY LOGIC ---
+    private void GuideView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        if (ModalOverlay.Visibility == Visibility.Visible)
+        {
+            if (command == HtpcCommand.Back)
+            {
+                CloseModal_Click(null!, null!);
+                if (_selectedAiring != null) GuideItemsControl.Focus();
+                e.Handled = true;
+            }
+        }
+    }
+
+    // THE FIX: Provide a manual bridge from the Top Buttons down into the nested items control
+    private void GuideNav_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Down)
+        {
+            FocusFirstAiring();
+            e.Handled = true;
+        }
+    }
+
+    private void FocusFirstAiring()
+    {
+        // DispatcherPriority.ApplicationIdle ensures the virtual list is fully drawn before we hunt for the button
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            if (GuideItemsControl.Items.Count > 0)
+            {
+                var firstRow = GuideItemsControl.ItemContainerGenerator.ContainerFromIndex(0) as ListBoxItem;
+                if (firstRow != null)
+                {
+                    // Dig deeply into the visual tree to find the very first button
+                    var firstBtn = FindVisualChild<Button>(firstRow);
+                    firstBtn?.Focus();
+                }
+            }
+        }), DispatcherPriority.ApplicationIdle);
+    }
+
+    // THE FIX: When the user tabs to a button with the D-pad, force the scroll viewer to pan to it!
+    private void AiringButton_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn)
+        {
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                btn.BringIntoView();
+            }), DispatcherPriority.Render);
+        }
+    }
+
+    // A standard WPF trick to pierce through DataTemplates and find specific controls
+    private T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is T t) return t;
+            var result = FindVisualChild<T>(child);
+            if (result != null) return result;
+        }
+        return null;
+    }
 
     private void AiringBlock_Click(object sender, RoutedEventArgs e)
     {
@@ -63,12 +133,10 @@ public partial class GuideView : UserControl
         {
             _selectedAiring = airing;
             
-            // Populate overlay metadata
             ModalTitle.Text = airing.DisplayTitle;
             ModalTime.Text = $"{airing.Start:h:mm tt} - {airing.End:h:mm tt}";
             ModalSummary.Text = string.IsNullOrWhiteSpace(airing.DisplaySummary) ? "No description available." : airing.DisplaySummary;
             
-            // Load poster safely
             try 
             { 
                 if (!string.IsNullOrWhiteSpace(airing.ImageUrl))
@@ -84,8 +152,12 @@ public partial class GuideView : UserControl
             } 
             catch { ModalImage.Source = null; }
 
-            // Show the bottom guide
             ModalOverlay.Visibility = Visibility.Visible;
+            
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                WatchLiveBtn.Focus();
+            }), DispatcherPriority.Input);
         }
     }
 
@@ -97,14 +169,10 @@ public partial class GuideView : UserControl
             if (activeServer == null) return;
 
             string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-            
-            // Find the underlying channel to check for virtual properties
             var parentChannel = DisplayedChannels.FirstOrDefault(c => c.Number == _selectedAiring.ChannelNumber);
             if (parentChannel == null) return;
 
-            // THE FIX: Dynamically generate the correct stream rules
             var media = _libraryService.CreateLiveMediaItem(baseUrl, parentChannel, _selectedAiring);
-            
             OnPlayRequested?.Invoke(this, media);
             ModalOverlay.Visibility = Visibility.Collapsed;
         }
@@ -113,16 +181,15 @@ public partial class GuideView : UserControl
     private void CloseModal_Click(object sender, RoutedEventArgs e)
     {
         ModalOverlay.Visibility = Visibility.Collapsed;
+        if (_selectedAiring != null) GuideItemsControl.Focus();
     }
 
-    // --- NAVBAR ROUTING ---
-    private void Home_Click(object sender, MouseButtonEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
-    private void Movies_Click(object sender, MouseButtonEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
-    private void Shows_Click(object sender, MouseButtonEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
-    private void Videos_Click(object sender, MouseButtonEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
-    private void Settings_Click(object sender, MouseButtonEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
+    private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
+    private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
+    private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+    private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
 
-    // --- PAGINATION & SCROLLING ---
     private void ChannelItemsControl_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         var sv = GetScrollViewer(GuideItemsControl);
@@ -154,6 +221,7 @@ public partial class GuideView : UserControl
         DisplayedChannels.Clear();
         foreach (var c in channels) DisplayedChannels.Add(c);
         GenerateTimeHeaders();
+        FocusFirstAiring();
     }
 
     private void GenerateTimeHeaders()
@@ -175,6 +243,7 @@ public partial class GuideView : UserControl
         if (depObj is ScrollViewer viewer) return viewer;
         for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(depObj); i++)
         {
+            // THE FIX: Removed the "parent:" named parameter here!
             var child = System.Windows.Media.VisualTreeHelper.GetChild(depObj, i);
             var result = GetScrollViewer(child);
             if (result != null) return result;

@@ -34,37 +34,66 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="NavPillStyle" TargetType="Button">
+            <Setter Property="Background" Value="#2A2A2A"/>
+            <Setter Property="Foreground" Value="#B3B3B3"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Margin" Value="0,0,15,0"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="20" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="Black"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NavPillActiveStyle" TargetType="Button" BasedOn="{StaticResource NavPillStyle}">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Focusable" Value="False"/> 
+        </Style>
     </UserControl.Resources>
 
-    <Grid Margin="0,40,0,0">
+    <Grid Margin="0,40,0,0" FocusManager.IsFocusScope="True" 
+          KeyboardNavigation.DirectionalNavigation="Continue" 
+          KeyboardNavigation.TabNavigation="Cycle">
+        
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/> 
             <RowDefinition Height="*"/>   
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30">
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Home_Click">
-                <TextBlock Text="Home" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-            <Border Background="White" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand">
-                <TextBlock Text="Guide" Foreground="Black" FontWeight="Bold" FontSize="16"/>
-            </Border>
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Movies_Click">
-                <TextBlock Text="Movies" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Shows_Click">
-                <TextBlock Text="Shows" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Videos_Click">
-                <TextBlock Text="Videos" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
-            <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Settings_Click">
-                <TextBlock Text="Settings" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-            </Border>
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
+            <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Guide" Style="{StaticResource NavPillActiveStyle}"/>
+            <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
         </StackPanel>
 
-       <Grid Grid.Row="1" Margin="40,0,40,5">
+        <Grid Grid.Row="1" Margin="40,0,40,5" KeyboardNavigation.DirectionalNavigation="Continue">
             <Grid.Resources>
                 <Style TargetType="Button">
                     <Setter Property="Background" Value="#1A1A1A"/>
@@ -112,18 +141,18 @@
             <TextBlock Grid.Column="0" Text="CHANNELS" VerticalAlignment="Bottom" Margin="0,0,0,5" FontWeight="Bold" Foreground="#888888" FontSize="14"/>
             
             <Grid Grid.Column="1" Margin="0,0,0,5">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                    <Button Content="◀ Earlier" Width="100" Height="34" Margin="0,0,10,0" Click="ScrollLeft_Click"/>
-                    <Button Content="Later ▶" Width="100" Height="34" Click="ScrollRight_Click"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Button Content="◀ Earlier" Width="100" Height="34" Margin="0,0,10,0" Click="ScrollLeft_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>
+                    <Button Content="Later ▶" Width="100" Height="34" Click="ScrollRight_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <RepeatButton Content="▲ Up" Width="100" Height="34" Margin="0,0,10,0" Click="PageUp_Click"/>
-                    <RepeatButton Content="Down ▼" Width="100" Height="34" Click="PageDown_Click"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <RepeatButton Content="▲ Up" Width="100" Height="34" Margin="0,0,10,0" Click="PageUp_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>
+                    <RepeatButton Content="Down ▼" Width="100" Height="34" Click="PageDown_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>
                 </StackPanel>
             </Grid>
         </Grid>
-		
-        <Grid Grid.Row="2" Margin="40,0,40,0">
+        
+        <Grid Grid.Row="2" Margin="40,0,40,0" KeyboardNavigation.DirectionalNavigation="Continue">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
@@ -183,7 +212,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <ListBox x:Name="GuideItemsControl" Grid.Row="1" Focusable="False" IsTabStop="False"
+                    <ListBox x:Name="GuideItemsControl" Grid.Row="1" Focusable="False" IsTabStop="False" KeyboardNavigation.DirectionalNavigation="Continue"
                              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                              ScrollViewer.VerticalScrollBarVisibility="Visible" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              Background="Transparent" BorderThickness="0" ScrollViewer.ScrollChanged="GuideItemsControl_ScrollChanged"
@@ -191,15 +220,15 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid Height="70" Margin="0,5" ClipToBounds="False">
-                                    <ItemsControl ItemsSource="{Binding CurrentAirings}" Focusable="False" IsTabStop="False">
+                                    <ItemsControl ItemsSource="{Binding CurrentAirings}" Focusable="False" IsTabStop="False" KeyboardNavigation.DirectionalNavigation="Continue">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" Margin="4,0,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="4,0,0,0" KeyboardNavigation.DirectionalNavigation="Continue"/>
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Button Click="AiringBlock_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" Margin="{Binding DynamicMargin}" Padding="0" BorderThickness="0" Background="Transparent" Cursor="Hand" Tag="{Binding}">
+                                                <Button Click="AiringBlock_Click" GotFocus="AiringButton_GotFocus" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" Margin="{Binding DynamicMargin}" Padding="0" BorderThickness="0" Background="Transparent" Cursor="Hand" Tag="{Binding}">
                                                     <Button.Template>
                                                         <ControlTemplate TargetType="Button">
                                                             <Border x:Name="EpgBorder" MinWidth="150" Width="{Binding BlockWidth}" Height="70" Background="#1E1E1E" BorderBrush="#333333" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="1,0">
@@ -208,9 +237,7 @@
                                                                         <ColumnDefinition Width="Auto"/>
                                                                         <ColumnDefinition Width="*"/>
                                                                     </Grid.ColumnDefinitions>
-                                                                    
                                                                     <Border Grid.Column="0" Width="4" Background="{Binding CategoryColor}" CornerRadius="2" Margin="0,0,10,0"/>
-                                                                    
                                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                                         <TextBlock Text="{Binding DisplayTitle}" Foreground="White" FontWeight="Bold" FontSize="14" TextTrimming="CharacterEllipsis"/>
                                                                         <TextBlock Text="{Binding DisplaySummary}" Foreground="#AAAAAA" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
@@ -218,12 +245,8 @@
                                                                 </Grid>
                                                             </Border>
                                                             <ControlTemplate.Triggers>
-                                                                <Trigger Property="IsMouseOver" Value="True">
-                                                                    <Setter TargetName="EpgBorder" Property="Background" Value="#333333"/>
-                                                                </Trigger>
-                                                                <Trigger Property="IsKeyboardFocused" Value="True">
-                                                                    <Setter TargetName="EpgBorder" Property="Background" Value="#333333"/>
-                                                                </Trigger>
+                                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="EpgBorder" Property="Background" Value="#333333"/></Trigger>
+                                                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="EpgBorder" Property="Background" Value="#444444"/></Trigger>
                                                                 <DataTrigger Binding="{Binding IsAiringNow}" Value="True">
                                                                     <Setter TargetName="EpgBorder" Property="Background" Value="#1A3A5A"/>
                                                                     <Setter TargetName="EpgBorder" Property="BorderBrush" Value="#00A4EF"/>
@@ -247,9 +270,10 @@
             <Border.Effect>
                 <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
             </Border.Effect>
-            <Grid>
+            <Grid KeyboardNavigation.DirectionalNavigation="Continue">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/> <ColumnDefinition Width="*"/>    <ColumnDefinition Width="Auto"/> </Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/> <ColumnDefinition Width="*"/> <ColumnDefinition Width="Auto"/> 
+                </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Width="160" Height="220" CornerRadius="12" ClipToBounds="True" Background="#1A1A1A" Margin="0,0,30,0">
                     <Image x:Name="ModalImage" Stretch="UniformToFill"/>
@@ -261,9 +285,9 @@
                     <TextBlock x:Name="ModalSummary" FontSize="15" Foreground="#AAAAAA" TextWrapping="Wrap" LineHeight="22" MaxHeight="100" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                    <Button Content="▶ Watch Live" Width="180" Height="50" Background="White" Foreground="Black" FontWeight="Bold" FontSize="18" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="WatchButton_Click"/>
-                    <Button Content="Close" Width="180" Height="50" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseModal_Click"/>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Button x:Name="WatchLiveBtn" Content="▶ Watch Live" Width="180" Height="50" Background="White" Foreground="Black" FontWeight="Bold" FontSize="18" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="WatchButton_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
+                    <Button Content="Close" Width="180" Height="50" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseModal_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
                 </StackPanel>
             </Grid>
         </Border>

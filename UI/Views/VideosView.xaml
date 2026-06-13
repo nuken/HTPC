@@ -3,43 +3,89 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="#0F0F0F" Foreground="White">
 
-    <Grid Margin="0,40,0,0">
+    <UserControl.Resources>
+        <Style x:Key="NavPillStyle" TargetType="Button">
+            <Setter Property="Background" Value="#2A2A2A"/>
+            <Setter Property="Foreground" Value="#B3B3B3"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Margin" Value="0,0,15,0"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="20" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="Black"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NavPillActiveStyle" TargetType="Button" BasedOn="{StaticResource NavPillStyle}">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Focusable" Value="False"/> 
+        </Style>
+
+        <Style x:Key="StandardFocusStyle" TargetType="Control">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border BorderThickness="2" BorderBrush="White" CornerRadius="8" Margin="-2">
+                            <Border.Effect>
+                                <DropShadowEffect Color="White" BlurRadius="10" ShadowDepth="0" Opacity="0.8" />
+                            </Border.Effect>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="0,40,0,0" FocusManager.IsFocusScope="True" 
+          KeyboardNavigation.DirectionalNavigation="Continue" 
+          KeyboardNavigation.TabNavigation="Cycle">
+        
         <Grid x:Name="MasterGroupsGrid">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30">
-                <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Home_Click">
-                    <TextBlock Text="Home" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-                </Border>
-                <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Guide_Click">
-                    <TextBlock Text="Guide" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-                </Border>
-                <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Movies_Click">
-                    <TextBlock Text="Movies" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-                </Border>
-                <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Shows_Click">
-                    <TextBlock Text="Shows" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-                </Border>
-                <Border Background="White" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand">
-                    <TextBlock Text="Videos" Foreground="Black" FontWeight="Bold" FontSize="16"/>
-                </Border>
-                <Border Background="#2A2A2A" CornerRadius="20" Padding="20,10" Margin="0,0,15,0" Cursor="Hand" MouseLeftButtonDown="Settings_Click">
-                    <TextBlock Text="Settings" Foreground="#B3B3B3" FontWeight="SemiBold" FontSize="16"/>
-                </Border>
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
+                <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
+                <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
+                <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+                <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+                <Button Content="Videos" Style="{StaticResource NavPillActiveStyle}"/>
+                <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
             </StackPanel>
 
-            <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="0,0,0,60">
+            <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <StackPanel Margin="0,0,0,60" KeyboardNavigation.DirectionalNavigation="Continue">
                     <TextBlock Text="Video Folders" FontSize="24" FontWeight="Bold" Margin="40,0,0,20"/>
 
                     <ListBox x:Name="GroupsGrid" ItemsSource="{Binding VideoGroups}" Background="Transparent" BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" 
+                             KeyboardNavigation.DirectionalNavigation="Continue" PreviewMouseWheel="GroupsGrid_PreviewMouseWheel">
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" Margin="40,0,0,0"/>
+                                <WrapPanel Orientation="Horizontal" Margin="40,0,0,0" KeyboardNavigation.DirectionalNavigation="Continue"/>
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
                         <ListBox.ItemContainerStyle>
@@ -50,6 +96,7 @@
                                 <Setter Property="Padding" Value="0"/>
                                 <Setter Property="Margin" Value="0,0,20,30"/>
                                 <EventSetter Event="MouseLeftButtonUp" Handler="GroupCard_Click"/>
+                                <EventSetter Event="PreviewKeyDown" Handler="GroupItem_PreviewKeyDown"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
@@ -95,23 +142,25 @@
             </ScrollViewer>
         </Grid>
 
-        <Border x:Name="VideosOverlay" Background="#F20A0A0A" Visibility="Collapsed" Margin="0,-40,0,0">
-            <Grid Margin="40">
+        <Border x:Name="VideosOverlay" Background="#F20A0A0A" Visibility="Collapsed" Margin="0,-40,0,0" KeyboardNavigation.DirectionalNavigation="Continue">
+            <Grid Margin="40" KeyboardNavigation.DirectionalNavigation="Continue">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,40,0,20">
-                    <Button Content="🔙 Back to Folders" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" Click="CloseOverlay_Click"/>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,40,0,20" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Button Content="🔙 Back to Folders" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" Click="CloseOverlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
                     <TextBlock x:Name="SelectedGroupName" Text="Folder Name" Foreground="#00A4EF" FontSize="24" FontWeight="Bold" Margin="30,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <ListBox x:Name="VideosList" ItemsSource="{Binding CurrentVideos}" Background="Transparent" BorderThickness="0">
+                <ScrollViewer x:Name="OverlayScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <ListBox x:Name="VideosList" ItemsSource="{Binding CurrentVideos}" Background="Transparent" BorderThickness="0" KeyboardNavigation.DirectionalNavigation="Continue"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             PreviewMouseWheel="VideosList_PreviewMouseWheel">
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal"/>
+                                <WrapPanel Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Continue"/>
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
                         <ListBox.ItemContainerStyle>
@@ -122,6 +171,7 @@
                                 <Setter Property="Padding" Value="0"/>
                                 <Setter Property="Margin" Value="0,0,20,30"/>
                                 <EventSetter Event="MouseLeftButtonUp" Handler="VideoCard_Click"/>
+                                <EventSetter Event="PreviewKeyDown" Handler="VideoItem_PreviewKeyDown"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
