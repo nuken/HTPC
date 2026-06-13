@@ -37,6 +37,18 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
         Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
+		
+		// 1. Force the network cache to be active
+        Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
+        
+        // 2. Increase the RAM cache size to ~150MB (prevents high-bitrate starvation)
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000");
+        
+        // 3. Force MPV to buffer up to 10 seconds ahead into the future
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
+        
+        // 4. Force MPV to pause and wait for the cache to initially fill BEFORE playing
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
 
         int result = Libmpv.mpv_initialize(_mpvContext);
         if (result < 0) throw new Exception($"Failed to initialize libmpv context. Error: {result}");

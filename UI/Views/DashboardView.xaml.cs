@@ -49,51 +49,59 @@ public partial class DashboardView : UserControl
         if (activeServer == null || string.IsNullOrWhiteSpace(activeServer.IpAddress))
         {
             OnSettingsRequested?.Invoke(this, EventArgs.Empty);
-            return; // Stop trying to load the dashboard!
+            return; 
         } 
         
         if (FeaturedMovies.Count > 0) 
         {
-            // If already loaded, just return focus to the dropdown for the remote
-            GuideNavBtn.Focus();
+            if (LoadingOverlay != null) LoadingOverlay.Visibility = Visibility.Collapsed;
+            
+            // USE THE HEAVY HAMMER:
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                GuideNavBtn.Focus();
+                Keyboard.Focus(GuideNavBtn); 
+            }), DispatcherPriority.ApplicationIdle);
+            
             return;
         }
 
+        // --- SHOW THE LOADING SCREEN ---
+        LoadingOverlay.Visibility = Visibility.Visible;
+
         // 1. Fetch Collections
         var collections = await _libraryService.GetCollectionsAsync();
-        
-        // Add a default "All Channels" option at the top
         var allChannels = new ChannelCollection { Id = "", Name = "All Channels" };
         collections.Insert(0, allChannels);
         CollectionDropdown.ItemsSource = collections;
 
-        // 2. Select the saved collection from the database
         var savedCollection = collections.FirstOrDefault(c => c.Id == activeServer?.DefaultCollectionId);
-        
         CollectionDropdown.SelectedItem = savedCollection ?? allChannels;
-        _isUpdatingDropdown = false; // Allow the selection changed event to fire going forward
+        _isUpdatingDropdown = false; 
 
-        // 3. Fetch Initial Data based on the selected collection
+        // 2. AWAIT ALL SERVER DATA
         await LoadLiveTvData(savedCollection ?? allChannels);
         
         var movies = await _libraryService.GetFeaturedMoviesAsync();
         foreach (var movie in movies) FeaturedMovies.Add(movie);
         
-        // Load Recent Episodes
         var episodes = await _libraryService.GetRecentEpisodesAsync(15);
         RecentEpisodes.Clear();
         foreach (var ep in episodes) RecentEpisodes.Add(ep);
 
-        // Load Recent Videos
         var videos = await _libraryService.GetRecentVideosAsync(15);
         RecentVideos.Clear();
         foreach (var vid in videos) RecentVideos.Add(vid);
 
-        // THE FIX: Push the cursor to the Dropdown so the remote D-Pad works instantly
+        // --- THE DATA IS READY, HIDE THE LOADING SCREEN ---
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+
+        // 3. Return focus to the UI
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
             GuideNavBtn.Focus();
-        }), DispatcherPriority.Input);
+            Keyboard.Focus(GuideNavBtn); // Sync hardware keyboard instantly!
+        }), DispatcherPriority.ApplicationIdle);
     }
 
     private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)

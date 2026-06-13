@@ -50,6 +50,9 @@ public partial class PlayerOverlayWindow : Window
         
         // THE FIX: Use the bulletproof boolean flag
         _isLiveTv = media.IsLiveTv; 
+		
+		if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
+        else BufferingOverlay.Visibility = Visibility.Collapsed;
 
         // Always show the timeline now!
         TimelineGrid.Visibility = Visibility.Visible;
@@ -211,6 +214,20 @@ public partial class PlayerOverlayWindow : Window
     private void SyncTimer_Tick(object? sender, EventArgs e)
     {
         if (!_isPlaying || _isDragging) return;
+
+        // --- ADD THIS CHECK TO THE VERY TOP OF THE TICK ---
+        if (BufferingOverlay.Visibility == Visibility.Visible)
+        {
+            // When GetPosition returns greater than 0, the video has officially started rendering!
+            if (_mpvService.GetPosition() > 0)
+            {
+                BufferingOverlay.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                return; // Skip the rest of the UI updates until the video actually starts
+            }
+        }
 
         if (!_isLiveTv)
         {
