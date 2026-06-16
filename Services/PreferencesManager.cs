@@ -10,14 +10,18 @@ public class AppPreferences
     public string GuideCollection { get; set; } = "All";
     public int PaddingStartMinutes { get; set; } = 0;
     public int PaddingEndMinutes { get; set; } = 0;
-	public string LastGuideCollection { get; set; } = "All Channels";
-	public Dictionary<string, List<string>> CustomChannelOrders { get; set; } = new Dictionary<string, List<string>>();
-	public bool IsFullscreen { get; set; } = true;
+    public string LastGuideCollection { get; set; } = "All Channels";
+    public Dictionary<string, List<string>> CustomChannelOrders { get; set; } = new Dictionary<string, List<string>>();
+    public bool IsFullscreen { get; set; } = true;
     public double WindowWidth { get; set; } = 1280;
     public double WindowHeight { get; set; } = 720;
     public double WindowTop { get; set; } = 100;
     public double WindowLeft { get; set; } = 100;
-	public double UiScaleMultiplier { get; set; } = 1.0; // 1.0 = 100%, 1.2 = 120%, 1.5 = 150%
+    public double UiScaleMultiplier { get; set; } = 1.0; 
+
+    // --- NEW: VIDEO PROCESSING ---
+    public bool EnableUpscaling { get; set; } = false;
+    public string UpscalerPreset { get; set; } = "RAVU"; 
 }
 
 public static class PreferencesManager

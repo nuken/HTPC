@@ -74,6 +74,13 @@ public partial class PlayerOverlayWindow : Window
 
         _isPlaying = true;
         PlayPauseButton.Content = "⏸";
+		
+		// Show the Anime hot-swap button ONLY if global upscaling is enabled
+        var prefs = PreferencesManager.Load();
+        AnimeButton.Visibility = prefs.EnableUpscaling ? Visibility.Visible : Visibility.Collapsed;
+        
+        // Reset the button color to white every time a new video starts
+        AnimeButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
         
         _syncTimer.Start(); 
         WakeUpUi();
@@ -315,6 +322,18 @@ public partial class PlayerOverlayWindow : Window
     private void CC_Click(object sender, RoutedEventArgs e)
     {
         _mpvService.CycleSubtitles();
+        WakeUpUi();
+    }
+	
+	private void Anime_Click(object sender, RoutedEventArgs e)
+    {
+        // Tell the playback service to instantly hot-swap the shader
+        bool isAnimeActive = _mpvService.ToggleAnimeMode();
+        
+        // Give visual feedback (Turns Red when ON, White when OFF)
+        AnimeButton.Foreground = new System.Windows.Media.SolidColorBrush(
+            isAnimeActive ? System.Windows.Media.Color.FromRgb(139, 0, 0) : System.Windows.Media.Colors.White);
+            
         WakeUpUi();
     }
 

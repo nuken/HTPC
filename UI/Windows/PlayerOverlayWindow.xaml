@@ -133,9 +133,12 @@
                         <Button Content="⏮" Style="{StaticResource TransportButtonStyle}" ToolTip="-10 Seconds" Click="SkipBackward_Click"/>
                         <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource TransportButtonStyle}" FontSize="36" Margin="20,0" Click="PlayPause_Click"/>
                         <Button Content="⏭" Style="{StaticResource TransportButtonStyle}" ToolTip="+30 Seconds" Click="SkipForward_Click"/>
-                        <Button x:Name="CcButton" Content="CC" Style="{StaticResource TransportButtonStyle}" FontSize="20" ToolTip="Toggle Subtitles" Margin="30,0,0,0" Click="CC_Click"/>
+                        <StackPanel Orientation="Horizontal" Margin="30,0,0,0">
+                        <Button x:Name="AnimeButton" Content="✨" Style="{StaticResource TransportButtonStyle}" FontSize="24" ToolTip="Toggle Anime4K Upscaler" Margin="0,0,15,0" Click="Anime_Click" Visibility="Collapsed"/>
+                        <Button x:Name="CcButton" Content="CC" Style="{StaticResource TransportButtonStyle}" FontSize="20" ToolTip="Toggle Subtitles" Click="CC_Click"/>
+                    </StackPanel>
                         
-                        <StackPanel Orientation="Horizontal" Margin="40,0,0,0">
+                    <StackPanel Orientation="Horizontal" Margin="40,0,0,0">
                             <TextBlock Text="🔊" Foreground="White" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <Slider x:Name="VolumeSlider" Width="120" Minimum="0" Maximum="100" Value="100" VerticalAlignment="Center" Cursor="Hand" ValueChanged="VolumeSlider_ValueChanged"/>
                         </StackPanel>

@@ -81,6 +81,53 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{media.StreamUrl}\"");
         _positionTimer?.Change(5000, 5000);
     }
+	
+	private bool _isAnimeModeActive = false;
+
+    public void ApplyUpscalerSettings()
+    {
+        var prefs = PreferencesManager.Load();
+
+        // 1. Clear any existing external shaders from the pipeline (crucial for hot-swapping)
+        Libmpv.mpv_set_option_string(_mpvContext, "glsl-shaders", "");
+
+        // 2. Set the high-quality native base (Tier 3)
+        Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
+        Libmpv.mpv_set_option_string(_mpvContext, "scale", "spline36");
+
+        // 3. If upscaling is disabled globally, stop right here
+        if (!prefs.EnableUpscaling) return;
+
+        string shaderPath = string.Empty;
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+        // 4. Determine which shader to inject
+        if (_isAnimeModeActive)
+        {
+            shaderPath = System.IO.Path.Combine(baseDir, "Shaders", "Anime4K_Restore_CNN_M.glsl");
+        }
+        else if (prefs.UpscalerPreset == "RAVU")
+        {
+            shaderPath = System.IO.Path.Combine(baseDir, "Shaders", "ravu-zoom-r3.glsl");
+        }
+        else if (prefs.UpscalerPreset == "ArtCNN")
+        {
+            shaderPath = System.IO.Path.Combine(baseDir, "Shaders", "ArtCNN_C4F32.glsl");
+        }
+
+        // 5. Inject the shader directly into the active MPV renderer
+        if (!string.IsNullOrEmpty(shaderPath) && System.IO.File.Exists(shaderPath))
+        {
+            Libmpv.mpv_set_option_string(_mpvContext, "glsl-shaders", shaderPath);
+        }
+    }
+
+    public bool ToggleAnimeMode()
+    {
+        _isAnimeModeActive = !_isAnimeModeActive;
+        ApplyUpscalerSettings(); // Instantly re-apply pipeline without stopping video
+        return _isAnimeModeActive;
+    }
     
     public void Pause()
     {

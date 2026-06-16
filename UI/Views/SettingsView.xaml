@@ -209,6 +209,32 @@
                         Thumb.DragCompleted="UiScaleSlider_DragCompleted"/>
                         <TextBlock x:Name="UiScaleTextText" Text="100%" Foreground="White" FontWeight="Bold" FontSize="18" VerticalAlignment="Center" Margin="20,0,0,0"/>
                     </StackPanel>
+					
+					<TextBlock Text="Video Processing" FontSize="26" FontWeight="Bold" Margin="0,40,0,20"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                        <TextBlock Text="Hardware Upscaling:" Foreground="#B3B3B3" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="240"/>
+                        
+                        <CheckBox x:Name="EnableUpscalingCheck" Content="Enable External Shaders (High GPU Usage)" 
+                                  Foreground="White" FontSize="14" VerticalAlignment="Center" Cursor="Hand"
+                                  Checked="Upscaler_SelectionChanged" Unchecked="Upscaler_SelectionChanged">
+                            <CheckBox.LayoutTransform>
+                                <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+                            </CheckBox.LayoutTransform>
+                        </CheckBox>
+                    </StackPanel>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,30">
+                        <TextBlock Text="Upscaler Quality:" Foreground="#B3B3B3" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
+                        
+                        <ComboBox x:Name="UpscalerPresetBox" FontSize="16" Width="280" Height="45" 
+                                  Style="{StaticResource DarkComboBoxStyle}" 
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}" 
+                                  SelectionChanged="Upscaler_SelectionChanged">
+                            <ComboBoxItem Content="RAVU (Mid-Range GPUs)"/>
+                            <ComboBoxItem Content="ArtCNN (High-End GPUs)"/>
+                        </ComboBox>
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" KeyboardNavigation.DirectionalNavigation="Continue">

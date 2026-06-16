@@ -34,8 +34,16 @@ public partial class SettingsView : UserControl
 
         var prefs = PreferencesManager.Load();
         
+        // Load UI Scale
         UiScaleSlider.Value = prefs.UiScaleMultiplier;
         UiScaleTextText.Text = $"{(int)(prefs.UiScaleMultiplier * 100)}%";
+
+        // --- NEW: Load Video Processing ---
+        EnableUpscalingCheck.IsChecked = prefs.EnableUpscaling;
+        UpscalerPresetBox.IsEnabled = prefs.EnableUpscaling; // Gray out dropdown if disabled
+        
+        if (prefs.UpscalerPreset == "ArtCNN") UpscalerPresetBox.SelectedIndex = 1;
+        else UpscalerPresetBox.SelectedIndex = 0; // Default to RAVU
 
         _isInitialized = true;
         LoadServers();
@@ -101,6 +109,25 @@ public partial class SettingsView : UserControl
         {
             mainWindow.ApplyGlobalUiScale();
         }
+    }
+	
+	private void Upscaler_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_isInitialized) return;
+        
+        var prefs = PreferencesManager.Load();
+        
+        // 1. Save the Checkbox state
+        prefs.EnableUpscaling = EnableUpscalingCheck.IsChecked == true;
+        
+        // 2. Enable or Disable the dropdown visually based on the checkbox
+        UpscalerPresetBox.IsEnabled = prefs.EnableUpscaling;
+        
+        // 3. Save the dropdown string
+        if (UpscalerPresetBox.SelectedIndex == 1) prefs.UpscalerPreset = "ArtCNN";
+        else prefs.UpscalerPreset = "RAVU";
+        
+        PreferencesManager.Save(prefs);
     }
 
     private void LoadServers()
