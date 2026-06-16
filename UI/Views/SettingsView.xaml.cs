@@ -28,42 +28,79 @@ public partial class SettingsView : UserControl
     {
         if (_isInitialized) 
         {
-            TxtName.Focus();
+            this.Focus(); // Return focus to the page generally, NOT a textbox
             return;
         }
+
+        var prefs = PreferencesManager.Load();
+        
+        UiScaleSlider.Value = prefs.UiScaleMultiplier;
+        UiScaleTextText.Text = $"{(int)(prefs.UiScaleMultiplier * 100)}%";
 
         _isInitialized = true;
         LoadServers();
 
-        // 1. POPULATE COMBO BOXES
-        var prefs = PreferencesManager.Load();
-    for (int i = 0; i <= 30; i++)
-    {
-        string label = i == 0 ? "None" : $"{i} Min";
-        PaddingStartBox.Items.Add(label); // No more complex Tags needed!
-        PaddingEndBox.Items.Add(label);
-    }
-    PaddingStartBox.SelectedIndex = prefs.PaddingStartMinutes <= 30 ? prefs.PaddingStartMinutes : 0;
-    PaddingEndBox.SelectedIndex = prefs.PaddingEndMinutes <= 30 ? prefs.PaddingEndMinutes : 0;
+        for (int i = 0; i <= 30; i++)
+        {
+            string label = i == 0 ? "None" : $"{i} Min";
+            PaddingStartBox.Items.Add(label); 
+            PaddingEndBox.Items.Add(label);
+        }
+        PaddingStartBox.SelectedIndex = prefs.PaddingStartMinutes <= 30 ? prefs.PaddingStartMinutes : 0;
+        PaddingEndBox.SelectedIndex = prefs.PaddingEndMinutes <= 30 ? prefs.PaddingEndMinutes : 0;
 
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
-            TxtName.Focus();
+            this.Focus(); // Ensure focus doesn't lock into the textbox on load
         }), DispatcherPriority.Input);
     }
 
-    // 2. AUTO-SAVE ON CHANGE
     private void Padding_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_isInitialized) return;
         
         var prefs = PreferencesManager.Load();
         
-        // Save the index directly as the minutes!
         prefs.PaddingStartMinutes = Math.Max(0, PaddingStartBox.SelectedIndex);
         prefs.PaddingEndMinutes = Math.Max(0, PaddingEndBox.SelectedIndex);
         
         PreferencesManager.Save(prefs);
+    }
+    
+    private void UiScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (UiScaleTextText == null) return;
+
+        // 1. Instantly update the text so the user sees the percentage changing
+        double newScale = Math.Round(e.NewValue, 1);
+        UiScaleTextText.Text = $"{(int)(newScale * 100)}%";
+
+        // 2. If the user is physically holding down the mouse to drag, DO NOT scale the UI yet!
+        // This prevents the slider from jumping out from under their cursor.
+        if (System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed) 
+            return;
+
+        // 3. If they clicked the track or used the keyboard, apply it instantly
+        ApplyUiScale(newScale);
+    }
+
+    private void UiScaleSlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        // 4. Once they let go of the mouse, apply the actual scale
+        double newScale = Math.Round(UiScaleSlider.Value, 1);
+        ApplyUiScale(newScale);
+    }
+
+    private void ApplyUiScale(double newScale)
+    {
+        var prefs = PreferencesManager.Load();
+        prefs.UiScaleMultiplier = newScale;
+        PreferencesManager.Save(prefs);
+
+        if (Application.Current.MainWindow is HTPC.UI.Windows.MainWindow mainWindow)
+        {
+            mainWindow.ApplyGlobalUiScale();
+        }
     }
 
     private void LoadServers()
@@ -88,9 +125,8 @@ public partial class SettingsView : UserControl
         TxtIp.Clear();
         TxtPort.Text = "8089";
         LoadServers();
-
-        // Return focus to the top box so they can add another
-        TxtName.Focus();
+        
+        this.Focus(); // Prevent focus from getting trapped after clicking save
     }
     
     // --- NAVIGATION SIGNATURES ---

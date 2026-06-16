@@ -1,8 +1,10 @@
 using System;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Controls;
 using HTPC.UI.Views;
 using HTPC.Core.Models;
+using HTPC.Services;
 
 namespace HTPC.UI.Windows;
 
@@ -16,21 +18,18 @@ public partial class MainWindow : Window
     private readonly ShowsView _showsView;
     private readonly VideosView _videosView;
     private object? _previousView;
+    
+    private bool _isFullscreen = true;
 
     public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView)
     {
         InitializeComponent();
         
-        this.PreviewKeyDown += MainWindow_PreviewKeyDown;
-        
         _dashboardView = dashboardView;
         _playerView = playerView;
         _settingsView = settingsView;
         _guideView = guideView;
-        
-        // THIS IS THE FIX: We just assign the injected view!
         _moviesView = moviesView; 
-        
         _showsView = showsView;
         _videosView = videosView;
         
@@ -75,13 +74,162 @@ public partial class MainWindow : Window
         _playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
 
         MainShellContainer.Content = _dashboardView;
+        
+        // --- Restore window layout preferences on boot ---
+        InitializeWindowState();
+		ApplyGlobalUiScale();
     }
     
-    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    // ==========================================
+    // TITLE BAR & WINDOW STATE LOGIC
+    // ==========================================
+
+    private void InitializeWindowState()
     {
-        // Don't intercept if the player overlay is actively running!
+        var prefs = PreferencesManager.Load();
+        _isFullscreen = prefs.IsFullscreen;
+
+        if (_isFullscreen)
+        {
+            WindowState = WindowState.Maximized;
+            TitleBarRow.Height = new GridLength(0); // Hide title bar
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
+            TitleBarRow.Height = new GridLength(32); // Show title bar
+            
+            // Reapply saved coordinates
+            if (prefs.WindowWidth > 0)
+            {
+                this.Width = prefs.WindowWidth;
+                this.Height = prefs.WindowHeight;
+                this.Top = prefs.WindowTop;
+                this.Left = prefs.WindowLeft;
+            }
+        }
+    }
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2) 
+        {
+            ToggleFullscreen();
+        }
+        else if (e.LeftButton == MouseButtonState.Pressed && WindowState == WindowState.Normal) 
+        {
+            DragMove(); 
+        }
+    }
+
+    private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void MaximizeRestore_Click(object sender, RoutedEventArgs e) => ToggleFullscreen();
+
+    public void ToggleFullscreen()
+    {
+        var prefs = PreferencesManager.Load();
+
+        if (_isFullscreen)
+        {
+            _isFullscreen = false;
+            WindowState = WindowState.Normal;
+            TitleBarRow.Height = new GridLength(32);
+            MaximizeRestoreBtn.Content = "🗖";
+
+            if (prefs.WindowWidth > 0)
+            {
+                this.Width = prefs.WindowWidth;
+                this.Height = prefs.WindowHeight;
+                this.Top = prefs.WindowTop;
+                this.Left = prefs.WindowLeft;
+            }
+        }
+        else
+        {
+            // Save the exact floating coordinates before blowing it up to Fullscreen
+            prefs.WindowWidth = this.ActualWidth;
+            prefs.WindowHeight = this.ActualHeight;
+            prefs.WindowTop = this.Top;
+            prefs.WindowLeft = this.Left;
+
+            _isFullscreen = true;
+            WindowState = WindowState.Maximized;
+            TitleBarRow.Height = new GridLength(0);
+            MaximizeRestoreBtn.Content = "🗗";
+        }
+
+        prefs.IsFullscreen = _isFullscreen;
+        PreferencesManager.Save(prefs);
+    }
+
+    private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        var prefs = PreferencesManager.Load();
+        prefs.IsFullscreen = _isFullscreen;
+
+        // If closing in windowed mode, save the current dimensions so it boots back perfectly
+        if (!_isFullscreen)
+        {
+            prefs.WindowWidth = this.ActualWidth;
+            prefs.WindowHeight = this.ActualHeight;
+            prefs.WindowTop = this.Top;
+            prefs.WindowLeft = this.Left;
+        }
+
+        PreferencesManager.Save(prefs);
+    }
+
+    // ==========================================
+    // GLOBAL KEYBOARD SHORTCUTS
+    // ==========================================
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        // 1. THE 'F' KEY HANDLER
+        if (e.Key == Key.F)
+        {
+            // CRITICAL: Ignore if the user is typing into a search box or IP address field
+            if (Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is PasswordBox) return;
+
+            ToggleFullscreen();
+            e.Handled = true;
+            return;
+        }
+
+        // 2. UNIVERSAL BACK / ESCAPE HANDLER
+        if (e.Key == Key.Escape)
+        {
+            if (MainShellContainer.Content == _playerView)
+            {
+                _playerView.StopPlayback();
+                MainShellContainer.Content = _previousView ?? _dashboardView;
+                e.Handled = true;
+            }
+            else if (MainShellContainer.Content == _settingsView || MainShellContainer.Content == _guideView) 
+            {
+                MainShellContainer.Content = _dashboardView;
+                e.Handled = true;
+            }
+            else if (MainShellContainer.Content == _dashboardView)
+            {
+                Application.Current.Shutdown();
+            }
+            return;
+        }
+
+        // 3. IGNORE OTHER HOTKEYS IF WATCHING VIDEO
         if (MainShellContainer.Content is PlayerView) return;
 
+        // 4. GUIDE HOTKEY
+        if (e.Key == Key.G && MainShellContainer.Content == _dashboardView)
+        {
+            MainShellContainer.Content = _guideView;
+            e.Handled = true;
+            return;
+        }
+
+        // 5. STANDARD NAVIGATION (REMOTE BACK/HOME)
         var command = Core.Input.InputMapper.GetCommand(e.Key);
 
         if (command == Core.Input.HtpcCommand.Home)
@@ -91,7 +239,6 @@ public partial class MainWindow : Window
         }
         else if (command == Core.Input.HtpcCommand.Back)
         {
-            // If they aren't already on the Dashboard, take them back to it
             if (MainShellContainer.Content != _dashboardView)
             {
                 NavigateToDashboard(this, EventArgs.Empty);
@@ -99,6 +246,25 @@ public partial class MainWindow : Window
             }
         }
     }
+	
+	// ==========================================
+    // GLOBAL UI SCALING
+    // ==========================================
+    public void ApplyGlobalUiScale()
+    {
+        var prefs = PreferencesManager.Load();
+        double scale = prefs.UiScaleMultiplier;
+
+        // Ensure scale doesn't accidentally get set to 0 or something invisible
+        if (scale < 0.5) scale = 1.0;
+
+        // Apply a vector scale to the entire application shell
+        MainShellContainer.LayoutTransform = new System.Windows.Media.ScaleTransform(scale, scale);
+    }
+
+    // ==========================================
+    // NAVIGATION ROUTING
+    // ==========================================
     
     private void NavigateToDashboard(object? sender, EventArgs e)
     {
@@ -107,9 +273,7 @@ public partial class MainWindow : Window
 
     private void PlayMedia(object? sender, MediaItem media)
     {
-        // THE FIX: Remember the current view before we swap to the Player
         _previousView = MainShellContainer.Content;
-        
         MainShellContainer.Content = _playerView;
         _playerView.StartPlayback(media); 
     }
@@ -117,36 +281,5 @@ public partial class MainWindow : Window
     private void Dashboard_ExitRequested(object? sender, EventArgs e)
     {
         Application.Current.Shutdown();
-    }
-
-    private void Window_KeyDown(object sender, KeyEventArgs e)
-    {
-        // OPEN GUIDE HOTKEY
-        if (e.Key == Key.G && MainShellContainer.Content == _dashboardView)
-        {
-            MainShellContainer.Content = _guideView;
-            e.Handled = true;
-            return;
-        }
-
-        // UNIVERSAL BACK BUTTON
-        if (e.Key == Key.Escape)
-        {
-            if (MainShellContainer.Content == _playerView)
-            {
-                _playerView.StopPlayback();
-                
-                // THE FIX: Restore the previous view instead of forcing Dashboard
-                MainShellContainer.Content = _previousView ?? _dashboardView;
-            }
-            else if (MainShellContainer.Content == _settingsView || MainShellContainer.Content == _guideView) 
-            {
-                MainShellContainer.Content = _dashboardView;
-            }
-            else if (MainShellContainer.Content == _dashboardView)
-            {
-                Application.Current.Shutdown();
-            }
-        }
     }
 }

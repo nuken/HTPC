@@ -17,6 +17,7 @@ public class AppPreferences
     public double WindowHeight { get; set; } = 720;
     public double WindowTop { get; set; } = 100;
     public double WindowLeft { get; set; } = 100;
+	public double UiScaleMultiplier { get; set; } = 1.0; // 1.0 = 100%, 1.2 = 120%, 1.5 = 150%
 }
 
 public static class PreferencesManager

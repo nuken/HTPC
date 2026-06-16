@@ -28,11 +28,12 @@ public partial class PlayerOverlayWindow : Window
     private bool _isLiveTv = false; 
     private MediaItem? _currentMedia;
     private bool _isControlsVisible = true;
-	private Point _lastMousePosition;
+    private Point _lastMousePosition;
 
     public PlayerOverlayWindow(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
         InitializeComponent();
+		ApplyGlobalUiScale();
         _mpvService = mpvService;
         _libraryService = libraryService;
         _serverManager = serverManager;
@@ -43,8 +44,19 @@ public partial class PlayerOverlayWindow : Window
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _idleTimer.Tick += IdleTimer_Tick;
         _idleTimer.Start();
+
+        // 1. NEW: Ensure we clean up timers and mouse cursor when window dies
+        this.Closed += Window_Closed;
     }
     
+    // 2. NEW: The absolute guarantee that the mouse cursor comes back
+    private void Window_Closed(object? sender, EventArgs e)
+    {
+        _idleTimer?.Stop();
+        _syncTimer?.Stop();
+        Mouse.OverrideCursor = null; 
+    }
+
     public void InitializeMedia(MediaItem media)
     {
         _currentMedia = media;
@@ -54,20 +66,11 @@ public partial class PlayerOverlayWindow : Window
         
         _isLiveTv = media.IsLiveTv; 
         
-        // INSTANTLY SHOW THE TUNING SCREEN
         if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
         else BufferingOverlay.Visibility = Visibility.Collapsed;
 
         TimelineGrid.Visibility = Visibility.Visible;
-        
-        if (_isLiveTv)
-        {
-            TimelineSlider.IsHitTestVisible = false; 
-        }
-        else
-        {
-            TimelineSlider.IsHitTestVisible = true;  
-        }
+        TimelineSlider.IsHitTestVisible = !_isLiveTv;
 
         _isPlaying = true;
         PlayPauseButton.Content = "⏸";
@@ -91,6 +94,17 @@ public partial class PlayerOverlayWindow : Window
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         WakeUpUi(); 
+
+        // 3. NEW: Forward the 'F' key to the Main Window!
+        if (e.Key == Key.F)
+        {
+            if (Application.Current.MainWindow is MainWindow main)
+            {
+                main.ToggleFullscreen();
+            }
+            e.Handled = true;
+            return;
+        }
 
         var command = InputMapper.GetCommand(e.Key);
 
@@ -214,7 +228,6 @@ public partial class PlayerOverlayWindow : Window
     {
         if (!_isPlaying || _isDragging) return;
 
-        // --- HIDE THE BUFFERING SCREEN ONCE VIDEO STARTS ---
         if (BufferingOverlay.Visibility == Visibility.Visible)
         {
             if (_mpvService.GetPosition() > 0)
@@ -328,7 +341,6 @@ public partial class PlayerOverlayWindow : Window
     {
         Point currentPosition = e.GetPosition(this);
 
-        // Check if the physical mouse actually moved more than 2 pixels
         if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
             Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
         {
@@ -339,39 +351,33 @@ public partial class PlayerOverlayWindow : Window
 
     private void WakeUpUi()
     {
-        // 1. Instantly restore the mouse cursor
         Mouse.OverrideCursor = null;
 
-        // 2. Smoothly fade the controls back in if they were hidden
         if (!_isControlsVisible)
         {
             _isControlsVisible = true;
-            FadeControls(1.0); // 100% Opacity
+            FadeControls(1.0); 
         }
 
-        // 3. Reset the 3-second countdown (Safe against WPF initialization events!)
         _idleTimer?.Stop();
         _idleTimer?.Start();
     }
 
     private void IdleTimer_Tick(object? sender, EventArgs e)
     {
-        _idleTimer.Stop();
+        _idleTimer?.Stop();
 
-        // 1. Force the mouse cursor to completely vanish globally
         Mouse.OverrideCursor = Cursors.None;
 
-        // 2. Smoothly fade the controls out
         if (_isControlsVisible)
         {
             _isControlsVisible = false;
-            FadeControls(0.0); // 0% Opacity
+            FadeControls(0.0); 
         }
     }
 
     private void FadeControls(double targetOpacity)
     {
-        // Create a 0.3-second cinematic fade
         var fadeAnimation = new DoubleAnimation
         {
             To = targetOpacity,
@@ -379,10 +385,18 @@ public partial class PlayerOverlayWindow : Window
             FillBehavior = FillBehavior.HoldEnd
         };
 
-        // Apply the animation to the wrapper Grid
         ControlsContainer.BeginAnimation(UIElement.OpacityProperty, fadeAnimation);
-        
-        // Ensure invisible buttons don't accidentally intercept mouse clicks
         ControlsContainer.IsHitTestVisible = targetOpacity > 0;
+    }
+	
+	private void ApplyGlobalUiScale()
+    {
+        var prefs = PreferencesManager.Load();
+        double scale = prefs.UiScaleMultiplier;
+
+        if (scale < 0.5) scale = 1.0;
+
+        // Apply the vector scale ONLY to the transport controls and mini-guide
+        ControlsContainer.LayoutTransform = new System.Windows.Media.ScaleTransform(scale, scale);
     }
 }
