@@ -1,18 +1,52 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
 namespace HTPC.Core.Models;
 
-public class Channel
+public class Channel : INotifyPropertyChanged
 {
     public string Id { get; set; } = string.Empty;
     public string Number { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
-    public bool Favorite { get; set; } = false;
+
+    // Stores the specific tuner/source ID (e.g., "TVE-YouTubeTV")
+    public string DeviceId { get; set; } = string.Empty;
+    public bool IsHD { get; set; } = false;	
+
+    // Favorite toggle with instant UI notification
+    private bool _favorite = false;
+    public bool Favorite 
+    { 
+        get => _favorite; 
+        set 
+        { 
+            _favorite = value; 
+            OnPropertyChanged(); 
+        } 
+    }
+	
+	private bool _hidden = false;
+    public bool Hidden 
+    { 
+        get => _hidden; 
+        set 
+        { 
+            _hidden = value; 
+            OnPropertyChanged(); 
+        } 
+    }
     
     public List<Airing>? CurrentAirings { get; set; }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    protected void OnPropertyChanged([CallerMemberName] string? name = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
 }
 
 public class Airing
@@ -24,7 +58,6 @@ public class Airing
     public string? ImageUrl { get; set; }
     public string? Source { get; set; }
     
-    // ADD THESE TWO LINES:
     public string? SeriesId { get; set; }
     public string? ProgramId { get; set; }
     

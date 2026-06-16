@@ -25,9 +25,12 @@ public partial class GuideView : UserControl
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
     public ObservableCollection<Channel> DisplayedChannels { get; set; } = new ObservableCollection<Channel>();
+	private List<Channel> _allChannels = new List<Channel>();
+	private string _currentCollectionId = "All";
+	private List<ChannelCollection> _collections = new List<ChannelCollection>();
 
     private Airing? _selectedAiring;
-	private Button? _lastFocusedAiringButton;
+    private Button? _lastFocusedAiringButton;
     private DateTime _lastTimeFocus = DateTime.MinValue;
 
     public GuideView(MediaLibraryService libraryService, ServerManagerService serverManager)
@@ -41,179 +44,325 @@ public partial class GuideView : UserControl
         
         this.Loaded += OnLoaded;
         this.PreviewKeyDown += GuideView_PreviewKeyDown; 
-		this.IsVisibleChanged += GuideView_IsVisibleChanged;
+        this.IsVisibleChanged += GuideView_IsVisibleChanged;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (DisplayedChannels.Count > 0) return; 
         
-        var activeServer = _serverManager.GetActiveServer();
-        var collections = await _libraryService.GetCollectionsAsync();
-        var savedCollectionId = Services.PreferencesManager.LoadGuideCollection();
+        // 1. Fetch available custom collections from the DVR
+        _collections = await _libraryService.GetCollectionsAsync();
         
-        var targetCollection = collections.FirstOrDefault(c => c.Id == savedCollectionId) ?? collections.FirstOrDefault();
+        // 2. Populate the Dropdown with our static roots + custom collections
+        CollectionDropdown.Items.Clear();
+        CollectionDropdown.Items.Add("All Channels");
+        CollectionDropdown.Items.Add("Favorites");
+        CollectionDropdown.Items.Add("HD Channels");
+        CollectionDropdown.Items.Add("SD Channels");
         
-        if (targetCollection != null)
+        foreach (var col in _collections)
         {
+            CollectionDropdown.Items.Add(col.Name);
+        }
+
+        // 3. Select the saved preference (or default to All Channels)
+        var prefs = PreferencesManager.Load();
+        string savedSelection = string.IsNullOrEmpty(prefs.LastGuideCollection) ? "All Channels" : prefs.LastGuideCollection;
+        
+        if (CollectionDropdown.Items.Contains(savedSelection))
+            CollectionDropdown.SelectedItem = savedSelection;
+        else
+            CollectionDropdown.SelectedIndex = 0;            
+        
+    }
+	
+	// --- DROPDOWN FILTER LOGIC ---
+    
+    private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CollectionDropdown.SelectedItem is string selection)
+        {
+            // Clear the grid to give immediate visual feedback that it is loading
+            DisplayedChannels.Clear(); 
+            ChannelItemsControl.ItemsSource = null;
+            GuideItemsControl.ItemsSource = null;
+
+            ChannelCollection? targetCollection = null;
+            
+            // If it's a custom collection, find the ID to pass to the API
+            if (selection != "All Channels" && selection != "Favorites" && selection != "HD Channels" && selection != "SD Channels")
+            {
+                targetCollection = _collections.FirstOrDefault(c => c.Name == selection);
+            }
+
+            // Fetch Base Data (If targetCollection is null, this fetches ALL channels)
             var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 4);
-            RenderGuideData(channels);
+
+            // Apply Secondary Static Filters
+            if (selection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
+            else if (selection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
+            else if (selection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
+
+            // Re-bind and Render
+            ChannelItemsControl.ItemsSource = DisplayedChannels;
+            GuideItemsControl.ItemsSource = DisplayedChannels;
+            RenderGuideData(channels, selection);
+
+            // --- SAVE THE SELECTION SO IT PERSISTS ON RESTART ---
+            try 
+            {
+                var prefs = PreferencesManager.Load();
+                prefs.LastGuideCollection = selection;
+                PreferencesManager.Save(prefs);
+            }
+            catch 
+            { 
+                /* Silently fail if file is locked */ 
+            }
+        }
+    }
+
+    // --- 10-FOOT UI FOCUS TRAP FIX ---
+    
+    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var cb = sender as ComboBox;
+        var command = InputMapper.GetCommand(e.Key);
+
+        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list
+        if (cb != null && !cb.IsDropDownOpen)
+        {
+            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+                cb.MoveFocus(new TraversalRequest(direction));
+                e.Handled = true; 
+            }
+        }
+    }
+    
+	// --- THE NEW FAVORITE BUTTON HANDLER ---
+    private async void FavoriteToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is Channel channel)
+        {
+            channel.Favorite = !channel.Favorite;
+
+            var activeServer = _serverManager.GetActiveServer();
+            if (activeServer != null)
+            {
+                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+                
+                bool success = await _libraryService.ToggleChannelFavoriteAsync(baseUrl, channel.DeviceId, channel.Number);
+                
+                if (!success)
+                {
+                    channel.Favorite = !channel.Favorite;
+                    MessageBox.Show("Failed to sync favorite with the server.", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+    }
+	
+	private void FilterChannels()
+    {
+        DisplayedChannels.Clear();
+        bool showHidden = ShowHiddenCheckBox.IsChecked == true;
+        
+        // Find out what the user currently has selected in the dropdown
+        string currentFilter = CollectionDropdown.SelectedItem as string ?? "All Channels";
+
+        foreach (var channel in _allChannels)
+        {
+            // First, determine if the channel should be skipped due to its Hidden status
+            if (channel.Hidden && !showHidden) continue;
+            
+            // Second, enforce our static dropdown filters!
+            if (currentFilter == "Favorites" && !channel.Favorite) continue;
+            if (currentFilter == "HD Channels" && !channel.IsHD) continue;
+            if (currentFilter == "SD Channels" && channel.IsHD) continue;
+
+            // If it survived the gauntlet, add it to the UI
+            DisplayedChannels.Add(channel);
+        }
+    }
+
+    private void ShowHidden_Click(object sender, RoutedEventArgs e)
+    {
+        FilterChannels(); // Instantly re-renders the list
+    }
+
+    private async void HideChannel_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Channel channel)
+        {
+            // 1. Instantly flip the UI state
+            channel.Hidden = !channel.Hidden;
+
+            // 2. Refresh the Guide view
+            FilterChannels(); 
+
+            // 3. Fire the API call to update the DVR Server
+            var activeServer = _serverManager.GetActiveServer();
+            if (activeServer != null)
+            {
+                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+                
+                bool success = await _libraryService.ToggleChannelHiddenAsync(baseUrl, channel.DeviceId, channel.Number);
+                
+                if (!success)
+                {
+                    // Revert if the server call fails
+                    channel.Hidden = !channel.Hidden;
+                    FilterChannels();
+                    MessageBox.Show("Failed to sync hidden status with the server.", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
         }
     }
 
 
     private void GuideView_PreviewKeyDown(object sender, KeyEventArgs e)
-{
-    var command = InputMapper.GetCommand(e.Key);
-
-    // 1. MODAL BACK BUTTON
-    if (ModalOverlay.Visibility == Visibility.Visible)
     {
-        if (command == HtpcCommand.Back)
+        var command = InputMapper.GetCommand(e.Key);
+
+        if (ModalOverlay.Visibility == Visibility.Visible)
         {
-            CloseModal_Click(null!, null!);
-            _lastFocusedAiringButton?.Focus();
-            e.Handled = true;
-        }
-        return;
-    }
-
-    bool isArrowKey = command == HtpcCommand.Left || command == HtpcCommand.Right || command == HtpcCommand.Up || command == HtpcCommand.Down;
-    if (!isArrowKey) return;
-
-    // 2. MATHEMATICAL EPG ROUTING
-    if (Keyboard.FocusedElement is Button btn && btn.Tag is Airing currentAiring)
-    {
-        e.Handled = true; // Stop native WPF from dumping focus into the void!
-
-        // HORIZONTAL ROUTING
-        if (command == HtpcCommand.Left || command == HtpcCommand.Right)
-        {
-            var channel = DisplayedChannels.FirstOrDefault(c => c.Number == currentAiring.ChannelNumber);
-            if (channel != null)
+            if (command == HtpcCommand.Back)
             {
-                var airings = channel.CurrentAirings ?? new List<Airing>();
-                int currentIndex = airings.IndexOf(currentAiring);
-                int nextIndex = command == HtpcCommand.Right ? currentIndex + 1 : currentIndex - 1;
+                CloseModal_Click(null!, null!);
+                _lastFocusedAiringButton?.Focus();
+                e.Handled = true;
+            }
+            return;
+        }
 
-                if (nextIndex >= 0 && nextIndex < airings.Count)
+        bool isArrowKey = command == HtpcCommand.Left || command == HtpcCommand.Right || command == HtpcCommand.Up || command == HtpcCommand.Down;
+        if (!isArrowKey) return;
+
+        if (Keyboard.FocusedElement is Button btn && btn.Tag is Airing currentAiring)
+        {
+            e.Handled = true;
+
+            if (command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var channel = DisplayedChannels.FirstOrDefault(c => c.Number == currentAiring.ChannelNumber);
+                if (channel != null)
                 {
-                    var targetAiring = airings[nextIndex];
-                    FocusAiringSafely(channel, targetAiring);
+                    var airings = channel.CurrentAirings ?? new List<Airing>();
+                    int currentIndex = airings.IndexOf(currentAiring);
+                    int nextIndex = command == HtpcCommand.Right ? currentIndex + 1 : currentIndex - 1;
+
+                    if (nextIndex >= 0 && nextIndex < airings.Count)
+                    {
+                        var targetAiring = airings[nextIndex];
+                        FocusAiringSafely(channel, targetAiring);
+                    }
+                    else if (nextIndex < 0 && command == HtpcCommand.Left)
+                    {
+                        var request = new TraversalRequest(FocusNavigationDirection.Up);
+                        btn.MoveFocus(request);
+                    }
                 }
-                else if (nextIndex < 0 && command == HtpcCommand.Left)
+            }
+            else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+            {
+                int currentChannelIndex = DisplayedChannels.IndexOf(DisplayedChannels.First(c => c.Number == currentAiring.ChannelNumber));
+                int nextIndex = command == HtpcCommand.Down ? currentChannelIndex + 1 : currentChannelIndex - 1;
+
+                if (nextIndex >= 0 && nextIndex < DisplayedChannels.Count)
                 {
-                    // Bounce to the top menu if they push left on the very first show
+                    var nextChannel = DisplayedChannels[nextIndex];
+                    var safeAirings = nextChannel.CurrentAirings ?? new List<Airing>();
+
+                    var targetAiring = safeAirings.FirstOrDefault(a => 
+                        a.StartTime <= _lastTimeFocus && 
+                        a.StartTime.AddSeconds(a.Duration ?? 0) > _lastTimeFocus) ?? safeAirings.FirstOrDefault();
+
+                    if (targetAiring != null)
+                    {
+                        FocusAiringSafely(nextChannel, targetAiring);
+                    }
+                }
+                else if (nextIndex < 0 && command == HtpcCommand.Up)
+                {
                     var request = new TraversalRequest(FocusNavigationDirection.Up);
                     btn.MoveFocus(request);
                 }
             }
+            return; 
         }
-        // VERTICAL ROUTING
-        else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+
+        bool isFocusedOnTopMenu = Keyboard.FocusedElement is ComboBox || Keyboard.FocusedElement is TextBox || 
+                                  (Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null) ||
+                                  (Keyboard.FocusedElement is RepeatButton);
+
+        if (!isFocusedOnTopMenu)
         {
-            int currentChannelIndex = DisplayedChannels.IndexOf(DisplayedChannels.First(c => c.Number == currentAiring.ChannelNumber));
-            int nextIndex = command == HtpcCommand.Down ? currentChannelIndex + 1 : currentChannelIndex - 1;
-
-            if (nextIndex >= 0 && nextIndex < DisplayedChannels.Count)
+            if (Keyboard.FocusedElement == null || Keyboard.FocusedElement == this || Keyboard.FocusedElement == GuideItemsControl)
             {
-                var nextChannel = DisplayedChannels[nextIndex];
-                var safeAirings = nextChannel.CurrentAirings ?? new List<Airing>();
+                FocusFirstAiring();
+                e.Handled = true;
+            }
+        }
+    }
 
-                var targetAiring = safeAirings.FirstOrDefault(a => 
-                    a.StartTime <= _lastTimeFocus && 
-                    a.StartTime.AddSeconds(a.Duration ?? 0) > _lastTimeFocus) ?? safeAirings.FirstOrDefault();
+    private void FocusAiringSafely(Channel channel, Airing airing)
+    {
+        this.Focus(); 
 
-                if (targetAiring != null)
+        GuideItemsControl.ScrollIntoView(channel);
+        
+        Dispatcher.BeginInvoke(new Action(() => 
+        {
+            GuideItemsControl.UpdateLayout();
+            var row = GuideItemsControl.ItemContainerGenerator.ContainerFromItem(channel) as DependencyObject;
+            
+            if (row != null)
+            {
+                var targetBtn = FindButtonForAiring(row, airing);
+                targetBtn?.Focus();
+            }
+        }), DispatcherPriority.Loaded);
+    }
+
+    private void GuideView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if ((bool)e.NewValue && DisplayedChannels.Count > 0)
+        {
+            if (_lastFocusedAiringButton != null && _lastFocusedAiringButton.Tag is Airing lastAiring)
+            {
+                var channel = DisplayedChannels.FirstOrDefault(c => c.Number == lastAiring.ChannelNumber);
+                if (channel != null) 
                 {
-                    FocusAiringSafely(nextChannel, targetAiring);
+                    FocusAiringSafely(channel, lastAiring);
+                    return;
                 }
             }
-            else if (nextIndex < 0 && command == HtpcCommand.Up)
-            {
-                // Escape up to the Navigation Bar
-                var request = new TraversalRequest(FocusNavigationDirection.Up);
-                btn.MoveFocus(request);
-            }
-        }
-        return; 
-    }
-
-    // 3. FAIL-SAFE THE VOID
-    bool isFocusedOnTopMenu = Keyboard.FocusedElement is ComboBox || Keyboard.FocusedElement is TextBox || 
-                              (Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null) ||
-                              (Keyboard.FocusedElement is RepeatButton);
-
-    if (!isFocusedOnTopMenu)
-    {
-        if (Keyboard.FocusedElement == null || Keyboard.FocusedElement == this || Keyboard.FocusedElement == GuideItemsControl)
-        {
+            
             FocusFirstAiring();
-            e.Handled = true;
         }
     }
-}
 
-    // THE FIX: Pierce through the UI Virtualization barrier smoothly
-private void FocusAiringSafely(Channel channel, Airing airing)
-{
-    // 1. "Park" the focus safely on the background control so it isn't destroyed when the row scrolls out of view
-    this.Focus(); 
+    private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring)
+    {
+        Queue<DependencyObject> queue = new Queue<DependencyObject>();
+        queue.Enqueue(parent);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (current is Button b && b.Tag == targetAiring) return b;
 
-    // 2. Force the ListBox to scroll the required channel into the view
-    GuideItemsControl.ScrollIntoView(channel);
+            int childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(current);
+            for (int i = 0; i < childCount; i++) queue.Enqueue(System.Windows.Media.VisualTreeHelper.GetChild(current, i));
+        }
+        return null;
+    }
     
-    // 3. Wait for WPF to finish drawing the new row, then hand the focus to the button
-    Dispatcher.BeginInvoke(new Action(() => 
-    {
-        GuideItemsControl.UpdateLayout();
-        var row = GuideItemsControl.ItemContainerGenerator.ContainerFromItem(channel) as DependencyObject;
-        
-        if (row != null)
-        {
-            var targetBtn = FindButtonForAiring(row, airing);
-            targetBtn?.Focus();
-        }
-    }), DispatcherPriority.Loaded);
-}
-
-private void GuideView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-{
-    // When the guide becomes visible again...
-    if ((bool)e.NewValue && DisplayedChannels.Count > 0)
-    {
-        // Try to restore exactly where they left off!
-        if (_lastFocusedAiringButton != null && _lastFocusedAiringButton.Tag is Airing lastAiring)
-        {
-            var channel = DisplayedChannels.FirstOrDefault(c => c.Number == lastAiring.ChannelNumber);
-            if (channel != null) 
-            {
-                FocusAiringSafely(channel, lastAiring);
-                return;
-            }
-        }
-        
-        // If we can't restore, default safely to the top
-        FocusFirstAiring();
-    }
-}
-
-private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring)
-{
-    Queue<DependencyObject> queue = new Queue<DependencyObject>();
-    queue.Enqueue(parent);
-    while (queue.Count > 0)
-    {
-        var current = queue.Dequeue();
-        if (current is Button b && b.Tag == targetAiring) return b;
-
-        int childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(current);
-        for (int i = 0; i < childCount; i++) queue.Enqueue(System.Windows.Media.VisualTreeHelper.GetChild(current, i));
-    }
-    return null;
-}
-	
-	// THE FIX: Provide a manual bridge from the Top Buttons down into the nested items control
     private void GuideNav_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
@@ -226,43 +375,37 @@ private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring
     }
 
     private void FocusFirstAiring()
-{
-    if (DisplayedChannels.Count > 0)
     {
-        var firstChannel = DisplayedChannels[0];
-        var firstAiring = firstChannel.CurrentAirings?.FirstOrDefault();
-        if (firstAiring != null) FocusAiringSafely(firstChannel, firstAiring);
-    }
-}
-
-    // THE FIX: When the user tabs to a button with the D-pad, force the scroll viewer to pan to it!
-    private void AiringButton_GotFocus(object sender, RoutedEventArgs e)
-{
-    if (sender is Button btn && btn.Tag is Airing airing)
-    {
-        // 1. Check if we are moving horizontally
-        bool isHorizontalMove = _lastFocusedAiringButton == null || 
-            ((Airing)_lastFocusedAiringButton.Tag).ChannelNumber == airing.ChannelNumber;
-
-        // 2. If moving horizontally, lock in the new time to keep vertical jumps perfectly straight
-        if (isHorizontalMove)
+        if (DisplayedChannels.Count > 0)
         {
-            if (airing.IsAiringNow) _lastTimeFocus = DateTime.Now;
-            else _lastTimeFocus = airing.StartTime.AddSeconds(1);
+            var firstChannel = DisplayedChannels[0];
+            var firstAiring = firstChannel.CurrentAirings?.FirstOrDefault();
+            if (firstAiring != null) FocusAiringSafely(firstChannel, firstAiring);
         }
-
-        // 3. Clear the CS0649 warning by actually remembering the button!
-        _lastFocusedAiringButton = btn;
-
-        // 4. Safely bring the item into view
-        _ = Dispatcher.BeginInvoke(new Action(() => 
-        {
-            btn.BringIntoView();
-        }), DispatcherPriority.Render);
     }
-}
 
-    // A standard WPF trick to pierce through DataTemplates and find specific controls
+    private void AiringButton_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is Airing airing)
+        {
+            bool isHorizontalMove = _lastFocusedAiringButton == null || 
+                ((Airing)_lastFocusedAiringButton.Tag).ChannelNumber == airing.ChannelNumber;
+
+            if (isHorizontalMove)
+            {
+                if (airing.IsAiringNow) _lastTimeFocus = DateTime.Now;
+                else _lastTimeFocus = airing.StartTime.AddSeconds(1);
+            }
+
+            _lastFocusedAiringButton = btn;
+
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                btn.BringIntoView();
+            }), DispatcherPriority.Render);
+        }
+    }
+
     private T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {
         for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
@@ -300,11 +443,8 @@ private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring
             } 
             catch { ModalImage.Source = null; }
 
-            // --- THE NEW BUTTON LOGIC ---
             WatchLiveBtn.Visibility = Visibility.Visible;
             
-            // Ensure you have added x:Name="RecordEpisodeButton" and x:Name="RecordSeriesButton" 
-            // to the new buttons in your GuideView.xaml Modal layout!
             RecordEpisodeButton.Visibility = Visibility.Visible;
             RecordSeriesButton.Visibility = string.IsNullOrWhiteSpace(airing.SeriesId) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -316,14 +456,13 @@ private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring
             }), DispatcherPriority.Input);
         }
     }
-	
-	private async void RecordEpisode_Click(object sender, RoutedEventArgs e)
+    
+    private async void RecordEpisode_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedAiring == null) return;
         var activeServer = _serverManager.GetActiveServer();
         if (activeServer == null) return;
 
-        // Convert Minutes to Seconds for the API
         var prefs = PreferencesManager.Load();
         int padStart = prefs.PaddingStartMinutes * 60;
         int padEnd = prefs.PaddingEndMinutes * 60;
@@ -417,10 +556,23 @@ private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring
         if (channelScroll != null) channelScroll.ScrollToVerticalOffset(e.VerticalOffset);
     }
 
-    public void RenderGuideData(List<Channel> channels)
+    public void RenderGuideData(List<Channel> channels, string collectionId)
     {
-        DisplayedChannels.Clear();
-        foreach (var c in channels) DisplayedChannels.Add(c);
+        _currentCollectionId = string.IsNullOrEmpty(collectionId) ? "All" : collectionId;
+
+        // Apply saved custom sorting before rendering!
+        var prefs = PreferencesManager.Load();
+        if (prefs.CustomChannelOrders != null && prefs.CustomChannelOrders.TryGetValue(_currentCollectionId, out var savedOrder))
+        {
+            channels = channels.OrderBy(c => 
+            {
+                int idx = savedOrder.IndexOf(c.Number);
+                return idx != -1 ? idx : 999999; // If it's a new channel, put it at the bottom
+            }).ToList();
+        }
+
+        _allChannels = channels;
+        FilterChannels();
         GenerateTimeHeaders();
         FocusFirstAiring();
     }
@@ -438,13 +590,80 @@ private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring
         }
         TimeHeadersControl.ItemsSource = headers;
     }
+	
+	// --- CUSTOM SORTING LOGIC ---
+
+    private void MoveChannelUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Channel channel)
+        {
+            int index = _allChannels.IndexOf(channel);
+            if (index > 0)
+            {
+                _allChannels.RemoveAt(index);
+                _allChannels.Insert(index - 1, channel);
+                FilterChannels(); // Instantly redraws the UI
+                SaveCurrentSortOrder();
+            }
+        }
+    }
+
+    private void MoveChannelDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Channel channel)
+        {
+            int index = _allChannels.IndexOf(channel);
+            if (index < _allChannels.Count - 1)
+            {
+                _allChannels.RemoveAt(index);
+                _allChannels.Insert(index + 1, channel);
+                FilterChannels();
+                SaveCurrentSortOrder();
+            }
+        }
+    }
+
+    private void MoveChannelTop_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Channel channel)
+        {
+            _allChannels.Remove(channel);
+            _allChannels.Insert(0, channel);
+            FilterChannels();
+            SaveCurrentSortOrder();
+        }
+    }
+
+    private void MoveChannelBottom_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Channel channel)
+        {
+            _allChannels.Remove(channel);
+            _allChannels.Add(channel);
+            FilterChannels();
+            SaveCurrentSortOrder();
+        }
+    }
+
+    private void SaveCurrentSortOrder()
+    {
+        var prefs = PreferencesManager.Load();
+        if (prefs.CustomChannelOrders == null) 
+            prefs.CustomChannelOrders = new Dictionary<string, List<string>>();
+        
+        // Extract the new order of Channel Numbers
+        var newOrder = _allChannels.Select(c => c.Number).ToList();
+        
+        // Save it to this specific collection
+        prefs.CustomChannelOrders[_currentCollectionId] = newOrder;
+        PreferencesManager.Save(prefs);
+    }
 
     private ScrollViewer? GetScrollViewer(DependencyObject depObj)
     {
         if (depObj is ScrollViewer viewer) return viewer;
         for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(depObj); i++)
         {
-            // THE FIX: Removed the "parent:" named parameter here!
             var child = System.Windows.Media.VisualTreeHelper.GetChild(depObj, i);
             var result = GetScrollViewer(child);
             if (result != null) return result;

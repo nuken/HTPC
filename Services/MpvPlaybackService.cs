@@ -37,23 +37,16 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
         Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
-		
-		// 1. Force the network cache to be active
+        
+        // --- PRE-BUFFER CACHE SETTINGS (Eliminates Stutter) ---
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
-        
-        // 2. Increase the RAM cache size to ~150MB (prevents high-bitrate starvation)
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000");
-        
-        // 3. Force MPV to buffer up to 10 seconds ahead into the future
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
-        
-        // 4. Force MPV to pause and wait for the cache to initially fill BEFORE playing
         Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
 
         int result = Libmpv.mpv_initialize(_mpvContext);
         if (result < 0) throw new Exception($"Failed to initialize libmpv context. Error: {result}");
 
-        // Setup the background timer (but don't start it yet)
         _positionTimer = new Timer(SaveCurrentPosition, null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -68,7 +61,6 @@ public class MpvPlaybackService : IDisposable
         _currentMedia = media;
         _logger.LogInformation($"Loading media: {media.Title}");
 
-        // 1. Check the database for a resume timestamp
         using (var scope = _scopeFactory.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -76,7 +68,6 @@ public class MpvPlaybackService : IDisposable
             
             if (state != null && state.PositionTicks > 0)
             {
-                // Convert .NET Ticks back to seconds for the mpv engine
                 double startSeconds = TimeSpan.FromTicks(state.PositionTicks).TotalSeconds;
                 Libmpv.mpv_set_option_string(_mpvContext, "start", startSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 _logger.LogInformation($"Resuming at {startSeconds} seconds.");
@@ -87,14 +78,11 @@ public class MpvPlaybackService : IDisposable
             }
         }
 
-        // 2. Start the video
         Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{media.StreamUrl}\"");
-
-        // 3. Start the background timer to save position every 5 seconds
         _positionTimer?.Change(5000, 5000);
     }
-	
-	public void Pause()
+    
+    public void Pause()
     {
         _logger.LogInformation("Pausing playback...");
         Libmpv.mpv_set_property_string(_mpvContext, "pause", "yes");
@@ -113,22 +101,18 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_command_string(_mpvContext, "stop"); 
         _currentMedia = null;
     }
-	
-	public void SetVolume(int volume)
+    
+    public void SetVolume(int volume)
     {
         if (_mpvContext != IntPtr.Zero)
         {
-            // Tell the MPV engine to change the volume property
             Core.Interop.Libmpv.mpv_set_property_string(_mpvContext, "volume", volume.ToString());
         }
     }
-	
-	// --- TIMELINE & SEEKING ---
     
     public double GetDuration()
     {
         if (_mpvContext == IntPtr.Zero) return 0;
-        // format 5 = MPV_FORMAT_DOUBLE
         Libmpv.mpv_get_property(_mpvContext, "duration", 5, out double duration);
         return duration;
     }
@@ -143,23 +127,18 @@ public class MpvPlaybackService : IDisposable
     public void SeekAbsolute(double seconds)
     {
         if (_mpvContext == IntPtr.Zero) return;
-        // Seek to an exact timestamp
         Libmpv.mpv_command_string(_mpvContext, $"seek {seconds} absolute");
     }
 
     public void SeekRelative(double seconds)
     {
         if (_mpvContext == IntPtr.Zero) return;
-        // Skip forward or backward
         Libmpv.mpv_command_string(_mpvContext, $"seek {seconds} relative");
     }
-
-    // --- CLOSED CAPTIONS ---
 
     public void CycleSubtitles()
     {
         if (_mpvContext == IntPtr.Zero) return;
-        // Cycles through available subtitle tracks (and 'none')
         Libmpv.mpv_command_string(_mpvContext, "cycle sub");
     }
 
@@ -167,9 +146,8 @@ public class MpvPlaybackService : IDisposable
     {
         if (_currentMedia == null || _mpvContext == IntPtr.Zero) return;
 
-        // format 5 = MPV_FORMAT_DOUBLE
         int result = Libmpv.mpv_get_property(_mpvContext, "time-pos", 5, out double timeInSeconds);
-        if (result < 0) return; // Video might be buffering or ending, skip saving
+        if (result < 0) return; 
 
         using (var scope = _scopeFactory.CreateScope())
         {

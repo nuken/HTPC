@@ -323,6 +323,23 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Background="#1A1A1A" CornerRadius="12" Margin="0,0,20,20" Padding="15" Cursor="Hand">
+                                
+                                <Border.ContextMenu>
+                                    <ContextMenu Opened="ContextMenu_Opened">
+                                        <MenuItem Header="Mark as Watched" Click="AdminCommand_Click" Tag="watch" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Mark as Unwatched" Click="AdminCommand_Click" Tag="unwatch" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Favorite" Click="AdminCommand_Click" Tag="favorite" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Unfavorite" Click="AdminCommand_Click" Tag="unfavorite" FontSize="14" Padding="5"/>
+                                        <Separator/>
+                                        <MenuItem Header="Fix Timestamp" Click="AdminCommand_Click" Tag="retimestamp" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Reprocess Video" Click="AdminCommand_Click" Tag="fingerprint" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Refresh Metadata" Click="AdminCommand_Click" Tag="reprocess" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Redetect Commercials" Click="AdminCommand_Click" Tag="recomskip" FontSize="14" Padding="5"/>
+                                        <Separator/>
+                                        <MenuItem Header="View Media Info" Click="MediaInfo_Click" FontSize="14" Padding="5" FontWeight="SemiBold"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
+                                
                                 <Border.Effect>
                                     <DropShadowEffect Color="Black" Direction="270" ShadowDepth="2" BlurRadius="6" Opacity="0.3"/>
                                 </Border.Effect>
@@ -333,11 +350,41 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     
-                                    <Image Grid.Column="0" Source="{Binding PosterUrl, IsAsync=True}" Width="220" Height="124" Stretch="UniformToFill">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,220,124" RadiusX="8" RadiusY="8"/>
-                                        </Image.Clip>
-                                    </Image>
+                                    <Grid Grid.Column="0">
+                                        <Image Source="{Binding PosterUrl, IsAsync=True}" Width="220" Height="124" Stretch="UniformToFill">
+                                            <Image.Clip>
+                                                <RectangleGeometry Rect="0,0,220,124" RadiusX="8" RadiusY="8"/>
+                                            </Image.Clip>
+                                        </Image>
+                                        
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="8">
+                                            <TextBlock Text="♥" Foreground="#D32F2F" FontSize="20" Margin="0,0,5,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <Border Background="#00A4EF" CornerRadius="4" Padding="4,1" VerticalAlignment="Center">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsWatched}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="✓" Foreground="White" FontSize="12" FontWeight="Bold"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
 
                                     <StackPanel Grid.Column="1" Margin="20,5,20,0">
                                         <TextBlock Text="{Binding CurrentShowTitle}" FontSize="20" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis"/>
@@ -356,6 +403,33 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+            </Grid>
+        </Border>
+
+        <Border x:Name="ToastNotification" Grid.RowSpan="2" Background="#D800A4EF" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,50" Padding="20,10" CornerRadius="8" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="100">
+            <TextBlock x:Name="ToastText" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+        </Border>
+
+        <Border x:Name="MediaInfoModal" Grid.RowSpan="2" Background="#F20A0A0A" Visibility="Collapsed" Padding="40" CornerRadius="20" HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="500" MaxWidth="800" Panel.ZIndex="100">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <TextBlock Text="Media Information" FontSize="24" FontWeight="Bold" Foreground="White" Margin="0,0,0,20"/>
+                
+                <TextBlock x:Name="MediaInfoTitle" Grid.Row="1" FontSize="18" FontWeight="SemiBold" Foreground="#00A4EF" Margin="0,0,0,15" TextWrapping="Wrap"/>
+                
+                <StackPanel x:Name="MediaInfoDetails" Grid.Row="2" Margin="0,0,0,30">
+                    </StackPanel>
+
+                <Button Grid.Row="3" Content="Close" Width="120" Height="40" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseMediaInfo_Click" HorizontalAlignment="Right" FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
             </Grid>
         </Border>
     </Grid>

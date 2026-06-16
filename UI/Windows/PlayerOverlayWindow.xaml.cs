@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using HTPC.Core.Models;
 using HTPC.Services;
 using HTPC.Core.Input;
+using System.Windows.Media.Animation;
 
 namespace HTPC.UI.Windows;
 
@@ -19,13 +20,15 @@ public partial class PlayerOverlayWindow : Window
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
     
-    private readonly DispatcherTimer _uiHideTimer;
     private readonly DispatcherTimer _syncTimer; 
+    private DispatcherTimer _idleTimer;
     
     private bool _isPlaying = true;
     private bool _isDragging = false;
     private bool _isLiveTv = false; 
-	private MediaItem? _currentMedia;
+    private MediaItem? _currentMedia;
+    private bool _isControlsVisible = true;
+	private Point _lastMousePosition;
 
     public PlayerOverlayWindow(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -34,45 +37,43 @@ public partial class PlayerOverlayWindow : Window
         _libraryService = libraryService;
         _serverManager = serverManager;
 
-        _uiHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _uiHideTimer.Tick += UiHideTimer_Tick;
-
         _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _syncTimer.Tick += SyncTimer_Tick;
+        
+        _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _idleTimer.Tick += IdleTimer_Tick;
+        _idleTimer.Start();
     }
-
+    
     public void InitializeMedia(MediaItem media)
     {
-        _currentMedia = media; // Save the media item to access Start/End times
+        _currentMedia = media;
         
         ShowTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? "" : media.Title;
         MediaTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? media.Title : media.CurrentShowTitle;
         
-        // THE FIX: Use the bulletproof boolean flag
         _isLiveTv = media.IsLiveTv; 
-		
-		if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
+        
+        // INSTANTLY SHOW THE TUNING SCREEN
+        if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
         else BufferingOverlay.Visibility = Visibility.Collapsed;
 
-        // Always show the timeline now!
         TimelineGrid.Visibility = Visibility.Visible;
         
         if (_isLiveTv)
         {
-            
-            TimelineSlider.IsHitTestVisible = false; // Lock the slider so it acts purely as a visual progress bar
+            TimelineSlider.IsHitTestVisible = false; 
         }
         else
         {
-            
-            TimelineSlider.IsHitTestVisible = true;  // Unlock for movies/shows
+            TimelineSlider.IsHitTestVisible = true;  
         }
 
         _isPlaying = true;
         PlayPauseButton.Content = "⏸";
         
         _syncTimer.Start(); 
-        ShowControls();
+        WakeUpUi();
 
         if (media.StartOffsetSeconds > 0)
         {
@@ -86,29 +87,26 @@ public partial class PlayerOverlayWindow : Window
             });
         }
     }
-	
-	private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    
+    private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        ShowControls(); 
+        WakeUpUi(); 
 
-        // Ask the centralized mapper what action this key represents
         var command = InputMapper.GetCommand(e.Key);
 
-        // If the key isn't mapped to anything, let WPF handle it normally
         if (command == HtpcCommand.None) return;
 
-        // --- Execute logic based on the COMMAND, not the KEY ---
         switch (command)
         {
             case HtpcCommand.Back:
                 if (MiniGuideContainer.Visibility == Visibility.Visible) CloseMiniGuide();
-                else Back_Click(null!, null!);
+                else Back_Click(null, null);
                 break;
 
             case HtpcCommand.Up:
-        if (_isLiveTv && MiniGuideContainer.Visibility == Visibility.Collapsed) 
-            await OpenMiniGuideAsync(); 
-        break;
+                if (_isLiveTv && MiniGuideContainer.Visibility == Visibility.Collapsed) 
+                    await OpenMiniGuideAsync(); 
+                break;
 
             case HtpcCommand.Down:
                 if (MiniGuideContainer.Visibility == Visibility.Visible) 
@@ -129,7 +127,6 @@ public partial class PlayerOverlayWindow : Window
 
             case HtpcCommand.Left:
             case HtpcCommand.SkipBackward: 
-                // THE FIX: Let WPF's ListBox handle the Left arrow natively!
                 if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
                 
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
@@ -138,7 +135,6 @@ public partial class PlayerOverlayWindow : Window
 
             case HtpcCommand.Right:
             case HtpcCommand.SkipForward:
-                // THE FIX: Let WPF's ListBox handle the Right arrow natively!
                 if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
                 
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
@@ -156,7 +152,12 @@ public partial class PlayerOverlayWindow : Window
 
         e.Handled = true;
     }
-	
+    
+    private void Back_Click(object? sender, RoutedEventArgs? e)
+    {
+        OnBackRequested?.Invoke(this, EventArgs.Empty);
+    }
+
    private async Task OpenMiniGuideAsync()
     {
         BottomBar.Visibility = Visibility.Collapsed; 
@@ -176,7 +177,6 @@ public partial class PlayerOverlayWindow : Window
         {
             MiniGuideList.SelectedIndex = 0;
             
-            // THE FIX: Wait for WPF to finish drawing the horizontal list before hunting for the container
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 MiniGuideList.UpdateLayout();
@@ -201,7 +201,6 @@ public partial class PlayerOverlayWindow : Window
         
         var currentAiring = channel.CurrentAirings?.FirstOrDefault(a => a.IsAiringNow) ?? channel.CurrentAirings?.FirstOrDefault();
         
-        // THE FIX: Generate the proper virtual or standard parameters
         var media = _libraryService.CreateLiveMediaItem(baseUrl, channel, currentAiring);
 
         _mpvService.Stop();
@@ -215,23 +214,21 @@ public partial class PlayerOverlayWindow : Window
     {
         if (!_isPlaying || _isDragging) return;
 
-        // --- ADD THIS CHECK TO THE VERY TOP OF THE TICK ---
+        // --- HIDE THE BUFFERING SCREEN ONCE VIDEO STARTS ---
         if (BufferingOverlay.Visibility == Visibility.Visible)
         {
-            // When GetPosition returns greater than 0, the video has officially started rendering!
             if (_mpvService.GetPosition() > 0)
             {
                 BufferingOverlay.Visibility = Visibility.Collapsed;
             }
             else
             {
-                return; // Skip the rest of the UI updates until the video actually starts
+                return; 
             }
         }
 
         if (!_isLiveTv)
         {
-            // --- STANDARD BEHAVIOR: Movies and Recorded TV ---
             double duration = _mpvService.GetDuration();
             double position = _mpvService.GetPosition();
 
@@ -249,7 +246,6 @@ public partial class PlayerOverlayWindow : Window
         }
         else
         {
-            // --- THE FERAL TRICK: Clock-based TV Guide Timeline ---
             if (_currentMedia != null && _currentMedia.EndTime > _currentMedia.StartTime)
             {
                 double duration = (_currentMedia.EndTime - _currentMedia.StartTime).TotalSeconds;
@@ -270,38 +266,43 @@ public partial class PlayerOverlayWindow : Window
         }
     }
     
-	private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         _mpvService?.SetVolume((int)e.NewValue);
+        WakeUpUi();
     }
 
-    private void Timeline_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) => _isDragging = true;
+    private void Timeline_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) 
+    {
+        _isDragging = true;
+        WakeUpUi();
+    }
 
     private void Timeline_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
         _isDragging = false;
         _mpvService.SeekAbsolute(TimelineSlider.Value);
-        ShowControls(); 
+        WakeUpUi(); 
     }
 
     private void SkipBackward_Click(object sender, RoutedEventArgs e)
     {
         _mpvService.SeekRelative(-10); 
-        ShowControls();
+        WakeUpUi();
         SyncTimer_Tick(null, EventArgs.Empty); 
     }
 
     private void SkipForward_Click(object sender, RoutedEventArgs e)
     {
         _mpvService.SeekRelative(30); 
-        ShowControls();
+        WakeUpUi();
         SyncTimer_Tick(null, EventArgs.Empty); 
     }
 
     private void CC_Click(object sender, RoutedEventArgs e)
     {
         _mpvService.CycleSubtitles();
-        ShowControls();
+        WakeUpUi();
     }
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)
@@ -318,34 +319,70 @@ public partial class PlayerOverlayWindow : Window
             _isPlaying = true;
             PlayPauseButton.Content = "⏸";
         }
+        WakeUpUi();
     }
 
-    private void Window_MouseMove(object sender, MouseEventArgs e) => ShowControls();
+    // --- IDLE TIMER & FADE LOGIC ---
 
-    private void ShowControls()
+    private void Window_MouseMove(object sender, MouseEventArgs e)
     {
-        TopBar.Visibility = Visibility.Visible;
-        if (MiniGuideContainer.Visibility == Visibility.Collapsed) BottomBar.Visibility = Visibility.Visible;
-        
-        this.Cursor = Cursors.Arrow;
-        _uiHideTimer.Stop();
-        _uiHideTimer.Start();
-    }
+        Point currentPosition = e.GetPosition(this);
 
-    private void UiHideTimer_Tick(object? sender, EventArgs e)
-    {
-        _uiHideTimer.Stop();
-        if (!_isDragging && MiniGuideContainer.Visibility == Visibility.Collapsed)
+        // Check if the physical mouse actually moved more than 2 pixels
+        if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
+            Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
         {
-            TopBar.Visibility = Visibility.Collapsed;
-            BottomBar.Visibility = Visibility.Collapsed;
-            this.Cursor = Cursors.None;
+            _lastMousePosition = currentPosition;
+            WakeUpUi();
         }
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
+    private void WakeUpUi()
     {
-        _syncTimer.Stop();
-        OnBackRequested?.Invoke(this, EventArgs.Empty);
+        // 1. Instantly restore the mouse cursor
+        Mouse.OverrideCursor = null;
+
+        // 2. Smoothly fade the controls back in if they were hidden
+        if (!_isControlsVisible)
+        {
+            _isControlsVisible = true;
+            FadeControls(1.0); // 100% Opacity
+        }
+
+        // 3. Reset the 3-second countdown (Safe against WPF initialization events!)
+        _idleTimer?.Stop();
+        _idleTimer?.Start();
+    }
+
+    private void IdleTimer_Tick(object? sender, EventArgs e)
+    {
+        _idleTimer.Stop();
+
+        // 1. Force the mouse cursor to completely vanish globally
+        Mouse.OverrideCursor = Cursors.None;
+
+        // 2. Smoothly fade the controls out
+        if (_isControlsVisible)
+        {
+            _isControlsVisible = false;
+            FadeControls(0.0); // 0% Opacity
+        }
+    }
+
+    private void FadeControls(double targetOpacity)
+    {
+        // Create a 0.3-second cinematic fade
+        var fadeAnimation = new DoubleAnimation
+        {
+            To = targetOpacity,
+            Duration = TimeSpan.FromSeconds(0.3),
+            FillBehavior = FillBehavior.HoldEnd
+        };
+
+        // Apply the animation to the wrapper Grid
+        ControlsContainer.BeginAnimation(UIElement.OpacityProperty, fadeAnimation);
+        
+        // Ensure invisible buttons don't accidentally intercept mouse clicks
+        ControlsContainer.IsHitTestVisible = targetOpacity > 0;
     }
 }

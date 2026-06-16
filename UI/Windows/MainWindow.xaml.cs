@@ -12,69 +12,72 @@ public partial class MainWindow : Window
     private readonly PlayerView _playerView;
     private readonly SettingsView _settingsView;
     private readonly GuideView _guideView;
-	private readonly MoviesView _moviesView;
-	private readonly ShowsView _showsView;
-	private readonly VideosView _videosView;
-	private object? _previousView;
+    private readonly MoviesView _moviesView;
+    private readonly ShowsView _showsView;
+    private readonly VideosView _videosView;
+    private object? _previousView;
 
     public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView)
     {
         InitializeComponent();
-		
-		this.PreviewKeyDown += MainWindow_PreviewKeyDown;
-		
+        
+        this.PreviewKeyDown += MainWindow_PreviewKeyDown;
+        
         _dashboardView = dashboardView;
         _playerView = playerView;
         _settingsView = settingsView;
         _guideView = guideView;
-		_moviesView = moviesView;
-		_showsView = showsView;
-		_videosView = videosView;
+        
+        // THIS IS THE FIX: We just assign the injected view!
+        _moviesView = moviesView; 
+        
+        _showsView = showsView;
+        _videosView = videosView;
         
         _settingsView.OnHomeRequested += NavigateToDashboard;
         
         _dashboardView.OnPlayRequested += PlayMedia;
         _dashboardView.OnExitRequested += Dashboard_ExitRequested;
         _dashboardView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView; 
-		_dashboardView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _dashboardView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _dashboardView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _dashboardView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _dashboardView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
-		
-		_guideView.OnHomeRequested += NavigateToDashboard;
+        
+        _guideView.OnHomeRequested += NavigateToDashboard;
         _guideView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _guideView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _guideView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _guideView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _guideView.OnPlayRequested += PlayMedia;
-		
-		_moviesView.OnHomeRequested += NavigateToDashboard;
+        
+        _moviesView.OnHomeRequested += NavigateToDashboard;
         _moviesView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _moviesView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _moviesView.OnPlayRequested += PlayMedia;
-		_moviesView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
-		_moviesView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
-		
-		_showsView.OnHomeRequested += NavigateToDashboard;
+        _moviesView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _moviesView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        
+        _showsView.OnHomeRequested += NavigateToDashboard;
         _showsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _showsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _showsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _showsView.OnPlayRequested += PlayMedia;
-		_showsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
-		
-		_videosView.OnHomeRequested += NavigateToDashboard;
+        _showsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        
+        _videosView.OnHomeRequested += NavigateToDashboard;
         _videosView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _videosView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _videosView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _videosView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _videosView.OnPlayRequested += PlayMedia;
-		
-		_playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
+        
+        _playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
 
         MainShellContainer.Content = _dashboardView;
     }
-	
-	private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         // Don't intercept if the player overlay is actively running!
         if (MainShellContainer.Content is PlayerView) return;
