@@ -1,0 +1,16 @@
+{
+  "MovieSort": "Recently Added",
+  "GuideCollection": "All",
+  "PaddingStartMinutes": 0,
+  "PaddingEndMinutes": 0,
+  "LastGuideCollection": "All Channels",
+  "CustomChannelOrders": {},
+  "IsFullscreen": false,
+  "WindowWidth": 1280,
+  "WindowHeight": 720,
+  "WindowTop": 100,
+  "WindowLeft": 100,
+  "UiScaleMultiplier": 1,
+  "EnableUpscaling": true,
+  "UpscalerPreset": "ArtCNN"
+}

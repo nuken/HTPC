@@ -34,6 +34,10 @@ public partial class MainWindow : Window
         _videosView = videosView;
         
         _settingsView.OnHomeRequested += NavigateToDashboard;
+        _settingsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _settingsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _settingsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _settingsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         
         _dashboardView.OnPlayRequested += PlayMedia;
         _dashboardView.OnExitRequested += Dashboard_ExitRequested;

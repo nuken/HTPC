@@ -75,4 +75,28 @@ public class ServerManagerService
             db.SaveChanges();
         }
     }
+	
+	public void DeleteServer(int serverId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        
+        var server = db.ServerConfigs.Find(serverId);
+        if (server != null)
+        {
+            db.ServerConfigs.Remove(server);
+            db.SaveChanges();
+            
+            // If the deleted server was the active one, make the next available server active
+            if (server.IsActive)
+            {
+                var nextServer = db.ServerConfigs.FirstOrDefault();
+                if (nextServer != null)
+                {
+                    nextServer.IsActive = true;
+                    db.SaveChanges();
+                }
+            }
+        }
+    }
 }

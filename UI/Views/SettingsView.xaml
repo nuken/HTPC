@@ -144,7 +144,21 @@
             <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Settings" Style="{StaticResource NavPillActiveStyle}"/>
-            <TextBlock Text="App Configuration" FontSize="26" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="#555555"/>
+            <TextBlock Text="Server Actions" FontSize="26" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="#555555"/>
+            
+            <Button Content="⚡" FontSize="24" Background="Transparent" Foreground="#FFD700" BorderThickness="0" Cursor="Hand" Margin="20,0,0,0" Click="AdminMenu_Click" ToolTip="Server Admin Actions">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Scan Personal Media" Click="AdminAction_Click" Tag="/dvr/scanner/scan"/>
+                        <MenuItem Header="Prune Removed Media" Click="AdminAction_Click" Tag="/dvr/scanner/imports/prune"/>
+                        <MenuItem Header="Refresh Virtual Channels" Click="AdminAction_Click" Tag="/dvr/lineups/X-VIRTUAL"/>
+                        <MenuItem Header="Clear Streaming Cache" Click="AdminAction_Click" Tag="/dvr/cache"/>
+                        <MenuItem Header="Fetch Guide Updates" Click="AdminAction_Click" Tag="/dvr/guide?force="/>
+                        <MenuItem Header="Re-Download Entire Guide" Click="AdminAction_Click" Tag="/dvr/guide?force=true"/>
+                        <MenuItem Header="Empty Trash" Click="AdminAction_Click" Tag="/dvr/trash/empty"/>
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,20,0">
@@ -268,7 +282,13 @@
                             <DataTemplate>
                                 <Border Background="#1E1E1E" CornerRadius="8" Padding="20">
                                     <Grid>
-                                        <StackPanel>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Name}" FontWeight="Bold"  Foreground="White" FontSize="18"/>
                                             <TextBlock Foreground="#B3B3B3" Margin="0,5,0,0">
                                                 <TextBlock.Text>
@@ -279,10 +299,26 @@
                                                 </TextBlock.Text>
                                             </TextBlock>
                                         </StackPanel>
-                                        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="#006400" CornerRadius="5" Padding="10,5" 
+                                        
+                                        <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#006400" CornerRadius="5" Padding="10,5" Margin="0,0,15,0"
                                                 Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}">
                                             <TextBlock Text="ACTIVE" FontWeight="Bold" FontSize="12"/>
                                         </Border>
+
+                                        <Button Grid.Column="2" Content="X" Width="35" Height="35" Background="#8B0000" Foreground="White" BorderThickness="0" FontSize="16" FontWeight="Bold" Cursor="Hand" Click="DeleteServer_Click" Focusable="False" ToolTip="Delete Server">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="DelBorder" Background="{TemplateBinding Background}" CornerRadius="6">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="DelBorder" Property="Background" Value="#A50000"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

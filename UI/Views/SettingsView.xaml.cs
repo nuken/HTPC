@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using HTPC.Services;
+using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace HTPC.UI.Views;
 
@@ -16,6 +18,7 @@ public partial class SettingsView : UserControl
 
     private readonly ServerManagerService _serverManager;
     private bool _isInitialized = false;
+	private static readonly HttpClient _httpClient = new HttpClient();
 
     public SettingsView(ServerManagerService serverManager)
     {
@@ -38,7 +41,7 @@ public partial class SettingsView : UserControl
         UiScaleSlider.Value = prefs.UiScaleMultiplier;
         UiScaleTextText.Text = $"{(int)(prefs.UiScaleMultiplier * 100)}%";
 
-        // --- NEW: Load Video Processing ---
+        // Load Video Processing
         EnableUpscalingCheck.IsChecked = prefs.EnableUpscaling;
         UpscalerPresetBox.IsEnabled = prefs.EnableUpscaling; // Gray out dropdown if disabled
         
@@ -79,22 +82,21 @@ public partial class SettingsView : UserControl
     {
         if (UiScaleTextText == null) return;
 
-        // 1. Instantly update the text so the user sees the percentage changing
+        // Instantly update the text so the user sees the percentage changing
         double newScale = Math.Round(e.NewValue, 1);
         UiScaleTextText.Text = $"{(int)(newScale * 100)}%";
 
-        // 2. If the user is physically holding down the mouse to drag, DO NOT scale the UI yet!
-        // This prevents the slider from jumping out from under their cursor.
+        // If the user is physically holding down the mouse to drag, DO NOT scale the UI yet!
         if (System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed) 
             return;
 
-        // 3. If they clicked the track or used the keyboard, apply it instantly
+        // If they clicked the track or used the keyboard, apply it instantly
         ApplyUiScale(newScale);
     }
 
     private void UiScaleSlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
-        // 4. Once they let go of the mouse, apply the actual scale
+        // Once they let go of the mouse, apply the actual scale
         double newScale = Math.Round(UiScaleSlider.Value, 1);
         ApplyUiScale(newScale);
     }
@@ -110,20 +112,20 @@ public partial class SettingsView : UserControl
             mainWindow.ApplyGlobalUiScale();
         }
     }
-	
-	private void Upscaler_SelectionChanged(object sender, RoutedEventArgs e)
+    
+    private void Upscaler_SelectionChanged(object sender, RoutedEventArgs e)
     {
         if (!_isInitialized) return;
         
         var prefs = PreferencesManager.Load();
         
-        // 1. Save the Checkbox state
+        // Save the Checkbox state
         prefs.EnableUpscaling = EnableUpscalingCheck.IsChecked == true;
         
-        // 2. Enable or Disable the dropdown visually based on the checkbox
+        // Enable or Disable the dropdown visually based on the checkbox
         UpscalerPresetBox.IsEnabled = prefs.EnableUpscaling;
         
-        // 3. Save the dropdown string
+        // Save the dropdown string
         if (UpscalerPresetBox.SelectedIndex == 1) prefs.UpscalerPreset = "ArtCNN";
         else prefs.UpscalerPreset = "RAVU";
         
@@ -154,6 +156,78 @@ public partial class SettingsView : UserControl
         LoadServers();
         
         this.Focus(); // Prevent focus from getting trapped after clicking save
+    }
+
+    // --- NEW DELETE SERVER METHOD ---
+    private void DeleteServer_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is HTPC.Core.Models.ServerConfig server)
+        {
+            var result = MessageBox.Show($"Are you sure you want to delete the connection to '{server.Name}'?", 
+                                         "Confirm Delete", 
+                                         MessageBoxButton.YesNo, 
+                                         MessageBoxImage.Warning);
+                                         
+            if (result == MessageBoxResult.Yes)
+            {
+                _serverManager.DeleteServer(server.Id);
+                LoadServers(); // Refresh the list
+            }
+        }
+    }
+	
+	private void AdminMenu_Click(object sender, RoutedEventArgs e)
+    {
+        // Left-clicking the button opens the context menu 
+        if (sender is Button btn && btn.ContextMenu != null)
+        {
+            btn.ContextMenu.IsOpen = true;
+        }
+    }
+
+    private async void AdminAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem item && item.Tag is string endpoint)
+        {
+            var activeServer = _serverManager.GetActiveServer();
+            if (activeServer == null)
+            {
+                MessageBox.Show("No active server selected.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            string url = $"http://{activeServer.IpAddress}:{activeServer.Port}{endpoint}";
+
+            try
+            {
+                HttpResponseMessage response;
+
+                // Explicitly route DELETE for the cache, and PUT for everything else
+                if (endpoint == "/dvr/cache")
+                {
+                    response = await _httpClient.DeleteAsync(url);
+                }
+                else
+                {
+                    response = await _httpClient.PutAsync(url, new StringContent(""));
+                }
+
+                if (response.IsSuccessStatusCode)
+                {
+                    MessageBox.Show($"Command '{item.Header}' sent successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    // Read the error message from Channels if one exists to help with debugging
+                    string errorText = await response.Content.ReadAsStringAsync();
+                    MessageBox.Show($"Server returned {response.StatusCode}\n{errorText}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to connect to server: {ex.Message}", "Connection Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
     
     // --- NAVIGATION SIGNATURES ---
