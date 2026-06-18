@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Net.Http.Json; // <-- REQUIRED FOR THE NEW JSON PARSER
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,61 @@ public class MediaLibraryService
         _serverManager = serverManager;
         _httpClient = httpClient;
         _logger = logger;
+    }
+
+    // --- NEW: FETCH DEVICE PRIORITY ---
+    public async Task<List<string>> GetDevicePriorityListAsync()
+    {
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null) return new List<string>();
+
+        string url = $"http://{activeServer.IpAddress}:{activeServer.Port}/devices/priority";
+        
+        try
+        {
+            var devices = await _httpClient.GetFromJsonAsync<List<DevicePriority>>(url);
+            
+            // Returns an ordered list of DeviceIDs. Index 0 is highest priority.
+            return devices?.Where(d => !string.IsNullOrEmpty(d.DeviceId))
+                           .Select(d => d.DeviceId!)
+                           .ToList() ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Failed to fetch device priority list: {ex.Message}");
+            return new List<string>();
+        }
+    }
+
+    // --- NEW: THE STACKING ALGORITHM ---
+    public List<Channel> StackAndFilterChannels(List<Channel> allChannels, List<string> priorityList)
+    {
+        var stackedChannels = new List<Channel>();
+        
+        // Group channels by StationId. If empty (like some virtual/M3U channels), group by Name so they don't incorrectly collapse together.
+        var groupedChannels = allChannels.GroupBy(c => !string.IsNullOrWhiteSpace(c.StationId) ? c.StationId : c.Name);
+
+        foreach (var group in groupedChannels)
+        {
+            if (group.Count() == 1)
+            {
+                stackedChannels.Add(group.First());
+                continue;
+            }
+
+            // Find the highest priority channel in the duplicate group
+            var highestPriorityChannel = group.OrderBy(c =>
+            {
+                if (string.IsNullOrWhiteSpace(c.DeviceId)) return int.MaxValue; 
+                
+                int priorityIndex = priorityList.IndexOf(c.DeviceId);
+                return priorityIndex == -1 ? int.MaxValue : priorityIndex;
+            }).First();
+
+            stackedChannels.Add(highestPriorityChannel);
+        }
+
+        return stackedChannels;
     }
 
     private async Task EnsureMoviesCacheAsync()
@@ -50,7 +106,6 @@ public class MediaLibraryService
                     long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
                     int year = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == JsonValueKind.Number ? yProp.GetInt32() : 0;
 
-                    // --- THE FIX: CHECK FOR BOTH LOWERCASE AND TITLECASE ---
                     bool isWatched = false;
                     if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
                     {
@@ -78,8 +133,6 @@ public class MediaLibraryService
                         Genres = ParseStringArray(element, "genres"),
                         Cast = ParseStringArray(element, "cast"),
                         Directors = ParseStringArray(element, "directors"),
-                        
-                        // Map the fixed variables
                         IsWatched = isWatched,
                         IsFavorite = isFavorite
                     });
@@ -200,6 +253,9 @@ public class MediaLibraryService
 
         string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
         
+        // --- NEW: FETCH THE PRIORITY LIST BEFORE WE START ---
+        List<string> devicePriority = await GetDevicePriorityListAsync();
+        
         try
         {
             var resultChannels = new List<Channel>();
@@ -211,7 +267,6 @@ public class MediaLibraryService
             long durationSeconds = durationHours * 3600; 
             string guideJson = await _httpClient.GetStringAsync($"{baseUrl}/devices/ANY/guide?time={unixTime}&duration={durationSeconds}");
 
-            // --- BULLETPROOF HD EXTRACTION ---
             var hdDictionary = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             try
             {
@@ -225,13 +280,11 @@ public class MediaLibraryService
                         string name = GetStringOrNumber(c, "name").ToUpper();
                         bool isHd = false;
 
-                        // 1. Check for boolean or numeric 1 flag
                         if (c.TryGetProperty("hd", out var hdProp) || c.TryGetProperty("HD", out hdProp))
                         {
                             isHd = hdProp.ValueKind == JsonValueKind.True || (hdProp.ValueKind == JsonValueKind.Number && hdProp.GetInt32() == 1);
                         }
 
-                        // 2. Fallback: Check if the channel's actual name contains "-HD" or " HD"
                         if (!isHd && (!string.IsNullOrEmpty(name) && (name.Contains("-HD") || name.EndsWith(" HD"))))
                         {
                             isHd = true;
@@ -241,7 +294,7 @@ public class MediaLibraryService
                     }
                 }
             }
-            catch { /* Silently fail and default to false if unreachable */ }
+            catch { }
 
             var stationLogoDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
@@ -409,7 +462,6 @@ public class MediaLibraryService
                                 airings[i].LeftOffset = (i == 0) ? (airings[i].StartTime - gridStart).TotalMinutes * 8.0 : 0;
                             }
 
-                            // --- CHECK THE HD DICTIONARY WITH TRIMMED KEY ---
                             bool hdStatus = hdDictionary.TryGetValue(channelNumber, out bool isHd) && isHd;
 
                             resultChannels.Add(new Channel
@@ -421,8 +473,9 @@ public class MediaLibraryService
                                 Favorite = isFavorite,
                                 Hidden = isHidden,
                                 DeviceId = currentDeviceId, 
+                                StationId = stationId, // <-- NEW: MAPPED FOR STACKING
                                 CurrentAirings = airings,
-                                IsHD = hdStatus // MAP THE STATUS
+                                IsHD = hdStatus 
                             });
                             
                             collectionSortOrder[channelNumber] = sortIndex;
@@ -431,7 +484,14 @@ public class MediaLibraryService
                 }
             }
 
-            var uniqueChannels = resultChannels.GroupBy(c => c.Number).Select(g => g.First());
+            // --- THE NEW STACKING PIPELINE ---
+            // 1. Condense the massive raw list down to just the highest priority channel per Station ID
+            var stackedChannels = StackAndFilterChannels(resultChannels, devicePriority);
+
+            // 2. Fallback Grouping (just in case two different stations somehow share a single guide number)
+            var uniqueChannels = stackedChannels.GroupBy(c => c.Number).Select(g => g.First());
+
+            // 3. Apply the final Collection Sort Order or fall back to numerical order
             return uniqueChannels.OrderBy(c => collectionSortOrder.TryGetValue(c.Number, out int idx) && idx != 999999 ? idx : (double.TryParse(c.Number, out double num) ? num : 999999)).ToList();
         }
         catch (Exception ex)
@@ -449,7 +509,6 @@ public class MediaLibraryService
             using var client = new System.Net.Http.HttpClient();
             string requestUri = $"{baseUrl}/dvr/files/{fileId}/{command}";
             
-            // Channels DVR uses PUT for these file state toggles/commands
             var response = await client.PutAsync(requestUri, null);
             return response.IsSuccessStatusCode;
         }
@@ -459,7 +518,6 @@ public class MediaLibraryService
         }
     }
 
-    // 2. Fetch Media Info JSON
     public async Task<string> GetMediaInfoAsync(string baseUrl, string fileId)
     {
         try
@@ -474,7 +532,6 @@ public class MediaLibraryService
         }
     }
     
-    // Added 'statusFilter' parameter with a default value of "All Movies"
     public async Task<List<MediaItem>> GetFilteredMoviesAsync(int startIndex, int chunkSize, string searchQuery, string genreFilter, string sortOrder, string statusFilter = "All Movies")
     {
         await EnsureMoviesCacheAsync();
@@ -482,7 +539,6 @@ public class MediaLibraryService
 
         var query = _masterMoviesCache.AsEnumerable();
 
-        // 1. Text Search
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchLower = searchQuery.ToLower();
@@ -493,13 +549,11 @@ public class MediaLibraryService
             );
         }
 
-        // 2. Genre Filter
         if (!string.IsNullOrWhiteSpace(genreFilter) && genreFilter != "All")
         {
             query = query.Where(m => m.Genres.Any(g => string.Equals(g, genreFilter, StringComparison.OrdinalIgnoreCase)));
         }
 
-        // 3. NEW: Status Filter (Favorites, Watched, Unwatched)
         if (statusFilter == "Favorites")
             query = query.Where(m => m.IsFavorite);
         else if (statusFilter == "Watched")
@@ -507,7 +561,6 @@ public class MediaLibraryService
         else if (statusFilter == "Unwatched")
             query = query.Where(m => !m.IsWatched);
 
-        // 4. Sorting
         query = sortOrder switch
         {
             "Alphabetical (A-Z)" => query.OrderBy(m => m.Title),
@@ -560,7 +613,6 @@ public class MediaLibraryService
                     int episode = element.TryGetProperty("episode_number", out var eProp) && eProp.ValueKind == JsonValueKind.Number ? eProp.GetInt32() : 0;
                     long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
 
-                    // --- THE FIX: CHECK FOR BOTH LOWERCASE AND TITLECASE ---
                     bool isWatched = false;
                     if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
                     {
@@ -589,8 +641,6 @@ public class MediaLibraryService
                         EpisodeNumber = episode,
                         CreatedAt = createdAt,
                         Genres = ParseStringArray(element, "genres"),
-                        
-                        // Map the fixed variables
                         IsWatched = isWatched,
                         IsFavorite = isFavorite
                     });
@@ -778,7 +828,6 @@ public class MediaLibraryService
                         imagePath = $"/dvr/files/{id}/preview"; 
                     }
 
-                    // --- THE FIX: EXTRACT WATCHED AND FAVORITED STATUS ---
                     bool isWatched = false;
                     if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
                     {
@@ -801,8 +850,6 @@ public class MediaLibraryService
                         Title = string.IsNullOrEmpty(title) ? "Unknown Video" : title,
                         PosterUrl = FormatImageUrl(baseUrl, imagePath),
                         StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                        
-                        // Map the fixed variables
                         IsWatched = isWatched,
                         IsFavorite = isFavorite
                     });
@@ -946,7 +993,6 @@ public class MediaLibraryService
                     string rawImageUrl = GetStringOrNumber(element, "thumbnail_url", "image_url");
                     long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
                     
-                    // --- EXTRACT WATCHED AND FAVORITED STATUS ---
                     bool isWatched = false;
                     if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
                     {
@@ -971,8 +1017,6 @@ public class MediaLibraryService
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
                         StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         CreatedAt = createdAt,
-                        
-                        // Map the fixed variables
                         IsWatched = isWatched,
                         IsFavorite = isFavorite
                     });

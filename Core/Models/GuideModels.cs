@@ -6,6 +6,16 @@ using System.Text.Json.Serialization;
 
 namespace HTPC.Core.Models;
 
+// --- NEW MODEL FOR THE PRIORITY ENDPOINT ---
+public class DevicePriority
+{
+    [JsonPropertyName("DeviceID")]
+    public string? DeviceId { get; set; }
+    
+    [JsonPropertyName("FriendlyName")]
+    public string? FriendlyName { get; set; }
+}
+
 public class Channel : INotifyPropertyChanged
 {
     public string Id { get; set; } = string.Empty;
@@ -13,11 +23,12 @@ public class Channel : INotifyPropertyChanged
     public string Name { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
 
-    // Stores the specific tuner/source ID (e.g., "TVE-YouTubeTV")
+    // Source Tracking for Stacking
     public string DeviceId { get; set; } = string.Empty;
+    public string StationId { get; set; } = string.Empty; // <-- NEW: Used to group duplicate channels
+
     public bool IsHD { get; set; } = false;	
 
-    // Favorite toggle with instant UI notification
     private bool _favorite = false;
     public bool Favorite 
     { 
@@ -64,7 +75,6 @@ public class Airing
     public DateTime StartTime { get; set; }
     public double? Duration { get; set; }
     
-    // UI Properties for the Timeline
     public double LeftOffset { get; set; } = 0;
     public System.Windows.Thickness DynamicMargin => new System.Windows.Thickness(LeftOffset, 0, 0, 0);
     public System.Windows.Thickness InnerContentMargin => new System.Windows.Thickness(LeftOffset < 0 ? Math.Abs(LeftOffset) : 0, 0, 0, 0);
