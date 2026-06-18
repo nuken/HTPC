@@ -11,4 +11,5 @@ public class ServerConfig
     public string AuthToken { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public string DefaultCollectionId { get; set; } = string.Empty; 
+	
 }

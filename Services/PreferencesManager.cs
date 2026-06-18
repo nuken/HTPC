@@ -18,6 +18,7 @@ public class AppPreferences
     public double WindowTop { get; set; } = 100;
     public double WindowLeft { get; set; } = 100;
     public double UiScaleMultiplier { get; set; } = 1.0; 
+	public string LastMultiviewCollection { get; set; } = "All Channels";
 
     // --- NEW: VIDEO PROCESSING ---
     public bool EnableUpscaling { get; set; } = false;

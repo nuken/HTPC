@@ -19,6 +19,7 @@ public partial class VideosView : UserControl
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
+	public event EventHandler? OnMultiviewRequested;
 
     private readonly MediaLibraryService _libraryService;
 	private readonly ServerManagerService _serverManager;
@@ -358,5 +359,6 @@ public partial class VideosView : UserControl
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
-    private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
+	private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
 }

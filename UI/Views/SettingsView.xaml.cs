@@ -15,6 +15,7 @@ public partial class SettingsView : UserControl
     public event EventHandler? OnMoviesRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
+	public event EventHandler? OnMultiviewRequested;
 
     private readonly ServerManagerService _serverManager;
     private bool _isInitialized = false;
@@ -235,5 +236,6 @@ public partial class SettingsView : UserControl
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
-    private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+    private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
+	private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
 }

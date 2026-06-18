@@ -155,3 +155,9 @@ C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\refint\HTPC.dll
 C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\HTPC.pdb
 C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\HTPC.genruntimeconfig.cache
 C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\ref\HTPC.dll
+C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\UI\Views\MultiviewSetupView.baml
+C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\UI\Views\MultiviewSetupView.g.cs
+C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\UI\Windows\MultiviewPlayerWindow.g.cs
+C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\GeneratedInternalTypeHelper.g.cs
+C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\HTPC_MarkupCompile.lref
+C:\Users\Bobby\Documents\HTPC_Linked\obj\Debug\net10.0-windows\UI\Windows\MultiviewPlayerWindow.baml

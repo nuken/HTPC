@@ -21,6 +21,7 @@ public partial class GuideView : UserControl
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested; 
+	public event EventHandler? OnMultiviewRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -529,7 +530,8 @@ public partial class GuideView : UserControl
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
-
+    private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
+	
     private void ChannelItemsControl_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         var sv = GetScrollViewer(GuideItemsControl);

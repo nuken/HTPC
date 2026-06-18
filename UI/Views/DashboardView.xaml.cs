@@ -21,6 +21,7 @@ public partial class DashboardView : UserControl
     public event EventHandler? OnMoviesRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
+	public event EventHandler? OnMultiviewRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -146,7 +147,8 @@ public partial class DashboardView : UserControl
     {
         OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     }
-    
+	private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
+	    
     private void Shows_Click(object sender, RoutedEventArgs e)
     {
         OnShowsRequested?.Invoke(this, EventArgs.Empty);

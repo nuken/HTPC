@@ -3,14 +3,15 @@
   "GuideCollection": "All",
   "PaddingStartMinutes": 0,
   "PaddingEndMinutes": 0,
-  "LastGuideCollection": "All Channels",
+  "LastGuideCollection": "Popular",
   "CustomChannelOrders": {},
   "IsFullscreen": false,
   "WindowWidth": 1280,
   "WindowHeight": 720,
-  "WindowTop": 100,
-  "WindowLeft": 100,
+  "WindowTop": 8,
+  "WindowLeft": 35.2,
   "UiScaleMultiplier": 1,
+  "LastMultiviewCollection": "Popular",
   "EnableUpscaling": true,
   "UpscalerPreset": "ArtCNN"
 }

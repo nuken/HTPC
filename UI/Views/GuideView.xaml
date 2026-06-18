@@ -167,7 +167,8 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
             <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Guide" Style="{StaticResource NavPillActiveStyle}"/>
-            <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
+			<Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>

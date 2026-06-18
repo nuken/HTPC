@@ -17,11 +17,15 @@ public partial class MainWindow : Window
     private readonly MoviesView _moviesView;
     private readonly ShowsView _showsView;
     private readonly VideosView _videosView;
-    private object? _previousView;
     
+    // --- THE MULTIVIEW VARIABLES ---
+    private readonly MultiviewSetupView _multiviewSetupView;
+    private readonly ServerManagerService _serverManager;
+    
+    private object? _previousView;
     private bool _isFullscreen = true;
 
-    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView)
+    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, MultiviewSetupView multiviewSetupView, ServerManagerService serverManager)
     {
         InitializeComponent();
         
@@ -32,7 +36,19 @@ public partial class MainWindow : Window
         _moviesView = moviesView; 
         _showsView = showsView;
         _videosView = videosView;
+        _multiviewSetupView = multiviewSetupView;
+        _serverManager = serverManager;
+
+        // --- MULTIVIEW WIRING ---
+        _multiviewSetupView.OnLaunchMultiviewRequested += LaunchMultiviewPlayer;
         
+        // (Temporary Route: If you press 'M' on the Dashboard, it opens the Setup screen)
+        _dashboardView.PreviewKeyDown += (s, e) => 
+        {
+            if (e.Key == Key.M) MainShellContainer.Content = _multiviewSetupView;
+        };
+        
+        // --- RESTORED NAVIGATION WIRING ---
         _settingsView.OnHomeRequested += NavigateToDashboard;
         _settingsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _settingsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
@@ -74,6 +90,20 @@ public partial class MainWindow : Window
         _videosView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _videosView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _videosView.OnPlayRequested += PlayMedia;
+		
+		_dashboardView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _settingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _guideView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _moviesView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _showsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _videosView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+		
+		_multiviewSetupView.OnHomeRequested += NavigateToDashboard;
+        _multiviewSetupView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _multiviewSetupView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _multiviewSetupView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _multiviewSetupView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _multiviewSetupView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         
         _playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
 
@@ -210,11 +240,11 @@ public partial class MainWindow : Window
                 MainShellContainer.Content = _previousView ?? _dashboardView;
                 e.Handled = true;
             }
-            else if (MainShellContainer.Content == _settingsView || MainShellContainer.Content == _guideView) 
-            {
-                MainShellContainer.Content = _dashboardView;
-                e.Handled = true;
-            }
+            else if (MainShellContainer.Content == _settingsView || MainShellContainer.Content == _guideView || MainShellContainer.Content == _multiviewSetupView) 
+        {
+            MainShellContainer.Content = _dashboardView;
+            e.Handled = true;
+        }
             else if (MainShellContainer.Content == _dashboardView)
             {
                 Application.Current.Shutdown();
@@ -251,7 +281,7 @@ public partial class MainWindow : Window
         }
     }
 	
-	// ==========================================
+    // ==========================================
     // GLOBAL UI SCALING
     // ==========================================
     public void ApplyGlobalUiScale()
@@ -285,5 +315,23 @@ public partial class MainWindow : Window
     private void Dashboard_ExitRequested(object? sender, EventArgs e)
     {
         Application.Current.Shutdown();
+    }
+
+    private void LaunchMultiviewPlayer(object? sender, System.Collections.Generic.List<Channel> channels)
+    {
+        var multiWindow = new MultiviewPlayerWindow(channels, _serverManager)
+        {
+            Owner = this // Ties the player strictly to the main window
+        };
+        
+        // Hide the background app entirely so no double-clicks can occur
+        this.Hide(); 
+        
+        // ShowDialog blocks the thread until the user explicitly closes the player
+        multiWindow.ShowDialog(); 
+        
+        // Bring the app back once the player is closed
+        this.Show(); 
+        MainShellContainer.Focus(); 
     }
 }
