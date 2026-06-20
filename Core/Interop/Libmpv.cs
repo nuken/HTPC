@@ -34,4 +34,30 @@ internal static partial class Libmpv
 	// format 5 = MPV_FORMAT_DOUBLE
     [LibraryImport(LibraryName, StringMarshalling = StringMarshalling.Utf8)]
     public static partial int mpv_get_property(IntPtr ctx, string name, int format, out double data);
+	
+	// --- NEW: MPV EVENT STRUCTS ---
+    [StructLayout(LayoutKind.Sequential)]
+    public struct mpv_event
+    {
+        public int event_id;
+        public int error;
+        public ulong reply_userdata;
+        public IntPtr data;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct mpv_event_property
+    {
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
+        public string name;
+        public int format;
+        public IntPtr data;
+    }
+
+    // --- NEW: EVENT LOOP IMPORTS ---
+    [LibraryImport(LibraryName)]
+    public static partial IntPtr mpv_wait_event(IntPtr ctx, double timeout);
+
+    [LibraryImport(LibraryName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial int mpv_observe_property(IntPtr ctx, ulong reply_userdata, string name, int format);
 }

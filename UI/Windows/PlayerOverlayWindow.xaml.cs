@@ -29,6 +29,10 @@ public partial class PlayerOverlayWindow : Window
     private MediaItem? _currentMedia;
     private bool _isControlsVisible = true;
     private Point _lastMousePosition;
+	
+	private DispatcherTimer _skipAdTimer;
+    private double _skipTargetTime = 0;
+    private bool _markersDrawn = false;
 
     public PlayerOverlayWindow(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -44,6 +48,11 @@ public partial class PlayerOverlayWindow : Window
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _idleTimer.Tick += IdleTimer_Tick;
         _idleTimer.Start();
+		
+		_skipAdTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _skipAdTimer.Tick += (s, e) => { SkipAdButton.Visibility = Visibility.Collapsed; _skipAdTimer.Stop(); };
+        
+        _mpvService.OnCommercialPrompt += ShowSkipAdPrompt;
 
         // 1. NEW: Ensure we clean up timers and mouse cursor when window dies
         this.Closed += Window_Closed;
@@ -52,8 +61,10 @@ public partial class PlayerOverlayWindow : Window
     // 2. NEW: The absolute guarantee that the mouse cursor comes back
     private void Window_Closed(object? sender, EventArgs e)
     {
+        _mpvService.OnCommercialPrompt -= ShowSkipAdPrompt; // <-- NEW
         _idleTimer?.Stop();
         _syncTimer?.Stop();
+        _skipAdTimer?.Stop();
         Mouse.OverrideCursor = null; 
     }
 
@@ -71,6 +82,10 @@ public partial class PlayerOverlayWindow : Window
 
         TimelineGrid.Visibility = Visibility.Visible;
         TimelineSlider.IsHitTestVisible = !_isLiveTv;
+		
+		_markersDrawn = false;
+        CommercialMarkersCanvas.Children.Clear();
+        SkipAdButton.Visibility = Visibility.Collapsed;
 
         _isPlaying = true;
         PlayPauseButton.Content = "⏸";
@@ -254,6 +269,12 @@ public partial class PlayerOverlayWindow : Window
 
             if (duration > 0)
             {
+                if (!_markersDrawn)
+                {
+                    DrawCommercialMarkers(duration);
+                    _markersDrawn = true;
+                }
+
                 TimelineSlider.Maximum = duration;
                 TimelineSlider.Value = position;
 
@@ -298,11 +319,14 @@ public partial class PlayerOverlayWindow : Window
         WakeUpUi();
     }
 
-    private void Timeline_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    private async void Timeline_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
-        _isDragging = false;
         _mpvService.SeekAbsolute(TimelineSlider.Value);
         WakeUpUi(); 
+        
+        // Give MPV 300ms to execute the seek before allowing the timer to update the UI
+        await Task.Delay(300);
+        _isDragging = false;
     }
 
     private void SkipBackward_Click(object sender, RoutedEventArgs e)
@@ -352,6 +376,66 @@ public partial class PlayerOverlayWindow : Window
             PlayPauseButton.Content = "⏸";
         }
         WakeUpUi();
+    }
+	
+	// --- COMMERCIAL SKIP PROMPT LOGIC ---
+    private void ShowSkipAdPrompt(double targetTime)
+    {
+        Dispatcher.Invoke(() => 
+        {
+            _skipTargetTime = targetTime;
+            SkipAdButton.Visibility = Visibility.Visible;
+            SkipAdButton.Focus(); // Optional: Grabs focus so a remote control "Enter" click skips
+            _skipAdTimer.Stop();
+            _skipAdTimer.Start(); // Starts the 10-second countdown to hide it
+            WakeUpUi();
+        });
+    }
+
+    private void SkipAdButton_Click(object sender, RoutedEventArgs e)
+    {
+        _mpvService.SeekAbsolute(_skipTargetTime);
+        SkipAdButton.Visibility = Visibility.Collapsed;
+        _skipAdTimer.Stop();
+        WakeUpUi();
+    }
+
+    // --- TIMELINE MARKER LOGIC ---
+    private void CommercialMarkersCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_isLiveTv && _mpvService.GetDuration() > 0)
+        {
+            DrawCommercialMarkers(_mpvService.GetDuration());
+        }
+    }
+
+    private void DrawCommercialMarkers(double totalDuration)
+    {
+        CommercialMarkersCanvas.Children.Clear();
+        
+        if (_currentMedia?.Commercials == null || _currentMedia.Commercials.Count < 2 || totalDuration <= 0 || CommercialMarkersCanvas.ActualWidth <= 0) 
+            return;
+
+        var comms = _currentMedia.Commercials;
+        
+        for (int i = 0; i < comms.Count - 1; i += 2)
+        {
+            double start = comms[i];
+            double end = comms[i + 1];
+
+            double startPct = start / totalDuration;
+            double widthPct = (end - start) / totalDuration;
+
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 255, 165, 0)), // Orange
+                Width = CommercialMarkersCanvas.ActualWidth * widthPct,
+                Height = CommercialMarkersCanvas.ActualHeight
+            };
+
+            Canvas.SetLeft(rect, CommercialMarkersCanvas.ActualWidth * startPct);
+            CommercialMarkersCanvas.Children.Add(rect);
+        }
     }
 
     // --- IDLE TIMER & FADE LOGIC ---

@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Threading;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using HTPC.Core.Interop;
@@ -13,15 +15,26 @@ public class MpvPlaybackService : IDisposable
 {
     private readonly ILogger<MpvPlaybackService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private IntPtr _mpvContext;
+	
+	private readonly ServerManagerService _serverManager;
+    private static readonly System.Net.Http.HttpClient _httpClient = new System.Net.Http.HttpClient();
     
+	private IntPtr _mpvContext;    
     private Timer? _positionTimer;
     private MediaItem? _currentMedia;
+	private Thread? _eventLoopThread;
+    private bool _isDisposed = false;
+    private HashSet<int> _disabledCommercialBlocks = new HashSet<int>();
 
-    public MpvPlaybackService(ILogger<MpvPlaybackService> logger, IServiceScopeFactory scopeFactory)
+    // This event lets the UI know it should show the "Click to Skip" button overlay
+    // It passes the 'targetTime' so the UI knows where to jump if clicked.
+    public event Action<double>? OnCommercialPrompt;
+
+    public MpvPlaybackService(ILogger<MpvPlaybackService> logger, IServiceScopeFactory scopeFactory, ServerManagerService serverManager)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _serverManager = serverManager; 
         InitializeMpv();
     }
 
@@ -31,7 +44,7 @@ public class MpvPlaybackService : IDisposable
 
         _mpvContext = Libmpv.mpv_create();
         if (_mpvContext == IntPtr.Zero) throw new Exception("Failed to create libmpv context.");
-
+        Libmpv.mpv_set_option_string(_mpvContext, "osd-bar", "no");
         Libmpv.mpv_set_option_string(_mpvContext, "terminal", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "msg-level", "all=info"); 
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
@@ -48,6 +61,14 @@ public class MpvPlaybackService : IDisposable
         if (result < 0) throw new Exception($"Failed to initialize libmpv context. Error: {result}");
 
         _positionTimer = new Timer(SaveCurrentPosition, null, Timeout.Infinite, Timeout.Infinite);
+		
+		// Format 5 is MPV_FORMAT_DOUBLE. We tell MPV to notify us whenever time-pos changes.
+    Libmpv.mpv_observe_property(_mpvContext, 1, "time-pos", 5);
+
+    _eventLoopThread = new Thread(EventLoop);
+    _eventLoopThread.IsBackground = true;
+    _eventLoopThread.Name = "MpvEventLoop";
+    _eventLoopThread.Start();
     }
 
     public void AttachToWindow(IntPtr hwnd)
@@ -66,12 +87,20 @@ public class MpvPlaybackService : IDisposable
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var state = db.PlaybackStates.FirstOrDefault(s => s.MediaId == media.Id);
             
-            if (state != null && state.PositionTicks > 0)
+            // Priority 1: Channels API explicitly gave us a StartOffset (from the Up Next queue)
+            if (media.StartOffset > 0)
+            {
+                Libmpv.mpv_set_option_string(_mpvContext, "start", media.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                _logger.LogInformation($"Up Next: Resuming at {media.StartOffset} seconds.");
+            }
+            // Priority 2: Otherwise, check the local database like normal
+            else if (state != null && state.PositionTicks > 0)
             {
                 double startSeconds = TimeSpan.FromTicks(state.PositionTicks).TotalSeconds;
                 Libmpv.mpv_set_option_string(_mpvContext, "start", startSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 _logger.LogInformation($"Resuming at {startSeconds} seconds.");
             }
+            // Fallback: Start from the beginning
             else
             {
                 Libmpv.mpv_set_option_string(_mpvContext, "start", "0");
@@ -80,6 +109,121 @@ public class MpvPlaybackService : IDisposable
 
         Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{media.StreamUrl}\"");
         _positionTimer?.Change(5000, 5000);
+    }
+	
+	private void EventLoop()
+    {
+        while (!_isDisposed)
+        {
+            IntPtr eventPtr = Libmpv.mpv_wait_event(_mpvContext, 0.5);
+            if (eventPtr == IntPtr.Zero) continue;
+
+            var ev = Marshal.PtrToStructure<Libmpv.mpv_event>(eventPtr);
+            
+            // event_id 7 == MPV_EVENT_END_FILE (Video finished naturally)
+            if (ev.event_id == 7)
+            {
+                if (_currentMedia != null)
+                {
+                    double duration = GetDuration();
+                    // Force the position to equal the duration so it triggers the "Watched" guardrail
+                    _ = SyncProgressToServerAsync(_currentMedia.Id, duration, duration);
+                }
+            }
+            
+            // event_id 22 == MPV_EVENT_PROPERTY_CHANGE (For Commercial Skip)
+            if (ev.event_id == 22) 
+            {
+                var prop = Marshal.PtrToStructure<Libmpv.mpv_event_property>(ev.data);
+                if (prop.name == "time-pos" && prop.data != IntPtr.Zero)
+                {
+                    double timePos = Marshal.PtrToStructure<double>(prop.data);
+                    EvaluateCommercialBoundaries(timePos);
+                }
+            }
+        }
+    }
+
+    private void EvaluateCommercialBoundaries(double currentSeconds)
+    {
+        if (_currentMedia?.Commercials == null || _currentMedia.Commercials.Count < 2) return;
+
+        var prefs = PreferencesManager.Load();
+        if (prefs.CommercialSkipMode == 0) return; // Mode 0 = Off
+
+        var comms = _currentMedia.Commercials;
+        
+        // Loop through pairs: [Start, End, Start, End...]
+        for (int i = 0; i < comms.Count - 1; i += 2)
+        {
+            double start = comms[i];
+            double end = comms[i + 1];
+
+            // THE FERAL ANTI-LOOP LOGIC:
+            // If the user manually scrubs backwards well before the commercial start,
+            // we re-enable the block so it can be skipped again.
+            if (currentSeconds < start - 5)
+            {
+                _disabledCommercialBlocks.Remove(i);
+            }
+
+            // Are we currently inside a commercial break?
+            if (currentSeconds >= start && currentSeconds < end)
+            {
+                // If this block is disabled (because we already skipped it or the user 
+                // explicitly scrubbed into it), do nothing.
+                if (_disabledCommercialBlocks.Contains(i)) continue; 
+
+                if (prefs.CommercialSkipMode == 2) // Mode 2 = Auto Skip
+                {
+                    _logger.LogInformation($"Auto-skipping commercial block: {start}s to {end}s");
+                    _disabledCommercialBlocks.Add(i); // Mark as skipped
+                    SeekAbsolute(end); 
+                }
+                else if (prefs.CommercialSkipMode == 1) // Mode 1 = Prompt
+                {
+                    _disabledCommercialBlocks.Add(i); // Mark as triggered so we don't spam the UI
+                    OnCommercialPrompt?.Invoke(end);  // Fire the event to the WPF window
+                }
+            }
+        }
+    }
+	
+	private async Task SyncProgressToServerAsync(string fileId, double duration, double position)
+    {
+        if (string.IsNullOrEmpty(fileId)) return;
+
+        // Guard 1: The "Accidental Click" (Under 60 seconds)
+        if (position < 60)
+        {
+            _logger.LogInformation("Playback under 60 seconds. Ignoring progress sync.");
+            return;
+        }
+
+        var server = _serverManager.GetActiveServer();
+        if (server == null) return;
+
+        string baseUrl = $"http://{server.IpAddress}:{server.Port}";
+
+        try
+        {
+            // Guard 2: The "Credits" Threshold (Within 3 minutes of the end)
+            if (duration > 0 && position >= duration - 180)
+            {
+                _logger.LogInformation($"Playback within 3 minutes of end. Marking {fileId} as Watched.");
+                await _httpClient.PutAsync($"{baseUrl}/dvr/files/{fileId}/watch", new System.Net.Http.StringContent(""));
+            }
+            else
+            {
+                // Standard progress save
+                _logger.LogInformation($"Saving progress for {fileId} at {position} seconds.");
+                await _httpClient.PutAsync($"{baseUrl}/dvr/files/{fileId}/playback_time/{position}", new System.Net.Http.StringContent(""));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to sync playback progress to Channels DVR: {ex.Message}");
+        }
     }
 	
 	private bool _isAnimeModeActive = false;
@@ -145,6 +289,17 @@ public class MpvPlaybackService : IDisposable
     {
         _positionTimer?.Change(Timeout.Infinite, Timeout.Infinite); 
         SaveCurrentPosition(null); 
+
+        // --- NEW: Sync to Channels Server ---
+        if (_currentMedia != null)
+        {
+            double duration = GetDuration();
+            double position = GetPosition();
+            
+            // Fire and forget the async task so it doesn't block the UI from closing
+            _ = SyncProgressToServerAsync(_currentMedia.Id, duration, position);
+        }
+
         Libmpv.mpv_command_string(_mpvContext, "stop"); 
         _currentMedia = null;
     }
@@ -216,6 +371,7 @@ public class MpvPlaybackService : IDisposable
 
     public void Dispose()
     {
+        _isDisposed = true; // Signals the while-loop to stop
         _positionTimer?.Dispose();
         if (_mpvContext != IntPtr.Zero)
         {

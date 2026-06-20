@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -20,6 +21,7 @@ public partial class SettingsView : UserControl
     private readonly ServerManagerService _serverManager;
     private bool _isInitialized = false;
 	private static readonly HttpClient _httpClient = new HttpClient();
+	public System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig> DashboardRows { get; set; } = new System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig>();
 
     public SettingsView(ServerManagerService serverManager)
     {
@@ -37,7 +39,26 @@ public partial class SettingsView : UserControl
         }
 
         var prefs = PreferencesManager.Load();
-        
+		
+		// Load Commercial Skip Mode
+        if (prefs.CommercialSkipMode >= 0 && prefs.CommercialSkipMode <= 2)
+        {
+            CommercialSkipBox.SelectedIndex = prefs.CommercialSkipMode;
+        }
+        else
+        {
+            CommercialSkipBox.SelectedIndex = 2; // Default to Auto
+        }
+        // Load Dashboard Layout
+        DashboardRows.Clear();
+        if (prefs.DashboardLayout != null)
+        {
+            foreach (var row in prefs.DashboardLayout.OrderBy(r => r.Order))
+            {
+                DashboardRows.Add(row);
+            }
+        }
+        DashboardLayoutList.ItemsSource = DashboardRows;
         // Load UI Scale
         UiScaleSlider.Value = prefs.UiScaleMultiplier;
         UiScaleTextText.Text = $"{(int)(prefs.UiScaleMultiplier * 100)}%";
@@ -177,6 +198,18 @@ public partial class SettingsView : UserControl
         }
     }
 	
+	private void MakeActive_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is HTPC.Core.Models.ServerConfig server)
+        {
+            // Update the database/config to mark this ID as active
+            _serverManager.SetActiveServer(server.Id); 
+            
+            // Refresh the UI to reflect the change
+            LoadServers();
+        }
+    }
+	
 	private void AdminMenu_Click(object sender, RoutedEventArgs e)
     {
         // Left-clicking the button opens the context menu 
@@ -229,6 +262,76 @@ public partial class SettingsView : UserControl
                 MessageBox.Show($"Failed to connect to server: {ex.Message}", "Connection Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+    }
+	
+	private void CommercialSkip_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isInitialized) return;
+        
+        var prefs = PreferencesManager.Load();
+        
+        // Index 0 = Off, 1 = Prompt, 2 = Auto
+        prefs.CommercialSkipMode = CommercialSkipBox.SelectedIndex;
+        
+        PreferencesManager.Save(prefs);
+    }
+	
+	// --- DASHBOARD LAYOUT LOGIC ---
+
+    private void MoveRowUp_Click(object sender, RoutedEventArgs e)
+    {
+        int index = DashboardLayoutList.SelectedIndex;
+        if (index > 0)
+        {
+            var item = DashboardRows[index];
+            DashboardRows.RemoveAt(index);
+            DashboardRows.Insert(index - 1, item);
+            DashboardLayoutList.SelectedIndex = index - 1; // Keep it selected
+            SaveDashboardLayout();
+        }
+    }
+
+    private void MoveRowDown_Click(object sender, RoutedEventArgs e)
+    {
+        int index = DashboardLayoutList.SelectedIndex;
+        if (index >= 0 && index < DashboardRows.Count - 1)
+        {
+            var item = DashboardRows[index];
+            DashboardRows.RemoveAt(index);
+            DashboardRows.Insert(index + 1, item);
+            DashboardLayoutList.SelectedIndex = index + 1; // Keep it selected
+            SaveDashboardLayout();
+        }
+    }
+
+    private void ToggleRowVisibility_Click(object sender, RoutedEventArgs e)
+    {
+        if (DashboardLayoutList.SelectedItem is DashboardRowConfig row)
+        {
+            row.IsVisible = !row.IsVisible;
+            
+            // Force WPF to update the UI by removing and re-inserting
+            int index = DashboardLayoutList.SelectedIndex;
+            DashboardRows.RemoveAt(index);
+            DashboardRows.Insert(index, row);
+            DashboardLayoutList.SelectedIndex = index;
+            
+            SaveDashboardLayout();
+        }
+    }
+
+    private void SaveDashboardLayout()
+    {
+        var prefs = PreferencesManager.Load();
+        prefs.DashboardLayout = new System.Collections.Generic.List<DashboardRowConfig>();
+        
+        for (int i = 0; i < DashboardRows.Count; i++)
+        {
+            DashboardRows[i].Order = i; // Update the order integer based on physical list position
+            prefs.DashboardLayout.Add(DashboardRows[i]);
+        }
+        
+        PreferencesManager.Save(prefs);
     }
     
     // --- NAVIGATION SIGNATURES ---

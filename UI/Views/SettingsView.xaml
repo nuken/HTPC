@@ -213,6 +213,77 @@
                                   ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}" 
                                   SelectionChanged="Padding_SelectionChanged"/>
                     </StackPanel>
+					
+					<TextBlock Text="Playback Settings" FontSize="26" FontWeight="Bold" Margin="0,20,0,20"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,30">
+                        <TextBlock Text="Commercial Skip:" Foreground="#B3B3B3" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
+                        <ComboBox x:Name="CommercialSkipBox" FontSize="16" Width="280" Height="45" 
+                                  Style="{StaticResource DarkComboBoxStyle}" 
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}" 
+                                  SelectionChanged="CommercialSkip_SelectionChanged">
+                            <ComboBoxItem Content="Disabled (Off)"/>
+                            <ComboBoxItem Content="Prompt (Click to Skip)"/>
+                            <ComboBoxItem Content="Automatic (Seamless)"/>
+                        </ComboBox>
+                    </StackPanel>
+					
+					<TextBlock Text="Dashboard Layout" FontSize="26" FontWeight="Bold" Margin="0,40,0,20"/>
+                    <Grid Margin="0,0,0,40">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <ListBox x:Name="DashboardLayoutList" Background="#1E1E1E" BorderThickness="0" Foreground="White" FontSize="18" Padding="10" Height="260"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="10,15"/>
+                                    <Setter Property="Margin" Value="0,0,0,5"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Border" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Border" Property="Background" Value="#333333"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                        <Setter TargetName="Border" Property="BorderBrush" Value="White"/>
+                                                        <Setter TargetName="Border" Property="BorderThickness" Value="2"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding IsVisible, StringFormat='Visible: {0}'}" Foreground="#00A4EF" FontSize="14" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel Grid.Column="1" Margin="30,0,0,0" VerticalAlignment="Center">
+                            <Button Content="Move Up ⬆" Click="MoveRowUp_Click" Style="{StaticResource NavPillStyle}" Margin="0,0,0,15" Width="180"/>
+                            <Button Content="Move Down ⬇" Click="MoveRowDown_Click" Style="{StaticResource NavPillStyle}" Margin="0,0,0,15" Width="180"/>
+                            <Button Content="Toggle Visibility 👁" Click="ToggleRowVisibility_Click" Style="{StaticResource NavPillStyle}" Width="180"/>
+                        </StackPanel>
+                    </Grid>
 
                     <TextBlock Text="Display Settings" FontSize="26" FontWeight="Bold" Margin="0,20,0,20"/>
                     
@@ -301,10 +372,28 @@
                                             </TextBlock>
                                         </StackPanel>
                                         
-                                        <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#006400" CornerRadius="5" Padding="10,5" Margin="0,0,15,0"
-                                                Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <TextBlock Text="ACTIVE" FontWeight="Bold" FontSize="12"/>
+                                        <Border x:Name="ActiveBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#006400" CornerRadius="5" Padding="10,5" Margin="0,0,15,0" Visibility="Collapsed">
+                                            <TextBlock Text="ACTIVE" FontWeight="Bold" FontSize="12" Foreground="White"/>
                                         </Border>
+
+                                        <Button x:Name="MakeActiveBtn" Grid.Column="1" Content="Make Active" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#333333" Foreground="White" BorderThickness="0" Padding="10,5" Margin="0,0,15,0" FontSize="12" FontWeight="Bold" Cursor="Hand" Click="MakeActive_Click" Visibility="Visible">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="MakeBtnBorder" Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="MakeBtnBorder" Property="Background" Value="#555555"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                                            <Setter TargetName="MakeBtnBorder" Property="Background" Value="#FFFFFF"/>
+                                                            <Setter Property="Foreground" Value="Black"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
 
                                         <Button Grid.Column="2" Content="X" Width="35" Height="35" Background="#8B0000" Foreground="White" BorderThickness="0" FontSize="16" FontWeight="Bold" Cursor="Hand" Click="DeleteServer_Click" Focusable="False" ToolTip="Delete Server">
                                             <Button.Template>
@@ -322,7 +411,13 @@
                                         </Button>
                                     </Grid>
                                 </Border>
-                            </DataTemplate>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                    <Setter TargetName="ActiveBadge" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="MakeActiveBtn" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </StackPanel>

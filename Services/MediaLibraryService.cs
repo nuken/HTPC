@@ -134,7 +134,8 @@ public class MediaLibraryService
                         Cast = ParseStringArray(element, "cast"),
                         Directors = ParseStringArray(element, "directors"),
                         IsWatched = isWatched,
-                        IsFavorite = isFavorite
+                        IsFavorite = isFavorite,
+						Commercials = ParseDoubleArray(element, "commercials")
                     });
                 }
             }
@@ -642,7 +643,8 @@ public class MediaLibraryService
                         CreatedAt = createdAt,
                         Genres = ParseStringArray(element, "genres"),
                         IsWatched = isWatched,
-                        IsFavorite = isFavorite
+                        IsFavorite = isFavorite,
+						Commercials = ParseDoubleArray(element, "commercials")
                     });
                 }
             }
@@ -689,8 +691,7 @@ public class MediaLibraryService
                         Id = id,
                         Title = string.IsNullOrEmpty(title) ? "Unknown Show" : title,
                         Summary = summary,
-                        PosterUrl = FormatImageUrl(baseUrl, imagePath),
-                        CreatedAt = createdAt
+                        PosterUrl = FormatImageUrl(baseUrl, imagePath)                        
                     });
                 }
             }
@@ -851,7 +852,8 @@ public class MediaLibraryService
                         PosterUrl = FormatImageUrl(baseUrl, imagePath),
                         StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         IsWatched = isWatched,
-                        IsFavorite = isFavorite
+                        IsFavorite = isFavorite,
+						Commercials = ParseDoubleArray(element, "commercials")
                     });
                 }
             }
@@ -904,7 +906,8 @@ public class MediaLibraryService
                         Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
                         StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                        CreatedAt = createdAt
+                        CreatedAt = createdAt,
+						Commercials = ParseDoubleArray(element, "commercials")
                     });
 
                     if (movies.Count >= limit) break;
@@ -952,7 +955,8 @@ public class MediaLibraryService
                         CurrentShowTitle = episodeTitle, 
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
                         StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                        CreatedAt = createdAt
+                        CreatedAt = createdAt,
+						Commercials = ParseDoubleArray(element, "commercials")
                     });
 
                     if (episodes.Count >= limit) break;
@@ -965,6 +969,66 @@ public class MediaLibraryService
             _logger.LogError($"Failed to fetch episodes: {ex.Message}");
             return new List<MediaItem>();
         }
+    }
+	
+	public async Task<List<MediaItem>> GetUpNextAsync()
+    {
+        var items = new List<MediaItem>();
+        var server = _serverManager.GetActiveServer();
+        if (server == null) return items;
+
+        string baseUrl = $"http://{server.IpAddress}:{server.Port}";
+        string url = $"{baseUrl}/dvr/recordings/upnext";
+
+        try
+        {
+            var response = await _httpClient.GetStringAsync(url);
+            using (JsonDocument doc = JsonDocument.Parse(response))
+            {
+                foreach (JsonElement element in doc.RootElement.EnumerateArray())
+                {
+                    string id = element.GetProperty("ID").GetString() ?? "";
+                    
+                    // Navigate into the "Airing" node to get the title and poster
+                    string title = "Unknown";
+                    string posterUrl = "";
+                    if (element.TryGetProperty("Airing", out JsonElement airing))
+                    {
+                        title = airing.TryGetProperty("Title", out var t) ? t.GetString() ?? "" : "";
+                        if (airing.TryGetProperty("EpisodeTitle", out var epTitle))
+                        {
+                            title += $" - {epTitle.GetString()}"; // e.g. "The Wiggles - Anthony's Friend"
+                        }
+                        
+                        string rawImageUrl = airing.TryGetProperty("Image", out var img) ? img.GetString() ?? "" : "";
+                        posterUrl = FormatImageUrl(baseUrl, rawImageUrl);
+                    }
+
+                    // CRITICAL: Grab the playback time so we can resume!
+                    double playbackTime = 0;
+                    if (element.TryGetProperty("PlaybackTime", out JsonElement pbElement))
+                    {
+                        playbackTime = pbElement.GetDouble();
+                    }
+
+                    items.Add(new MediaItem
+                    {
+                        Id = id,
+                        Title = title,
+                        PosterUrl = posterUrl,
+                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        Commercials = ParseDoubleArray(element, "commercials"), // Keep our skip engine working!
+                        StartOffset = playbackTime // We will use this to tell MPV where to start
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error fetching Up Next: {ex.Message}");
+        }
+
+        return items;
     }
 
     public async Task<IEnumerable<MediaItem>> GetRecentVideosAsync(int limit = 10)
@@ -1018,7 +1082,8 @@ public class MediaLibraryService
                         StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         CreatedAt = createdAt,
                         IsWatched = isWatched,
-                        IsFavorite = isFavorite
+                        IsFavorite = isFavorite,
+						Commercials = ParseDoubleArray(element, "commercials")
                     });
 
                     if (videos.Count >= limit) break;
@@ -1146,6 +1211,31 @@ public class MediaLibraryService
                         else if (item.ValueKind == JsonValueKind.Number)
                         {
                             list.Add(item.ToString() ?? "");
+                        }
+                    }
+                    return list; 
+                }
+            }
+        }
+        return list;
+    }
+	
+	private List<double> ParseDoubleArray(JsonElement root, params string[] propertyNames)
+    {
+        var list = new List<double>();
+        if (root.ValueKind != JsonValueKind.Object) return list;
+        
+        foreach (var prop in root.EnumerateObject())
+        {
+            foreach (var name in propertyNames)
+            {
+                if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase) && prop.Value.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in prop.Value.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.Number)
+                        {
+                            list.Add(item.GetDouble());
                         }
                     }
                     return list; 

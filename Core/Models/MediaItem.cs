@@ -25,6 +25,8 @@ public class MediaItem : INotifyPropertyChanged
     public List<string> Genres { get; set; } = new List<string>();
     public List<string> Cast { get; set; } = new List<string>();
     public List<string> Directors { get; set; } = new List<string>();
+	
+	public List<double>? Commercials { get; set; } = new List<double>();
     
     // --- DVR METADATA ---
     private bool _isWatched;
@@ -44,6 +46,7 @@ public class MediaItem : INotifyPropertyChanged
     public int SeasonNumber { get; set; }
     public int EpisodeNumber { get; set; }
     public string Summary { get; set; } = string.Empty;
+	public double StartOffset { get; set; }
     public int StartOffsetSeconds { get; set; }
 
     // --- REQUIRED IMPLEMENTATION ---

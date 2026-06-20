@@ -8,10 +8,43 @@
   "IsFullscreen": false,
   "WindowWidth": 1280,
   "WindowHeight": 720,
-  "WindowTop": 8,
-  "WindowLeft": 35.2,
+  "WindowTop": 127.2,
+  "WindowLeft": 109.60000000000001,
   "UiScaleMultiplier": 1,
   "LastMultiviewCollection": "Popular",
+  "CommercialSkipMode": 2,
   "EnableUpscaling": true,
-  "UpscalerPreset": "ArtCNN"
+  "UpscalerPreset": "ArtCNN",
+  "DashboardLayout": [
+    {
+      "Id": "LiveTv",
+      "DisplayName": "Live TV",
+      "IsVisible": true,
+      "Order": 0
+    },
+    {
+      "Id": "UpNext",
+      "DisplayName": "Up Next",
+      "IsVisible": true,
+      "Order": 1
+    },
+    {
+      "Id": "Movies",
+      "DisplayName": "Recent Movies",
+      "IsVisible": true,
+      "Order": 2
+    },
+    {
+      "Id": "Shows",
+      "DisplayName": "Recent Episodes",
+      "IsVisible": true,
+      "Order": 3
+    },
+    {
+      "Id": "Videos",
+      "DisplayName": "Recent Videos",
+      "IsVisible": true,
+      "Order": 4
+    }
+  ]
 }

@@ -32,7 +32,8 @@ public partial class DashboardView : UserControl
     public ObservableCollection<MediaItem> LiveChannels { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> RecentEpisodes { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> RecentVideos { get; set; } = new ObservableCollection<MediaItem>();
-
+    public ObservableCollection<MediaItem> UpNextQueue { get; set; } = new ObservableCollection<MediaItem>();
+	
     public DashboardView(MediaLibraryService libraryService, ServerManagerService serverManager)
     {
         InitializeComponent();
@@ -42,6 +43,44 @@ public partial class DashboardView : UserControl
         Loaded += OnLoaded;
     }
 
+    // 1. THIS IS THE NEW HELPER METHOD
+    private void ApplyDashboardLayout()
+    {
+        var prefs = PreferencesManager.Load();
+        
+        // Remove all sections from the visual tree
+        DashboardContentPanel.Children.Clear();
+
+        // Sort the saved layout by the Order integer
+        var sortedLayout = prefs.DashboardLayout.OrderBy(r => r.Order).ToList();
+
+        foreach (var row in sortedLayout)
+        {
+            if (!row.IsVisible) continue; // Skip it entirely if the user disabled it
+
+            switch (row.Id)
+            {
+                case "UpNext":
+                    // Only add Up Next if there is actually content in the queue
+                    if (UpNextQueue.Count > 0) DashboardContentPanel.Children.Add(SectionUpNext);
+                    break;
+                case "LiveTv":
+                    DashboardContentPanel.Children.Add(SectionLiveTv);
+                    break;
+                case "Movies":
+                    DashboardContentPanel.Children.Add(SectionMovies);
+                    break;
+                case "Shows":
+                    DashboardContentPanel.Children.Add(SectionShows);
+                    break;
+                case "Videos":
+                    DashboardContentPanel.Children.Add(SectionVideos);
+                    break;
+            }
+        }
+    }
+
+    // 2. THIS IS YOUR UPDATED ONLOADED METHOD
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         var activeServer = _serverManager.GetActiveServer();
@@ -53,9 +92,13 @@ public partial class DashboardView : UserControl
             return; 
         } 
         
+        // --- CACHED LOAD (Returning from Settings) ---
         if (FeaturedMovies.Count > 0) 
         {
             if (LoadingOverlay != null) LoadingOverlay.Visibility = Visibility.Collapsed;
+            
+            // WE CALL THE LAYOUT METHOD HERE SO IT UPDATES INSTANTLY!
+            ApplyDashboardLayout();
             
             // USE THE HEAVY HAMMER:
             _ = Dispatcher.BeginInvoke(new Action(() => 
@@ -67,7 +110,7 @@ public partial class DashboardView : UserControl
             return;
         }
 
-        // --- SHOW THE LOADING SCREEN ---
+        // --- FRESH LOAD (First Startup) ---
         LoadingOverlay.Visibility = Visibility.Visible;
 
         // 1. Fetch Collections
@@ -93,6 +136,16 @@ public partial class DashboardView : UserControl
         var videos = await _libraryService.GetRecentVideosAsync(15);
         RecentVideos.Clear();
         foreach (var vid in videos) RecentVideos.Add(vid);
+
+        var upNextItems = await _libraryService.GetUpNextAsync();
+        UpNextQueue.Clear();
+        foreach (var item in upNextItems)
+        {
+            UpNextQueue.Add(item);
+        }
+        
+        // WE CALL THE LAYOUT METHOD HERE FOR THE INITIAL LOAD!
+        ApplyDashboardLayout();
 
         // --- THE DATA IS READY, HIDE THE LOADING SCREEN ---
         LoadingOverlay.Visibility = Visibility.Collapsed;
@@ -255,7 +308,7 @@ public partial class DashboardView : UserControl
             if (result != null) return result;
         }
         return null;
-    }
+    }	
 	
 	// --- 10-FOOT UI FOCUS TRAP FIXES ---
 

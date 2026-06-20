@@ -4,6 +4,14 @@ using System.Text.Json;
 
 namespace HTPC.Services;
 
+public class DashboardRowConfig
+{
+    public string Id { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public bool IsVisible { get; set; } = true;
+    public int Order { get; set; } = 0;
+}
+
 public class AppPreferences
 {
     public string MovieSort { get; set; } = "Recently Added";
@@ -19,10 +27,21 @@ public class AppPreferences
     public double WindowLeft { get; set; } = 100;
     public double UiScaleMultiplier { get; set; } = 1.0; 
 	public string LastMultiviewCollection { get; set; } = "All Channels";
+	public int CommercialSkipMode { get; set; } = 2;
 
     // --- NEW: VIDEO PROCESSING ---
     public bool EnableUpscaling { get; set; } = false;
     public string UpscalerPreset { get; set; } = "RAVU"; 
+	
+	// --- NEW: DASHBOARD LAYOUT ---
+    public List<DashboardRowConfig> DashboardLayout { get; set; } = new List<DashboardRowConfig>
+    {
+        new DashboardRowConfig { Id = "UpNext", DisplayName = "Up Next", Order = 0, IsVisible = true },
+        new DashboardRowConfig { Id = "LiveTv", DisplayName = "Live TV", Order = 1, IsVisible = true },
+        new DashboardRowConfig { Id = "Movies", DisplayName = "Recent Movies", Order = 2, IsVisible = true },
+        new DashboardRowConfig { Id = "Shows", DisplayName = "Recent Episodes", Order = 3, IsVisible = true },
+        new DashboardRowConfig { Id = "Videos", DisplayName = "Recent Videos", Order = 4, IsVisible = true }
+    };
 }
 
 public static class PreferencesManager
