@@ -29,18 +29,21 @@ public partial class PlayerOverlayWindow : Window
     private MediaItem? _currentMedia;
     private bool _isControlsVisible = true;
     private Point _lastMousePosition;
-	
-	private DispatcherTimer _skipAdTimer;
+    
+    private DispatcherTimer _skipAdTimer;
     private double _skipTargetTime = 0;
     private bool _markersDrawn = false;
-	
-	private MediaItem? _nextEpisodeToPlay;
+    
+    private MediaItem? _nextEpisodeToPlay;
     private bool _upNextPromptShown = false;
+
+    // --- NEW: Polling Timer ---
+    private readonly DispatcherTimer _statsTimer;
 
     public PlayerOverlayWindow(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
         InitializeComponent();
-		ApplyGlobalUiScale();
+        ApplyGlobalUiScale();
         _mpvService = mpvService;
         _libraryService = libraryService;
         _serverManager = serverManager;
@@ -51,23 +54,25 @@ public partial class PlayerOverlayWindow : Window
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _idleTimer.Tick += IdleTimer_Tick;
         _idleTimer.Start();
-		
-		_skipAdTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        
+        _skipAdTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _skipAdTimer.Tick += (s, e) => { SkipAdButton.Visibility = Visibility.Collapsed; _skipAdTimer.Stop(); };
         
         _mpvService.OnCommercialPrompt += ShowSkipAdPrompt;
 
-        // 1. NEW: Ensure we clean up timers and mouse cursor when window dies
+        _statsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _statsTimer.Tick += StatsTimer_Tick;
+
         this.Closed += Window_Closed;
     }
     
-    // 2. NEW: The absolute guarantee that the mouse cursor comes back
     private void Window_Closed(object? sender, EventArgs e)
     {
-        _mpvService.OnCommercialPrompt -= ShowSkipAdPrompt; // <-- NEW
+        _mpvService.OnCommercialPrompt -= ShowSkipAdPrompt; 
         _idleTimer?.Stop();
         _syncTimer?.Stop();
         _skipAdTimer?.Stop();
+        _statsTimer?.Stop();
         Mouse.OverrideCursor = null; 
     }
 
@@ -80,7 +85,7 @@ public partial class PlayerOverlayWindow : Window
         
         _isLiveTv = media.IsLiveTv; 
         
-		_upNextPromptShown = false;
+        _upNextPromptShown = false;
         UpNextPromptContainer.Visibility = Visibility.Collapsed;
         _nextEpisodeToPlay = null;
 
@@ -88,29 +93,26 @@ public partial class PlayerOverlayWindow : Window
         {
             _ = Task.Run(async () =>
             {
-                // Silently grab the next stream URL in the background
                 _nextEpisodeToPlay = await _libraryService.GetNextEpisodeAsync(media);
             });
         }
-		
+        
         if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
         else BufferingOverlay.Visibility = Visibility.Collapsed;
 
         TimelineGrid.Visibility = Visibility.Visible;
         TimelineSlider.IsHitTestVisible = !_isLiveTv;
-		
-		_markersDrawn = false;
+        
+        _markersDrawn = false;
         CommercialMarkersCanvas.Children.Clear();
         SkipAdButton.Visibility = Visibility.Collapsed;
 
         _isPlaying = true;
         PlayPauseButton.Content = "⏸";
-		
-		// Show the Anime hot-swap button ONLY if global upscaling is enabled
+        
         var prefs = PreferencesManager.Load();
         AnimeButton.Visibility = prefs.EnableUpscaling ? Visibility.Visible : Visibility.Collapsed;
         
-        // Reset the button color to white every time a new video starts
         AnimeButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
         
         _syncTimer.Start(); 
@@ -133,13 +135,20 @@ public partial class PlayerOverlayWindow : Window
     {
         WakeUpUi(); 
 
-        // 3. NEW: Forward the 'F' key to the Main Window!
         if (e.Key == Key.F)
         {
             if (Application.Current.MainWindow is MainWindow main)
             {
                 main.ToggleFullscreen();
             }
+            e.Handled = true;
+            return;
+        }
+
+        // --- NEW: Toggle Stats for Nerds ---
+        if (e.Key == Key.S)
+        {
+            ToggleStatsForNerds();
             e.Handled = true;
             return;
         }
@@ -173,7 +182,6 @@ public partial class PlayerOverlayWindow : Window
                 }
                 else if (UpNextPromptContainer.Visibility == Visibility.Visible && UpNextButton.IsFocused)
                 {
-                    // Allow the user to press 'Enter' on the remote to skip to the next episode
                     UpNextButton_Click(null!, null!);
                 }
                 else
@@ -305,11 +313,9 @@ public partial class PlayerOverlayWindow : Window
                 CurrentTimeText.Text = posTime.ToString(posTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
                 RemainingTimeText.Text = "-" + remTime.ToString(remTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
             }
-			
-			// --- NEW: WATCH NEXT THRESHOLD ---
+            
             if (_nextEpisodeToPlay != null && !_upNextPromptShown)
             {
-                // Trigger when 120 seconds left OR 95% complete (whichever hits first)
                 if (duration > 0 && (duration - position <= 120 || position / duration >= 0.95))
                 {
                     ShowUpNextPrompt();
@@ -337,22 +343,21 @@ public partial class PlayerOverlayWindow : Window
             }
         }
     }
-	
-	private void ShowUpNextPrompt()
+    
+    private void ShowUpNextPrompt()
     {
         _upNextPromptShown = true;
         UpNextTitleText.Text = _nextEpisodeToPlay?.CurrentShowTitle ?? "Next Episode";
         UpNextPromptContainer.Visibility = Visibility.Visible;
         
         WakeUpUi();
-        UpNextButton.Focus(); // Move hardware remote focus straight to the button!
+        UpNextButton.Focus(); 
     }
 
     private void UpNextButton_Click(object sender, RoutedEventArgs e)
     {
         if (_nextEpisodeToPlay == null) return;
 
-        // Instantly kill the current stream, reset the UI, and play the pre-fetched item
         _mpvService.Stop();
         _mpvService.PlayMedia(_nextEpisodeToPlay);
         InitializeMedia(_nextEpisodeToPlay);
@@ -375,7 +380,6 @@ public partial class PlayerOverlayWindow : Window
         _mpvService.SeekAbsolute(TimelineSlider.Value);
         WakeUpUi(); 
         
-        // Give MPV 300ms to execute the seek before allowing the timer to update the UI
         await Task.Delay(300);
         _isDragging = false;
     }
@@ -399,13 +403,11 @@ public partial class PlayerOverlayWindow : Window
         _mpvService.CycleSubtitles();
         WakeUpUi();
     }
-	
-	private void Anime_Click(object sender, RoutedEventArgs e)
+    
+    private void Anime_Click(object sender, RoutedEventArgs e)
     {
-        // Tell the playback service to instantly hot-swap the shader
         bool isAnimeActive = _mpvService.ToggleAnimeMode();
         
-        // Give visual feedback (Turns Red when ON, White when OFF)
         AnimeButton.Foreground = new System.Windows.Media.SolidColorBrush(
             isAnimeActive ? System.Windows.Media.Color.FromRgb(139, 0, 0) : System.Windows.Media.Colors.White);
             
@@ -428,17 +430,16 @@ public partial class PlayerOverlayWindow : Window
         }
         WakeUpUi();
     }
-	
-	// --- COMMERCIAL SKIP PROMPT LOGIC ---
+    
     private void ShowSkipAdPrompt(double targetTime)
     {
         Dispatcher.Invoke(() => 
         {
             _skipTargetTime = targetTime;
             SkipAdButton.Visibility = Visibility.Visible;
-            SkipAdButton.Focus(); // Optional: Grabs focus so a remote control "Enter" click skips
+            SkipAdButton.Focus(); 
             _skipAdTimer.Stop();
-            _skipAdTimer.Start(); // Starts the 10-second countdown to hide it
+            _skipAdTimer.Start(); 
             WakeUpUi();
         });
     }
@@ -451,7 +452,6 @@ public partial class PlayerOverlayWindow : Window
         WakeUpUi();
     }
 
-    // --- TIMELINE MARKER LOGIC ---
     private void CommercialMarkersCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (!_isLiveTv && _mpvService.GetDuration() > 0)
@@ -479,7 +479,7 @@ public partial class PlayerOverlayWindow : Window
 
             var rect = new System.Windows.Shapes.Rectangle
             {
-                Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 255, 165, 0)), // Orange
+                Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 255, 165, 0)),
                 Width = CommercialMarkersCanvas.ActualWidth * widthPct,
                 Height = CommercialMarkersCanvas.ActualHeight
             };
@@ -488,8 +488,6 @@ public partial class PlayerOverlayWindow : Window
             CommercialMarkersCanvas.Children.Add(rect);
         }
     }
-
-    // --- IDLE TIMER & FADE LOGIC ---
 
     private void Window_MouseMove(object sender, MouseEventArgs e)
     {
@@ -542,15 +540,72 @@ public partial class PlayerOverlayWindow : Window
         ControlsContainer.BeginAnimation(UIElement.OpacityProperty, fadeAnimation);
         ControlsContainer.IsHitTestVisible = targetOpacity > 0;
     }
-	
-	private void ApplyGlobalUiScale()
+    
+    private void ApplyGlobalUiScale()
     {
         var prefs = PreferencesManager.Load();
         double scale = prefs.UiScaleMultiplier;
 
         if (scale < 0.5) scale = 1.0;
 
-        // Apply the vector scale ONLY to the transport controls and mini-guide
         ControlsContainer.LayoutTransform = new System.Windows.Media.ScaleTransform(scale, scale);
+    }
+
+    // --- NEW: STATS FOR NERDS METHODS ---
+    private void ToggleStatsForNerds()
+    {
+        if (_statsTimer == null) return; 
+
+        if (StatsForNerdsContainer.Visibility == Visibility.Visible)
+        {
+            StatsForNerdsContainer.Visibility = Visibility.Collapsed;
+            _statsTimer.Stop(); 
+        }
+        else
+        {
+            StatsForNerdsContainer.Visibility = Visibility.Visible;
+            UpdateNerdStats(); 
+            _statsTimer.Start();
+        }
+    }
+
+    private void StatsTimer_Tick(object? sender, EventArgs e)
+    {
+        UpdateNerdStats();
+    }
+
+    private void UpdateNerdStats()
+    {
+        try
+        {
+            StatVideoCodec.Text = _mpvService.GetMpvProperty("video-codec");
+            
+            string width = _mpvService.GetMpvProperty("width");
+            string height = _mpvService.GetMpvProperty("height");
+            StatResolution.Text = width != "N/A" && height != "N/A" ? $"{width}x{height}" : "N/A";
+
+            string fps = _mpvService.GetMpvProperty("estimated-vf-fps");
+            if (fps != "N/A" && double.TryParse(fps, out double fpsValue))
+            {
+                StatFps.Text = fpsValue.ToString("0.00");
+            }
+            else StatFps.Text = "N/A";
+
+            StatAudioCodec.Text = _mpvService.GetMpvProperty("audio-codec");
+            
+            string avSync = _mpvService.GetMpvProperty("avsync");
+            if (avSync != "N/A" && double.TryParse(avSync, out double syncValue))
+            {
+                StatAvSync.Text = $"{syncValue.ToString("0.000")} sec";
+            }
+            else StatAvSync.Text = "0.000 sec";
+
+            string droppedDecoder = _mpvService.GetMpvProperty("drop-frame-count");
+            string droppedVo = _mpvService.GetMpvProperty("vo-drop-frame-count");
+            StatDropped.Text = $"{droppedDecoder} (Dec) / {droppedVo} (Out)";
+
+            StatHwDec.Text = _mpvService.GetMpvProperty("hwdec-current");
+        }
+        catch { }
     }
 }

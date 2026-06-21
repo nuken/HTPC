@@ -24,18 +24,25 @@ internal static partial class Libmpv
 
     [LibraryImport(LibraryName)]
     public static partial void mpv_terminate_destroy(IntPtr ctx);
-	
-	[LibraryImport(LibraryName, StringMarshalling = StringMarshalling.Utf8)]
+    
+    [LibraryImport(LibraryName, StringMarshalling = StringMarshalling.Utf8)]
     public static partial int mpv_set_property_string(IntPtr ctx, string name, string data);
 
     [LibraryImport(LibraryName, StringMarshalling = StringMarshalling.Utf8)]
     public static partial int mpv_command_string(IntPtr ctx, string args);
-	
-	// format 5 = MPV_FORMAT_DOUBLE
+    
+    // format 5 = MPV_FORMAT_DOUBLE
     [LibraryImport(LibraryName, StringMarshalling = StringMarshalling.Utf8)]
     public static partial int mpv_get_property(IntPtr ctx, string name, int format, out double data);
-	
-	// --- NEW: MPV EVENT STRUCTS ---
+
+    // --- NEW: STATS FOR NERDS STRING IMPORTS ---
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    public static extern IntPtr mpv_get_property_string(IntPtr ctx, string name);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void mpv_free(IntPtr data);
+    
+    // --- NEW: MPV EVENT STRUCTS ---
     [StructLayout(LayoutKind.Sequential)]
     public struct mpv_event
     {

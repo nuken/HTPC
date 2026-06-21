@@ -76,6 +76,19 @@ public class MpvPlaybackService : IDisposable
         string windowIdStr = hwnd.ToInt64().ToString();
         Libmpv.mpv_set_property_string(_mpvContext, "wid", windowIdStr);
     }
+	
+	public string GetMpvProperty(string propertyName)
+    {
+        // Safely fetch the property string from MPV
+        var ptr = HTPC.Core.Interop.Libmpv.mpv_get_property_string(_mpvContext, propertyName); 
+        if (ptr != IntPtr.Zero)
+        {
+            string? result = System.Runtime.InteropServices.Marshal.PtrToStringUTF8(ptr);
+            HTPC.Core.Interop.Libmpv.mpv_free(ptr);
+            return result ?? "N/A";
+        }
+        return "N/A";
+    }
 
     public void PlayMedia(MediaItem media)
     {

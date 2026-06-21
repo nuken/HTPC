@@ -1,37 +1,27 @@
 using System;
 using System.Windows;
 
-namespace HTPC;
-
-public partial class App : Application
+namespace HTPC
 {
-    public App()
+    public partial class App : Application
     {
-        // 1. Catch exceptions on the main UI thread
-        this.DispatcherUnhandledException += (sender, e) =>
+        protected override void OnStartup(StartupEventArgs e)
         {
-            MessageBox.Show($"UI Thread Crash!\n\n{e.Exception.Message}\n\n{e.Exception.StackTrace}", 
-                            "Fatal Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            
-            e.Handled = true; // Prevents the app from closing instantly
-        };
-
-        // 2. Catch exceptions on background/async threads
-        AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
-        {
-            if (e.ExceptionObject is Exception ex)
+            // Catch errors from background threads
+            AppDomain.CurrentDomain.UnhandledException += (s, ex) =>
             {
-                MessageBox.Show($"Background Thread Crash!\n\n{ex.Message}\n\n{ex.StackTrace}", 
-                                "Fatal Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        };
+                MessageBox.Show(ex.ExceptionObject.ToString(), "Fatal Crash", MessageBoxButton.OK, MessageBoxImage.Error);
+            };
 
-        // 3. Catch Async Task exceptions that were never awaited
-        TaskScheduler.UnobservedTaskException += (sender, e) =>
-        {
-            MessageBox.Show($"Unobserved Task Crash!\n\n{e.Exception.InnerException?.Message}", 
-                            "Fatal Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            e.SetObserved();
-        };
+            // Catch errors from the main UI thread
+            this.DispatcherUnhandledException += (s, ex) =>
+            {
+                MessageBox.Show(ex.Exception.ToString(), "Fatal Crash", MessageBoxButton.OK, MessageBoxImage.Error);
+                ex.Handled = true; 
+                Environment.Exit(1); // Force close after showing the message
+            };
+
+            base.OnStartup(e);
+        }
     }
 }

@@ -105,16 +105,44 @@ public partial class SettingsView : UserControl
         var cb = sender as ComboBox;
         var command = InputMapper.GetCommand(e.Key);
 
-        if (cb != null && !cb.IsDropDownOpen)
+        if (cb != null)
         {
-            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            if (!cb.IsDropDownOpen)
             {
-                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
-                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
-                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+                if (command == HtpcCommand.Select)
+                {
+                    cb.IsDropDownOpen = true;
+                    
+                    // FOCUS BRIDGE: Force the remote into the popup menu so you can select an item
+                    Dispatcher.BeginInvoke(new Action(() => 
+                    {
+                        var item = cb.ItemContainerGenerator.ContainerFromIndex(cb.SelectedIndex >= 0 ? cb.SelectedIndex : 0) as UIElement;
+                        item?.Focus();
+                    }), DispatcherPriority.Loaded);
+                    
+                    e.Handled = true;
+                    return;
+                }
 
-                cb.MoveFocus(new TraversalRequest(direction));
-                e.Handled = true; 
+                if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+                {
+                    var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                                    command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                                    command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+                    cb.MoveFocus(new TraversalRequest(direction));
+                    e.Handled = true; 
+                }
+            }
+            else
+            {
+                // If the dropdown IS open, allow the Enter key to confirm selection and close it
+                if (command == HtpcCommand.Select)
+                {
+                    cb.IsDropDownOpen = false;
+                    cb.Focus(); // Return focus safely to the closed box
+                    e.Handled = true;
+                }
             }
         }
     }
@@ -133,36 +161,117 @@ public partial class SettingsView : UserControl
     private void Slider_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
-        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        
+        // Sliders naturally eat Up/Down to change values. We force them to navigate instead!
+        if (command == HtpcCommand.Up || command == HtpcCommand.Down)
         {
             var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
             (sender as Slider)?.MoveFocus(new TraversalRequest(direction));
             e.Handled = true;
         }
+        // We leave Left/Right alone so the remote can actually adjust the slider value.
     }
 
     private void CheckBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
+        var chk = sender as CheckBox;
+
+        // FOCUS BRIDGE: Toggle the Checkbox when pressing Enter/Select on the remote
+        if (command == HtpcCommand.Select && chk != null)
+        {
+            chk.IsChecked = !chk.IsChecked;
+            e.Handled = true;
+            return;
+        }
+
         if (command == HtpcCommand.Down || command == HtpcCommand.Up)
         {
             var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            (sender as CheckBox)?.MoveFocus(new TraversalRequest(direction));
+            chk?.MoveFocus(new TraversalRequest(direction));
             e.Handled = true;
         }
+    }
+	
+	// --- NEW: Automatically physical-scroll the page to follow the remote focus! ---
+    private void MainScroll_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (e.NewFocus is FrameworkElement element)
+        {
+            ScrollToElement(MainScroll, element);
+        }
+    }
+
+    private void ScrollToElement(ScrollViewer scrollViewer, FrameworkElement element)
+    {
+        try
+        {
+            var content = scrollViewer.Content as UIElement;
+            if (content == null) return;
+
+            // Calculate the exact pixel location of the focused control
+            var transform = element.TransformToAncestor(content);
+            Point position = transform.Transform(new Point(0, 0));
+            
+            // Add a 50px buffer so the control isn't jammed against the top of the screen
+            double targetY = position.Y - 50; 
+            
+            if (targetY < 0) targetY = 0;
+            if (targetY > scrollViewer.ScrollableHeight) targetY = scrollViewer.ScrollableHeight;
+
+            scrollViewer.ScrollToVerticalOffset(targetY);
+        }
+        catch { }
     }
 
     private void DashboardListItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
+        var item = sender as ListBoxItem;
+        if (item == null) return;
 
         // Explicit Focus Bridge: Jump RIGHT to the Action Buttons
         if (command == HtpcCommand.Right)
         {
             LayoutMoveUpBtn.Focus();
             e.Handled = true;
+            return;
         }
-        // Notice we removed the 'Select' override! Now hitting Enter just selects the row normally.
+
+        // FOCUS BRIDGE: Fix the Up/Down Click Trap by intercepting the ListBox edges
+        if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+        {
+            // Find out exactly which row the remote is currently resting on
+            int index = DashboardLayoutList.ItemContainerGenerator.IndexFromContainer(item);
+
+            // ESCAPE UP: If we are on the very first row and press Up, jump to Commercial Skip
+            if (command == HtpcCommand.Up && index == 0)
+            {
+                CommercialSkipBox.Focus();
+                e.Handled = true;
+            }
+            // ESCAPE DOWN: If we are on the very last row and press Down, jump to UI Scale
+            else if (command == HtpcCommand.Down && index == DashboardLayoutList.Items.Count - 1)
+            {
+                UiScaleSlider.Focus();
+                e.Handled = true;
+            }
+            // INTERNAL MOVEMENT: If we are in the middle, just move normally
+            else
+            {
+                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+                item.MoveFocus(new TraversalRequest(direction));
+                
+                // Force the inner ListBox to scroll if the new item is off-screen
+                var newFocus = Keyboard.FocusedElement as FrameworkElement;
+                if (newFocus != null && newFocus.DataContext != null)
+                {
+                    DashboardLayoutList.ScrollIntoView(newFocus.DataContext);
+                }
+                
+                e.Handled = true;
+            }
+        }
     }
 
     private void LayoutActionBtn_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -172,14 +281,13 @@ public partial class SettingsView : UserControl
         // Explicit Focus Bridge: Jump LEFT back to the Layout List
         if (command == HtpcCommand.Left)
         {
-            if (DashboardLayoutList.SelectedItem != null)
+            // Since the ListBox container is invisible, we target the specific highlighted row
+            var targetData = DashboardLayoutList.SelectedItem ?? (DashboardLayoutList.Items.Count > 0 ? DashboardLayoutList.Items[0] : null);
+            
+            if (targetData != null)
             {
-                var item = DashboardLayoutList.ItemContainerGenerator.ContainerFromItem(DashboardLayoutList.SelectedItem) as UIElement;
-                item?.Focus();
-            }
-            else
-            {
-                DashboardLayoutList.Focus();
+                var container = DashboardLayoutList.ItemContainerGenerator.ContainerFromItem(targetData) as UIElement;
+                container?.Focus();
             }
             e.Handled = true;
         }
@@ -217,8 +325,8 @@ public partial class SettingsView : UserControl
             e.Handled = true;
         }
     }
-
-    // --- END FOCUS TRAPS ---
+	
+	    // --- END FOCUS TRAPS ---
 
     private void Padding_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {

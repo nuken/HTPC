@@ -30,6 +30,7 @@ public partial class MultiviewSetupView : UserControl
     private List<Channel> _allChannels = new List<Channel>();
     private List<ChannelCollection> _collections = new List<ChannelCollection>();
     private Channel?[] _selectedChannels = new Channel?[4];
+	private readonly DispatcherTimer _autoRefreshTimer;
     
     public MultiviewSetupView(MediaLibraryService libraryService)
     {
@@ -37,9 +38,57 @@ public partial class MultiviewSetupView : UserControl
         _libraryService = libraryService;
         ChannelItemsControl.ItemsSource = DisplayedChannels;
         this.Loaded += OnLoaded;
-        
-        // --- NEW: Add visibility listener ---
         this.IsVisibleChanged += MultiviewSetupView_IsVisibleChanged; 
+
+        // --- NEW: Start the Smart Sync EPG auto-refresh timer ---
+        DateTime now = DateTime.Now;
+        int minutesUntilNextHalfHour = 30 - (now.Minute % 30);
+        int secondsUntilNextHalfHour = (minutesUntilNextHalfHour * 60) - now.Second;
+
+        _autoRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(secondsUntilNextHalfHour) };
+        _autoRefreshTimer.Tick += AutoRefreshTimer_Tick;
+        _autoRefreshTimer.Start();
+    }
+	
+	private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
+    {
+        // --- NEW: Lock the timer to exactly 30 minutes going forward ---
+        if (sender is DispatcherTimer timer && timer.Interval.TotalMinutes != 30)
+        {
+            timer.Interval = TimeSpan.FromMinutes(30);
+        }
+
+        if (CollectionDropdown.SelectedItem is string selection)
+        {
+            // Remember focus...
+            Channel? focusedChannel = (Keyboard.FocusedElement as ListBoxItem)?.DataContext as Channel;
+
+            ChannelCollection? targetCollection = null;
+            if (selection != "All Channels" && selection != "Favorites" && selection != "HD Channels")
+                targetCollection = _collections.FirstOrDefault(c => c.Name == selection);
+
+            var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 4);
+
+            if (selection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
+            else if (selection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
+
+            _allChannels = channels.Where(c => !c.Hidden).ToList();
+            
+            DisplayedChannels.Clear();
+            foreach (var c in _allChannels) DisplayedChannels.Add(c);
+
+            // Restore focus
+            if (focusedChannel != null)
+            {
+                var newTarget = DisplayedChannels.FirstOrDefault(c => c.Number == focusedChannel.Number);
+                if (newTarget != null)
+                {
+                    ChannelItemsControl.UpdateLayout();
+                    var row = ChannelItemsControl.ItemContainerGenerator.ContainerFromItem(newTarget) as ListBoxItem;
+                    row?.Focus();
+                }
+            }
+        }
     }
 
     // --- NEW: Snap focus back when returning from the Multiview Player! ---

@@ -167,7 +167,7 @@
             <Button Content="⏻ Exit HTPC" HorizontalAlignment="Right" Style="{StaticResource NavPillStyle}" Foreground="#FF4444" Margin="0" Click="ExitApp_Click"/>
         </Grid>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,20,0">
+        <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,20,0" Focusable="False" IsTabStop="False" GotKeyboardFocus="MainScroll_GotKeyboardFocus">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>  
@@ -240,8 +240,9 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <ListBox x:Name="DashboardLayoutList" Background="#1E1E1E" BorderThickness="0" Foreground="White" FontSize="18" Padding="10" Height="260"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden">
+                       <ListBox x:Name="DashboardLayoutList" Background="#1E1E1E" BorderThickness="0" Foreground="White" FontSize="18" Padding="10" Height="260"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                                 Focusable="False" IsTabStop="False">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
                                     <Setter Property="Padding" Value="10,15"/>
@@ -274,11 +275,15 @@
                                 <DataTemplate>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/> 
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding IsVisible, StringFormat='Visible: {0}'}" Foreground="#00A4EF" FontSize="14" VerticalAlignment="Center"/>
+                                        
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center" 
+                                                   TextTrimming="CharacterEllipsis" Margin="0,0,15,0"/>
+                                        
+                                        <TextBlock Grid.Column="1" Text="{Binding IsVisible, StringFormat='Visible: {0}'}" 
+                                                   Foreground="#00A4EF" FontSize="14" VerticalAlignment="Center"/>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
@@ -296,9 +301,10 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,30">
                         <TextBlock Text="UI Scale:" Foreground="#B3B3B3" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
                         <Slider x:Name="UiScaleSlider" PreviewKeyDown="Slider_PreviewKeyDown" Width="200" Minimum="0.8" Maximum="2.0" Value="1.0" 
-                        TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center" 
-                        Cursor="Hand" ValueChanged="UiScaleSlider_ValueChanged"
-                        Thumb.DragCompleted="UiScaleSlider_DragCompleted"/>
+                                TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center" 
+                                Cursor="Hand" ValueChanged="UiScaleSlider_ValueChanged"
+                                Thumb.DragCompleted="UiScaleSlider_DragCompleted"
+                                FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
                         <TextBlock x:Name="UiScaleTextText" Text="100%" Foreground="White" FontWeight="Bold" FontSize="18" VerticalAlignment="Center" Margin="20,0,0,0"/>
                     </StackPanel>
 					
@@ -309,7 +315,8 @@
                         
                         <CheckBox x:Name="EnableUpscalingCheck" PreviewKeyDown="CheckBox_PreviewKeyDown" Content="Enable External Shaders (High GPU Usage)" 
                                   Foreground="White" FontSize="14" VerticalAlignment="Center" Cursor="Hand"
-                                  Checked="Upscaler_SelectionChanged" Unchecked="Upscaler_SelectionChanged">
+                                  Checked="Upscaler_SelectionChanged" Unchecked="Upscaler_SelectionChanged"
+                                  FocusVisualStyle="{StaticResource StandardFocusStyle}">
                             <CheckBox.LayoutTransform>
                                 <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
                             </CheckBox.LayoutTransform>

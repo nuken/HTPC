@@ -33,6 +33,7 @@ public partial class GuideView : UserControl
     private Airing? _selectedAiring;
     private Button? _lastFocusedAiringButton;
     private DateTime _lastTimeFocus = DateTime.MinValue;
+	private readonly DispatcherTimer _autoRefreshTimer;
 
     public GuideView(MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -46,6 +47,57 @@ public partial class GuideView : UserControl
         this.Loaded += OnLoaded;
         this.PreviewKeyDown += GuideView_PreviewKeyDown; 
         this.IsVisibleChanged += GuideView_IsVisibleChanged;
+
+        // --- NEW: Start the Smart Sync EPG auto-refresh timer ---
+        DateTime now = DateTime.Now;
+        int minutesUntilNextHalfHour = 30 - (now.Minute % 30);
+        int secondsUntilNextHalfHour = (minutesUntilNextHalfHour * 60) - now.Second;
+
+        _autoRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(secondsUntilNextHalfHour) };
+        _autoRefreshTimer.Tick += AutoRefreshTimer_Tick;
+        _autoRefreshTimer.Start();
+    }
+	
+	private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
+    {
+        // --- NEW: Lock the timer to exactly 30 minutes going forward ---
+        if (sender is DispatcherTimer timer && timer.Interval.TotalMinutes != 30)
+        {
+            timer.Interval = TimeSpan.FromMinutes(30);
+        }
+
+        if (CollectionDropdown.SelectedItem is string selection)
+        {
+            // Remember what the user is currently highlighting...
+            Airing? focusedAiring = (Keyboard.FocusedElement as Button)?.Tag as Airing;
+
+            // 2. Fetch fresh data
+            ChannelCollection? targetCollection = null;
+            if (selection != "All Channels" && selection != "Favorites" && selection != "HD Channels" && selection != "SD Channels")
+            {
+                targetCollection = _collections.FirstOrDefault(c => c.Name == selection);
+            }
+
+            var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 4);
+
+            if (selection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
+            else if (selection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
+            else if (selection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
+
+            // 3. Render the new data quietly
+            RenderGuideData(channels, selection);
+
+            // 4. Restore the user's focus seamlessly
+            if (focusedAiring != null)
+            {
+                var channel = DisplayedChannels.FirstOrDefault(c => c.Number == focusedAiring.ChannelNumber);
+                if (channel != null)
+                {
+                    var newAiring = channel.CurrentAirings?.FirstOrDefault(a => a.StartTime == focusedAiring.StartTime);
+                    if (newAiring != null) FocusAiringSafely(channel, newAiring);
+                }
+            }
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
