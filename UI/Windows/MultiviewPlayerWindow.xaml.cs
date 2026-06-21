@@ -225,7 +225,11 @@ public partial class MultiviewPlayerWindow : Window
 
         if (_isClosing) return;
 
-        if (e.Key == Key.Escape || e.Key == Key.Back)
+        // --- NEW: Fetch the mapped remote command ---
+        var command = HTPC.Core.Input.InputMapper.GetCommand(e.Key);
+
+        // FIX: Listen for the mapped remote command AND the hardware BrowserBack signal
+        if (command == HTPC.Core.Input.HtpcCommand.Back || e.Key == Key.Escape || e.Key == Key.Back || e.Key == Key.BrowserBack)
         {
             Back_Click(null!, null!);
             e.Handled = true;
@@ -240,9 +244,16 @@ public partial class MultiviewPlayerWindow : Window
             return;
         }
 
-        if (e.Key == Key.Right || e.Key == Key.Left || e.Key == Key.Up || e.Key == Key.Down)
+        // Map remote D-pad commands to standard keys for the navigation handler
+        Key navKey = e.Key;
+        if (command == HTPC.Core.Input.HtpcCommand.Right) navKey = Key.Right;
+        else if (command == HTPC.Core.Input.HtpcCommand.Left) navKey = Key.Left;
+        else if (command == HTPC.Core.Input.HtpcCommand.Up) navKey = Key.Up;
+        else if (command == HTPC.Core.Input.HtpcCommand.Down) navKey = Key.Down;
+
+        if (navKey == Key.Right || navKey == Key.Left || navKey == Key.Up || navKey == Key.Down)
         {
-            HandleNavigation(e.Key);
+            HandleNavigation(navKey);
             e.Handled = true;
         }
     }

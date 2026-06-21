@@ -5,11 +5,11 @@
   "PaddingEndMinutes": 0,
   "LastGuideCollection": "Popular",
   "CustomChannelOrders": {},
-  "IsFullscreen": false,
+  "IsFullscreen": true,
   "WindowWidth": 1280,
   "WindowHeight": 720,
-  "WindowTop": 127.2,
-  "WindowLeft": 109.60000000000001,
+  "WindowTop": 49.6,
+  "WindowLeft": 118.4,
   "UiScaleMultiplier": 1,
   "LastMultiviewCollection": "Popular",
   "CommercialSkipMode": 2,
@@ -46,5 +46,22 @@
       "IsVisible": true,
       "Order": 4
     }
-  ]
+  ],
+  "KeyBindings": {
+    "Up": "Up",
+    "Down": "Down",
+    "Left": "Left",
+    "Right": "Right",
+    "Enter": "Select",
+    "Return": "Select",
+    "Escape": "Back",
+    "Back": "Back",
+    "BrowserBack": "Back",
+    "MediaPlayPause": "PlayPause",
+    "MediaPreviousTrack": "SkipBackward",
+    "MediaNextTrack": "SkipForward",
+    "P": "PlayPause",
+    "C": "ToggleSubtitles",
+    "F": "Fullscreen"
+  }
 }

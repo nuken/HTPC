@@ -40,7 +40,6 @@
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="Black"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Focusable" Value="False"/> 
         </Style>
 
         <Style x:Key="NavPillExitStyle" TargetType="Button" BasedOn="{StaticResource NavPillStyle}">
@@ -156,10 +155,9 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
-                <Button Content="Home" Style="{StaticResource NavPillActiveStyle}"/>
-        
-                <Button x:Name="GuideNavBtn" Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
+            <Button x:Name="HomeNavBtn" Content="Home" Style="{StaticResource NavPillActiveStyle}"/>
+            <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
@@ -176,7 +174,7 @@
                     <StackPanel x:Name="SectionUpNext">
                         <TextBlock Text="Up Next" FontSize="24" FontWeight="Bold" Margin="40,0,0,10"/>
                         <Grid Margin="0,0,0,60">
-                            <ListBox x:Name="UpNextList" ItemsSource="{Binding UpNextQueue}" Background="Transparent" BorderThickness="0" 
+                            <ListBox x:Name="UpNextList" ItemsSource="{Binding UpNextQueue}" Focusable="False" IsTabStop="False" Background="Transparent" BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                                      PreviewMouseWheel="HorizontalList_PreviewMouseWheel" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -279,7 +277,7 @@
                         </Grid>
                         
                         <Grid Margin="0,0,0,60">
-                            <ListBox x:Name="LiveTvList" ItemsSource="{Binding LiveChannels}" Background="Transparent" BorderThickness="0" 
+                            <ListBox x:Name="LiveTvList" ItemsSource="{Binding LiveChannels}" Focusable="False" IsTabStop="False" Background="Transparent" BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                                      PreviewMouseWheel="HorizontalList_PreviewMouseWheel" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -346,7 +344,7 @@
                     <StackPanel x:Name="SectionMovies">
                         <TextBlock Text="Recent Movies" FontSize="24" FontWeight="Bold" Margin="40,0,0,10"/>
                         <Grid Margin="0,0,0,60">
-                            <ListBox x:Name="MoviesList" ItemsSource="{Binding FeaturedMovies}" Background="Transparent" BorderThickness="0" 
+                            <ListBox x:Name="MoviesList" ItemsSource="{Binding FeaturedMovies}" Focusable="False" IsTabStop="False" Background="Transparent" BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                                      PreviewMouseWheel="HorizontalList_PreviewMouseWheel" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -408,7 +406,7 @@
                     <StackPanel x:Name="SectionShows">
                         <TextBlock Text="Recent Episodes" FontSize="24" FontWeight="Bold" Margin="40,0,0,10"/>
                         <Grid Margin="0,0,0,60">
-                            <ListBox x:Name="EpisodesList" ItemsSource="{Binding RecentEpisodes}" Background="Transparent" BorderThickness="0" 
+                            <ListBox x:Name="EpisodesList" ItemsSource="{Binding RecentEpisodes}" Focusable="False" IsTabStop="False" Background="Transparent" BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                                      PreviewMouseWheel="HorizontalList_PreviewMouseWheel" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -473,7 +471,7 @@
                     <StackPanel x:Name="SectionVideos">
                         <TextBlock Text="Recent Videos" FontSize="24" FontWeight="Bold" Margin="40,0,0,10"/>
                         <Grid Margin="0,0,0,40">
-                            <ListBox x:Name="VideosList" ItemsSource="{Binding RecentVideos}" Background="Transparent" BorderThickness="0" 
+                            <ListBox x:Name="VideosList" ItemsSource="{Binding RecentVideos}" Focusable="False" IsTabStop="False" Background="Transparent" BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                                      PreviewMouseWheel="HorizontalList_PreviewMouseWheel" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -541,7 +539,7 @@
 
         <Border x:Name="LoadingOverlay" Background="#0F0F0F" Panel.ZIndex="1000" Visibility="Visible">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="⏳" FontSize="60" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                <TextBlock Text="⏳" FontSize="30" HorizontalAlignment="Center" Margin="0,0,0,20"/>
                 <TextBlock Text="Loading your library..." FontSize="26" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                 <TextBlock Text="Almost done..." FontSize="16" Foreground="#B3B3B3" HorizontalAlignment="Center" Margin="0,10,0,0"/>
             </StackPanel>

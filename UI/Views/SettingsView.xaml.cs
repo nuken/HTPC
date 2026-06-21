@@ -2,10 +2,13 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using HTPC.Services;
 using System.Net.Http;
 using System.Threading.Tasks;
+using HTPC.Core.Input; // Required for remote control commands
+using HTPC.Core.Models;
 
 namespace HTPC.UI.Views;
 
@@ -34,7 +37,12 @@ public partial class SettingsView : UserControl
     {
         if (_isInitialized) 
         {
-            this.Focus(); // Return focus to the page generally, NOT a textbox
+            // The Heavy Hammer Focus Fix for returning to the page
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                HomeNavBtn.Focus(); 
+                Keyboard.Focus(HomeNavBtn);
+            }), DispatcherPriority.ApplicationIdle);
             return;
         }
 
@@ -82,11 +90,135 @@ public partial class SettingsView : UserControl
         PaddingStartBox.SelectedIndex = prefs.PaddingStartMinutes <= 30 ? prefs.PaddingStartMinutes : 0;
         PaddingEndBox.SelectedIndex = prefs.PaddingEndMinutes <= 30 ? prefs.PaddingEndMinutes : 0;
 
-        _ = Dispatcher.BeginInvoke(new Action(() => 
-        {
-            this.Focus(); // Ensure focus doesn't lock into the textbox on load
-        }), DispatcherPriority.Input);
+       // The Heavy Hammer Focus Fix
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                SettingsNavBtn.Focus();          // <-- Changed
+                Keyboard.Focus(SettingsNavBtn);  // <-- Changed
+            }), DispatcherPriority.ApplicationIdle);
     }
+
+    // --- 10-FOOT UI FOCUS TRAPS & ESCAPE HATCHES ---
+
+    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var cb = sender as ComboBox;
+        var command = InputMapper.GetCommand(e.Key);
+
+        if (cb != null && !cb.IsDropDownOpen)
+        {
+            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+                cb.MoveFocus(new TraversalRequest(direction));
+                e.Handled = true; 
+            }
+        }
+    }
+
+    private void TextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+    }
+
+    private void Slider_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as Slider)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+    }
+
+    private void CheckBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as CheckBox)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+    }
+
+    private void DashboardListItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        // Explicit Focus Bridge: Jump RIGHT to the Action Buttons
+        if (command == HtpcCommand.Right)
+        {
+            LayoutMoveUpBtn.Focus();
+            e.Handled = true;
+        }
+        // Notice we removed the 'Select' override! Now hitting Enter just selects the row normally.
+    }
+
+    private void LayoutActionBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        // Explicit Focus Bridge: Jump LEFT back to the Layout List
+        if (command == HtpcCommand.Left)
+        {
+            if (DashboardLayoutList.SelectedItem != null)
+            {
+                var item = DashboardLayoutList.ItemContainerGenerator.ContainerFromItem(DashboardLayoutList.SelectedItem) as UIElement;
+                item?.Focus();
+            }
+            else
+            {
+                DashboardLayoutList.Focus();
+            }
+            e.Handled = true;
+        }
+        // Explicit Focus Bridge: Jump RIGHT to the Saved Servers List
+        else if (command == HtpcCommand.Right)
+        {
+            if (SavedServersList.Items.Count > 0)
+            {
+                var item = SavedServersList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+            else
+            {
+                TxtName.Focus(); // Fallback if no servers exist
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void SavedServerItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        // Let user hit "Enter" on a saved server to make it active instantly
+        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is ServerConfig server)
+        {
+            _serverManager.SetActiveServer(server.Id);
+            LoadServers();
+            e.Handled = true;
+        }
+        // Explicit Focus Bridge: Jump LEFT back to the center column buttons
+        else if (command == HtpcCommand.Left)
+        {
+            LayoutMoveUpBtn.Focus(); 
+            e.Handled = true;
+        }
+    }
+
+    // --- END FOCUS TRAPS ---
 
     private void Padding_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -177,10 +309,9 @@ public partial class SettingsView : UserControl
         TxtPort.Text = "8089";
         LoadServers();
         
-        this.Focus(); // Prevent focus from getting trapped after clicking save
+        HomeNavBtn.Focus(); // Re-focus navigation instead of getting stuck
     }
 
-    // --- NEW DELETE SERVER METHOD ---
     private void DeleteServer_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button button && button.DataContext is HTPC.Core.Models.ServerConfig server)
@@ -202,17 +333,13 @@ public partial class SettingsView : UserControl
     {
         if (sender is Button button && button.DataContext is HTPC.Core.Models.ServerConfig server)
         {
-            // Update the database/config to mark this ID as active
             _serverManager.SetActiveServer(server.Id); 
-            
-            // Refresh the UI to reflect the change
             LoadServers();
         }
     }
 	
 	private void AdminMenu_Click(object sender, RoutedEventArgs e)
     {
-        // Left-clicking the button opens the context menu 
         if (sender is Button btn && btn.ContextMenu != null)
         {
             btn.ContextMenu.IsOpen = true;
@@ -252,7 +379,6 @@ public partial class SettingsView : UserControl
                 }
                 else
                 {
-                    // Read the error message from Channels if one exists to help with debugging
                     string errorText = await response.Content.ReadAsStringAsync();
                     MessageBox.Show($"Server returned {response.StatusCode}\n{errorText}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
@@ -269,10 +395,7 @@ public partial class SettingsView : UserControl
         if (!_isInitialized) return;
         
         var prefs = PreferencesManager.Load();
-        
-        // Index 0 = Off, 1 = Prompt, 2 = Auto
         prefs.CommercialSkipMode = CommercialSkipBox.SelectedIndex;
-        
         PreferencesManager.Save(prefs);
     }
 	
@@ -304,19 +427,25 @@ public partial class SettingsView : UserControl
         }
     }
 
+    private void ToggleRowVisibility(DashboardRowConfig row)
+    {
+        row.IsVisible = !row.IsVisible;
+        
+        int index = DashboardRows.IndexOf(row);
+        if(index >= 0)
+        {
+            DashboardRows.RemoveAt(index);
+            DashboardRows.Insert(index, row);
+            DashboardLayoutList.SelectedIndex = index;
+            SaveDashboardLayout();
+        }
+    }
+
     private void ToggleRowVisibility_Click(object sender, RoutedEventArgs e)
     {
         if (DashboardLayoutList.SelectedItem is DashboardRowConfig row)
         {
-            row.IsVisible = !row.IsVisible;
-            
-            // Force WPF to update the UI by removing and re-inserting
-            int index = DashboardLayoutList.SelectedIndex;
-            DashboardRows.RemoveAt(index);
-            DashboardRows.Insert(index, row);
-            DashboardLayoutList.SelectedIndex = index;
-            
-            SaveDashboardLayout();
+            ToggleRowVisibility(row);
         }
     }
 
@@ -332,6 +461,11 @@ public partial class SettingsView : UserControl
         }
         
         PreferencesManager.Save(prefs);
+    }
+	
+	private void ExitApp_Click(object sender, RoutedEventArgs e)
+    {
+        Application.Current.Shutdown();
     }
     
     // --- NAVIGATION SIGNATURES ---

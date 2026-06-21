@@ -448,15 +448,73 @@ public partial class ShowsView : UserControl
     {
         EpisodesOverlay.Visibility = Visibility.Collapsed;
     }
+	
+	private void SeasonItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Right)
+        {
+            // FOCUS BRIDGE: Jump Right into the Episodes List
+            if (CurrentEpisodes.Count > 0)
+            {
+                EpisodesList.UpdateLayout(); // CRITICAL: Force UI to render the episodes instantly!
+                var firstEp = EpisodesList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                
+                if (firstEp != null) firstEp.Focus();
+                else EpisodesList.Focus();
+            }
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Left || command == HtpcCommand.Back)
+        {
+            // FOCUS BRIDGE: Jump Left to escape back to the main grid
+            CloseOverlay_Click(null!, null!);
+            ShowsGrid.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as ListBoxItem)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+    }
 
     // THE FIX: Listen for Enter/OK on the Episode Items
     private void EpisodeItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
+        
         if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem episode)
         {
             OnPlayRequested?.Invoke(this, episode);
             e.Handled = true;
+        }
+        else if (command == HtpcCommand.Left)
+        {
+            // FOCUS BRIDGE: Jump back to Seasons List
+            SeasonsList.UpdateLayout(); 
+            if (SeasonsList.SelectedItem != null)
+            {
+                var seasonItem = SeasonsList.ItemContainerGenerator.ContainerFromItem(SeasonsList.SelectedItem) as UIElement;
+                seasonItem?.Focus();
+            }
+            else
+            {
+                SeasonsList.Focus();
+            }
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as ListBoxItem)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Right)
+        {
+            e.Handled = true; // Block escaping right into the void
         }
     }
 

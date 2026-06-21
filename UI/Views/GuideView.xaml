@@ -150,7 +150,6 @@
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="Black"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Focusable" Value="False"/> 
         </Style>
     </UserControl.Resources>
 
@@ -166,13 +165,15 @@
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
             <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
-            <Button Content="Guide" Style="{StaticResource NavPillActiveStyle}"/>
+            <!-- NAMED THE GUIDE BUTTON -->
+            <Button x:Name="GuideNavBtn" Content="Guide" Style="{StaticResource NavPillActiveStyle}"/>
             <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
 			<Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
-            <CheckBox x:Name="ShowHiddenCheckBox" Content="👁 Show Hidden Channels" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="20,0,0,0" Click="ShowHidden_Click"/>
+            <!-- ADDED PREVIEW KEY DOWN FOR CHECKBOX -->
+            <CheckBox x:Name="ShowHiddenCheckBox" PreviewKeyDown="ShowHidden_PreviewKeyDown" Content="👁 Show Hidden Channels" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="20,0,0,0" Click="ShowHidden_Click"/>
         </StackPanel>
 
         <Grid Grid.Row="1" Margin="40,0,40,5" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -251,10 +252,17 @@
                 <Border x:Name="ChannelHeaderSpace" Grid.Row="0" Height="35" Margin="0,0,0,5" Background="Transparent"/>
                 
                 <ListBox x:Name="ChannelItemsControl" Grid.Row="1" Focusable="False" IsTabStop="False"
+                         KeyboardNavigation.DirectionalNavigation="None" KeyboardNavigation.TabNavigation="None"
                          PreviewMouseWheel="ChannelItemsControl_PreviewMouseWheel" 
                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                          ScrollViewer.VerticalScrollBarVisibility="Hidden" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource ListBoxItemStyle}">
+                         Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource ListBoxItemStyle}">
+                            <Setter Property="Focusable" Value="False"/>
+                            <Setter Property="IsTabStop" Value="False"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Height="70" Background="#1A1A1A" CornerRadius="8" Margin="0,5,15,5" Padding="10,5">
@@ -277,7 +285,7 @@
                                     
                                     <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center">
                                         
-                                        <Button Click="FavoriteToggle_Click" Tag="{Binding}" Background="Transparent" BorderThickness="0" Foreground="#D32F2F" FontSize="18" Cursor="Hand" Margin="0,0,5,0" FocusVisualStyle="{x:Null}">
+                                        <Button Click="FavoriteToggle_Click" Tag="{Binding}" Background="Transparent" BorderThickness="0" Foreground="#D32F2F" FontSize="18" Cursor="Hand" Margin="0,0,5,0" FocusVisualStyle="{x:Null}" Focusable="False">
                                             <Button.Style>
                                                 <Style TargetType="Button">
                                                     <Setter Property="Content" Value="♡"/>

@@ -247,18 +247,20 @@
                 </StackPanel>
 
                 <Border Grid.Column="1" BorderBrush="#333333" BorderThickness="0,0,1,0" Margin="0,0,30,0" Padding="0,0,15,0" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <ListBox x:Name="SeasonsList" ItemsSource="{Binding Seasons}" Background="Transparent" BorderThickness="0" SelectionChanged="SeasonsList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox x:Name="SeasonsList" ItemsSource="{Binding Seasons}" Grid.Column="0" Background="Transparent" BorderThickness="0" SelectionChanged="SeasonsList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden" Margin="0,0,20,0" Width="120" KeyboardNavigation.DirectionalNavigation="Continue">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
-                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="Foreground" Value="#AAAAAA"/>
-                                <Setter Property="BorderThickness" Value="0"/>
-                                <Setter Property="Padding" Value="20,15"/>
+                                <Setter Property="Padding" Value="15,10"/>
                                 <Setter Property="Margin" Value="0,0,0,5"/>
+                                <Setter Property="Background" Value="#1A1A1A"/>
+                                <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontSize" Value="18"/>
                                 <Setter Property="FontWeight" Value="SemiBold"/>
                                 <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>
+                                
+                                <EventSetter Event="PreviewKeyDown" Handler="SeasonItem_PreviewKeyDown"/>
+                                
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">

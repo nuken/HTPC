@@ -4,8 +4,11 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using HTPC.Core.Input; // Required for remote control commands
 using HTPC.Core.Models;
 using HTPC.Services;
+using System.Windows.Threading;
 
 namespace HTPC.UI.Views;
 
@@ -18,8 +21,7 @@ public partial class MultiviewSetupView : UserControl
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
    
-	
-	// Events to communicate with MainWindow
+    // Events to communicate with MainWindow
     public event EventHandler<List<Channel>>? OnLaunchMultiviewRequested;
     
     private readonly MediaLibraryService _libraryService;
@@ -28,13 +30,29 @@ public partial class MultiviewSetupView : UserControl
     private List<Channel> _allChannels = new List<Channel>();
     private List<ChannelCollection> _collections = new List<ChannelCollection>();
     private Channel?[] _selectedChannels = new Channel?[4];
-	
+    
     public MultiviewSetupView(MediaLibraryService libraryService)
     {
         InitializeComponent();
         _libraryService = libraryService;
         ChannelItemsControl.ItemsSource = DisplayedChannels;
         this.Loaded += OnLoaded;
+        
+        // --- NEW: Add visibility listener ---
+        this.IsVisibleChanged += MultiviewSetupView_IsVisibleChanged; 
+    }
+
+    // --- NEW: Snap focus back when returning from the Multiview Player! ---
+    private void MultiviewSetupView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if ((bool)e.NewValue)
+        {
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                CollectionDropdown.Focus();
+                Keyboard.Focus(CollectionDropdown);
+            }), DispatcherPriority.ApplicationIdle);
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -54,8 +72,15 @@ public partial class MultiviewSetupView : UserControl
         // Restore from disk memory
         CollectionDropdown.SelectedItem = prefs.LastMultiviewCollection ?? "All Channels";
         if (CollectionDropdown.SelectedIndex == -1) CollectionDropdown.SelectedIndex = 0;
-    }
 
+        // --- NEW: THE HEAVY HAMMER FOCUS FIX ---
+        // Snap the hardware remote control focus directly to the Dropdown
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            CollectionDropdown.Focus();
+            Keyboard.Focus(CollectionDropdown); 
+        }), DispatcherPriority.ApplicationIdle);
+    }
     private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CollectionDropdown.SelectedItem is string selection)
@@ -87,24 +112,72 @@ public partial class MultiviewSetupView : UserControl
         }
     }
 
-    private void Channel_Click(object sender, RoutedEventArgs e)
+    // --- REFACTORED SELECTION LOGIC ---
+    private void AddChannelToSlot(Channel channel)
     {
-        if (sender is Button btn && btn.Tag is Channel channel)
+        // Find first empty slot
+        for (int i = 0; i < 4; i++)
         {
-            // Find first empty slot
-            for (int i = 0; i < 4; i++)
+            if (_selectedChannels[i] == null)
             {
-                if (_selectedChannels[i] == null)
-                {
-                    _selectedChannels[i] = channel;
-                    UpdateSlotsUI();
-                    return;
-                }
+                _selectedChannels[i] = channel;
+                UpdateSlotsUI();
+                return;
             }
-            
-            MessageBox.Show("All 4 slots are full. Please remove a channel first.", "Multiview Full", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        
+        MessageBox.Show("All 4 slots are full. Please remove a channel first.", "Multiview Full", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        // 1. Handle OK/Enter to add the channel
+        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is Channel channel)
+        {
+            AddChannelToSlot(channel);
+            e.Handled = true; 
+        }
+        // 2. Escape the ListBox naturally using the D-Pad
+        else if (command == HtpcCommand.Up || command == HtpcCommand.Down || command == HtpcCommand.Right)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : 
+                            command == HtpcCommand.Up ? FocusNavigationDirection.Up : FocusNavigationDirection.Right;
+            (sender as ListBoxItem)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true; 
         }
     }
+
+    private void ListBoxItem_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBoxItem item && item.DataContext is Channel channel)
+        {
+            AddChannelToSlot(channel);
+        }
+    }
+
+    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var cb = sender as ComboBox;
+        var command = InputMapper.GetCommand(e.Key);
+
+        // If the dropdown is CLOSED, allow the D-Pad to escape!
+        if (cb != null && !cb.IsDropDownOpen)
+        {
+            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+                cb.MoveFocus(new TraversalRequest(direction));
+                e.Handled = true; 
+            }
+        }
+    }
+
+    // --- END SELECTION LOGIC ---
 
     private void RemoveSlot_Click(object sender, RoutedEventArgs e)
     {
@@ -160,12 +233,12 @@ public partial class MultiviewSetupView : UserControl
             OnLaunchMultiviewRequested?.Invoke(this, channelsToLaunch);
         }
     }
-	
-	// --- UPDATED NAVIGATION SIGNATURES (RoutedEventArgs) ---
+    
+    // --- UPDATED NAVIGATION SIGNATURES (RoutedEventArgs) ---
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
-	private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
 }

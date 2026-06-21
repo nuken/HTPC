@@ -50,12 +50,22 @@ public partial class GuideView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // 1. FOCUS HAMMER: Start on the Guide Button so we aren't lost in the void
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            if (_lastFocusedAiringButton == null)
+            {
+                GuideNavBtn.Focus();
+                Keyboard.Focus(GuideNavBtn);
+            }
+        }), DispatcherPriority.ApplicationIdle);
+
         if (DisplayedChannels.Count > 0) return; 
         
-        // 1. Fetch available custom collections from the DVR
+        // 2. Fetch available custom collections from the DVR
         _collections = await _libraryService.GetCollectionsAsync();
         
-        // 2. Populate the Dropdown with our static roots + custom collections
+        // 3. Populate the Dropdown with our static roots + custom collections
         CollectionDropdown.Items.Clear();
         CollectionDropdown.Items.Add("All Channels");
         CollectionDropdown.Items.Add("Favorites");
@@ -67,7 +77,7 @@ public partial class GuideView : UserControl
             CollectionDropdown.Items.Add(col.Name);
         }
 
-        // 3. Select the saved preference (or default to All Channels)
+        // 4. Select the saved preference (or default to All Channels)
         var prefs = PreferencesManager.Load();
         string savedSelection = string.IsNullOrEmpty(prefs.LastGuideCollection) ? "All Channels" : prefs.LastGuideCollection;
         
@@ -124,108 +134,66 @@ public partial class GuideView : UserControl
         }
     }
 
-    // --- 10-FOOT UI FOCUS TRAP FIX ---
+    // --- 10-FOOT UI FOCUS BRIDGES ---
     
     private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var cb = sender as ComboBox;
         var command = InputMapper.GetCommand(e.Key);
 
-        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list
         if (cb != null && !cb.IsDropDownOpen)
         {
-            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+            // FOCUS BRIDGE: Pushing UP escapes to the Top Nav!
+            if (command == HtpcCommand.Up)
             {
-                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
-                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
-                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
-
+                GuideNavBtn.Focus();
+                e.Handled = true;
+            }
+            // FOCUS BRIDGE: Pushing DOWN jumps exactly into the first TV show!
+            else if (command == HtpcCommand.Down)
+            {
+                FocusFirstAiring();
+                e.Handled = true;
+            }
+            // Allow Left/Right to still navigate between the UI columns normally
+            else if (command == HtpcCommand.Left || command == HtpcCommand.Right)
+            {
+                var direction = command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
                 cb.MoveFocus(new TraversalRequest(direction));
                 e.Handled = true; 
             }
         }
     }
-    
-	// --- THE NEW FAVORITE BUTTON HANDLER ---
-    private async void FavoriteToggle_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.Tag is Channel channel)
-        {
-            channel.Favorite = !channel.Favorite;
 
-            var activeServer = _serverManager.GetActiveServer();
-            if (activeServer != null)
-            {
-                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-                
-                bool success = await _libraryService.ToggleChannelFavoriteAsync(baseUrl, channel.DeviceId, channel.Number);
-                
-                if (!success)
-                {
-                    channel.Favorite = !channel.Favorite;
-                    MessageBox.Show("Failed to sync favorite with the server.", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-        }
-    }
-	
-	private void FilterChannels()
+    private void GuideNav_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        DisplayedChannels.Clear();
-        bool showHidden = ShowHiddenCheckBox.IsChecked == true;
+        var command = InputMapper.GetCommand(e.Key);
         
-        // Find out what the user currently has selected in the dropdown
-        string currentFilter = CollectionDropdown.SelectedItem as string ?? "All Channels";
-
-        foreach (var channel in _allChannels)
+        if (command == HtpcCommand.Down)
         {
-            // First, determine if the channel should be skipped due to its Hidden status
-            if (channel.Hidden && !showHidden) continue;
-            
-            // Second, enforce our static dropdown filters!
-            if (currentFilter == "Favorites" && !channel.Favorite) continue;
-            if (currentFilter == "HD Channels" && !channel.IsHD) continue;
-            if (currentFilter == "SD Channels" && channel.IsHD) continue;
-
-            // If it survived the gauntlet, add it to the UI
-            DisplayedChannels.Add(channel);
+            FocusFirstAiring();
+            e.Handled = true;
+        }
+        // FOCUS BRIDGE: Pushing UP from the side scrolling buttons escapes to the Top Nav!
+        else if (command == HtpcCommand.Up)
+        {
+            GuideNavBtn.Focus();
+            e.Handled = true;
         }
     }
 
-    private void ShowHidden_Click(object sender, RoutedEventArgs e)
+    private void ShowHidden_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        FilterChannels(); // Instantly re-renders the list
-    }
-
-    private async void HideChannel_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is MenuItem menuItem && menuItem.DataContext is Channel channel)
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Down)
         {
-            // 1. Instantly flip the UI state
-            channel.Hidden = !channel.Hidden;
-
-            // 2. Refresh the Guide view
-            FilterChannels(); 
-
-            // 3. Fire the API call to update the DVR Server
-            var activeServer = _serverManager.GetActiveServer();
-            if (activeServer != null)
-            {
-                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-                
-                bool success = await _libraryService.ToggleChannelHiddenAsync(baseUrl, channel.DeviceId, channel.Number);
-                
-                if (!success)
-                {
-                    // Revert if the server call fails
-                    channel.Hidden = !channel.Hidden;
-                    FilterChannels();
-                    MessageBox.Show("Failed to sync hidden status with the server.", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
+            CollectionDropdown.Focus();
+            e.Handled = true;
         }
     }
 
+    // --- MAIN GRID NAVIGATION ---
 
     private void GuideView_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -244,6 +212,19 @@ public partial class GuideView : UserControl
 
         bool isArrowKey = command == HtpcCommand.Left || command == HtpcCommand.Right || command == HtpcCommand.Up || command == HtpcCommand.Down;
         if (!isArrowKey) return;
+
+        // --- NEW: TOP NAV BRIDGE ---
+        // Prevent focus from falling into the invisible channel list when pushing down from the top menu
+        if (command == HtpcCommand.Down && Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null)
+        {
+            string? btnText = topBtn.Content?.ToString();
+            if (btnText == "Home" || btnText == "Guide" || btnText == "Multiview" || btnText == "Movies" || btnText == "Shows" || btnText == "Videos" || btnText == "Settings")
+            {
+                CollectionDropdown.Focus();
+                e.Handled = true;
+                return;
+            }
+        }
 
         if (Keyboard.FocusedElement is Button btn && btn.Tag is Airing currentAiring)
         {
@@ -265,8 +246,9 @@ public partial class GuideView : UserControl
                     }
                     else if (nextIndex < 0 && command == HtpcCommand.Left)
                     {
-                        var request = new TraversalRequest(FocusNavigationDirection.Up);
-                        btn.MoveFocus(request);
+                        // --- NEW: LEFT EDGE BRIDGE ---
+                        // Stop focus from falling off the far left edge of the grid
+                        CollectionDropdown.Focus();
                     }
                 }
             }
@@ -291,24 +273,48 @@ public partial class GuideView : UserControl
                 }
                 else if (nextIndex < 0 && command == HtpcCommand.Up)
                 {
-                    var request = new TraversalRequest(FocusNavigationDirection.Up);
-                    btn.MoveFocus(request);
+                    // FOCUS BRIDGE: Pushing UP from the very top row of the EPG escapes to the dropdown!
+                    CollectionDropdown.Focus();
                 }
             }
             return; 
         }
 
-        bool isFocusedOnTopMenu = Keyboard.FocusedElement is ComboBox || Keyboard.FocusedElement is TextBox || 
-                                  (Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null) ||
+        bool isFocusedOnTopMenu = Keyboard.FocusedElement is ComboBox || Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is CheckBox ||
+                                  (Keyboard.FocusedElement is Button tb && tb.Tag == null) ||
                                   (Keyboard.FocusedElement is RepeatButton);
 
         if (!isFocusedOnTopMenu)
         {
             if (Keyboard.FocusedElement == null || Keyboard.FocusedElement == this || Keyboard.FocusedElement == GuideItemsControl)
             {
-                FocusFirstAiring();
+                GuideNavBtn.Focus(); 
                 e.Handled = true;
             }
+        }
+    }
+	
+    private void GuideView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if ((bool)e.NewValue && DisplayedChannels.Count > 0)
+        {
+            // Only restore focus to the grid if they were ACTUALLY in the grid previously
+            // This stops the UI from "stealing" focus away from the Top Nav when swapping tabs
+            if (_lastFocusedAiringButton != null && _lastFocusedAiringButton.Tag is Airing lastAiring)
+            {
+                var channel = DisplayedChannels.FirstOrDefault(c => c.Number == lastAiring.ChannelNumber);
+                if (channel != null) 
+                {
+                    FocusAiringSafely(channel, lastAiring);
+                    return;
+                }
+            }
+            
+            // If they are just tabbing over, leave the focus safely on the Top Nav
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                GuideNavBtn.Focus();
+            }), DispatcherPriority.ApplicationIdle);
         }
     }
 
@@ -331,24 +337,6 @@ public partial class GuideView : UserControl
         }), DispatcherPriority.Loaded);
     }
 
-    private void GuideView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        if ((bool)e.NewValue && DisplayedChannels.Count > 0)
-        {
-            if (_lastFocusedAiringButton != null && _lastFocusedAiringButton.Tag is Airing lastAiring)
-            {
-                var channel = DisplayedChannels.FirstOrDefault(c => c.Number == lastAiring.ChannelNumber);
-                if (channel != null) 
-                {
-                    FocusAiringSafely(channel, lastAiring);
-                    return;
-                }
-            }
-            
-            FocusFirstAiring();
-        }
-    }
-
     private Button? FindButtonForAiring(DependencyObject parent, Airing targetAiring)
     {
         Queue<DependencyObject> queue = new Queue<DependencyObject>();
@@ -364,17 +352,6 @@ public partial class GuideView : UserControl
         return null;
     }
     
-    private void GuideNav_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var command = InputMapper.GetCommand(e.Key);
-        
-        if (command == HtpcCommand.Down)
-        {
-            FocusFirstAiring();
-            e.Handled = true;
-        }
-    }
-
     private void FocusFirstAiring()
     {
         if (DisplayedChannels.Count > 0)
@@ -407,16 +384,76 @@ public partial class GuideView : UserControl
         }
     }
 
-    private T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    // --- OTHER UI LOGIC ---
+    
+	private async void FavoriteToggle_Click(object sender, RoutedEventArgs e)
     {
-        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        if (sender is Button btn && btn.Tag is Channel channel)
         {
-            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
-            if (child is T t) return t;
-            var result = FindVisualChild<T>(child);
-            if (result != null) return result;
+            channel.Favorite = !channel.Favorite;
+
+            var activeServer = _serverManager.GetActiveServer();
+            if (activeServer != null)
+            {
+                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+                
+                bool success = await _libraryService.ToggleChannelFavoriteAsync(baseUrl, channel.DeviceId, channel.Number);
+                
+                if (!success)
+                {
+                    channel.Favorite = !channel.Favorite;
+                    MessageBox.Show("Failed to sync favorite with the server.", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
         }
-        return null;
+    }
+	
+	private void FilterChannels()
+    {
+        DisplayedChannels.Clear();
+        bool showHidden = ShowHiddenCheckBox.IsChecked == true;
+        
+        string currentFilter = CollectionDropdown.SelectedItem as string ?? "All Channels";
+
+        foreach (var channel in _allChannels)
+        {
+            if (channel.Hidden && !showHidden) continue;
+            
+            if (currentFilter == "Favorites" && !channel.Favorite) continue;
+            if (currentFilter == "HD Channels" && !channel.IsHD) continue;
+            if (currentFilter == "SD Channels" && channel.IsHD) continue;
+
+            DisplayedChannels.Add(channel);
+        }
+    }
+
+    private void ShowHidden_Click(object sender, RoutedEventArgs e)
+    {
+        FilterChannels();
+    }
+
+    private async void HideChannel_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Channel channel)
+        {
+            channel.Hidden = !channel.Hidden;
+            FilterChannels(); 
+
+            var activeServer = _serverManager.GetActiveServer();
+            if (activeServer != null)
+            {
+                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+                
+                bool success = await _libraryService.ToggleChannelHiddenAsync(baseUrl, channel.DeviceId, channel.Number);
+                
+                if (!success)
+                {
+                    channel.Hidden = !channel.Hidden;
+                    FilterChannels();
+                    MessageBox.Show("Failed to sync hidden status with the server.", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
     }
 
     private void AiringBlock_Click(object sender, RoutedEventArgs e)

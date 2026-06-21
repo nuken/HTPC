@@ -103,8 +103,8 @@ public partial class DashboardView : UserControl
             // USE THE HEAVY HAMMER:
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
-                GuideNavBtn.Focus();
-                Keyboard.Focus(GuideNavBtn); 
+                HomeNavBtn.Focus();          // <-- Changed
+                Keyboard.Focus(HomeNavBtn);  // <-- Changed
             }), DispatcherPriority.ApplicationIdle);
             
             return;
@@ -153,8 +153,8 @@ public partial class DashboardView : UserControl
         // 3. Return focus to the UI
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
-            GuideNavBtn.Focus();
-            Keyboard.Focus(GuideNavBtn); // Sync hardware keyboard instantly!
+            HomeNavBtn.Focus();
+            Keyboard.Focus(HomeNavBtn); // Sync hardware keyboard instantly!
         }), DispatcherPriority.ApplicationIdle);
     }
 
@@ -227,9 +227,54 @@ public partial class DashboardView : UserControl
         // 2. THE ESCAPE HATCH: Handle Up/Down to jump between rows instantly
         else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
         {
+            var currentItem = sender as ListBoxItem;
+            if (currentItem == null) return;
+
             var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            (sender as ListBoxItem)?.MoveFocus(new TraversalRequest(direction));
-            e.Handled = true; // Tell WPF we handled the movement, don't bounce around!
+            
+            // Predict where WPF wants to go natively BEFORE we actually move
+            var predicted = currentItem.PredictFocus(direction) as FrameworkElement;
+
+            // FIX 1: THE WRAP-AROUND BUG
+            // If WPF's spatial cone misses the top nav, it wraps to the bottom of the page.
+            if (command == HtpcCommand.Up)
+            {
+                bool isWrapAround = false;
+                if (predicted != null)
+                {
+                    try 
+                    {
+                        Point currentPos = currentItem.PointToScreen(new Point(0, 0));
+                        Point predictedPos = predicted.PointToScreen(new Point(0, 0));
+                        
+                        // If the "Up" target is physically lower on the screen, it wrapped around!
+                        if (predictedPos.Y >= currentPos.Y) isWrapAround = true;
+                    } 
+                    catch { /* Ignore coordinate errors during rapid scrolling */ }
+                }
+
+                // If it missed entirely, or it wrapped around, snap directly to the Top Nav!
+                if (predicted == null || isWrapAround)
+                {
+                    HomeNavBtn.Focus();
+                    MainScroll.ScrollToTop(); // Instantly bring top menu into view
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // Execute the physical movement
+            currentItem.MoveFocus(new TraversalRequest(direction));
+            
+            // FIX 2: THE DOUBLE-CLICK BUG
+            // We force it to physically scroll into view by mathematically calculating its position.
+            var newFocus = Keyboard.FocusedElement as FrameworkElement;
+            if (newFocus != null)
+            {
+                ScrollToElement(MainScroll, newFocus);
+            }
+
+            e.Handled = true; // Tell WPF we handled the movement
         }
     }
 
@@ -317,9 +362,33 @@ public partial class DashboardView : UserControl
         var cb = sender as ComboBox;
         var command = InputMapper.GetCommand(e.Key);
 
-        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list!
         if (cb != null && !cb.IsDropDownOpen)
         {
+            if (command == HtpcCommand.Up)
+            {
+                var predicted = cb.PredictFocus(FocusNavigationDirection.Up) as FrameworkElement;
+                bool isWrapAround = false;
+                try 
+                {
+                    if (predicted != null) 
+                    {
+                        Point currentPos = cb.PointToScreen(new Point(0, 0));
+                        Point predictedPos = predicted.PointToScreen(new Point(0, 0));
+                        if (predictedPos.Y >= currentPos.Y) isWrapAround = true;
+                    }
+                } 
+                catch {}
+
+                // Prevent the Dropdown from wrapping around to the bottom
+                if (predicted == null || isWrapAround)
+                {
+                    HomeNavBtn.Focus();
+                    MainScroll.ScrollToTop();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
             {
                 var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
@@ -327,9 +396,38 @@ public partial class DashboardView : UserControl
                                 command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
 
                 cb.MoveFocus(new TraversalRequest(direction));
-                e.Handled = true; // Stop the ComboBox from stealing the input
+                
+                var newFocus = Keyboard.FocusedElement as FrameworkElement;
+                if (newFocus != null && (command == HtpcCommand.Up || command == HtpcCommand.Down))
+                {
+                    ScrollToElement(MainScroll, newFocus);
+                }
+
+                e.Handled = true; 
             }
         }
+    }
+
+    // --- NEW: Helper to calculate exact offset and force the ScrollViewer to move ---
+    private void ScrollToElement(ScrollViewer scrollViewer, FrameworkElement element)
+    {
+        try
+        {
+            var content = scrollViewer.Content as UIElement;
+            if (content == null) return;
+
+            var transform = element.TransformToAncestor(content);
+            Point position = transform.Transform(new Point(0, 0));
+            
+            // 100px padding so the focused row isn't hugging the absolute top edge of the screen
+            double targetY = position.Y - 100; 
+            
+            if (targetY < 0) targetY = 0;
+            if (targetY > scrollViewer.ScrollableHeight) targetY = scrollViewer.ScrollableHeight;
+
+            scrollViewer.ScrollToVerticalOffset(targetY);
+        }
+        catch { }
     }
 
     private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)

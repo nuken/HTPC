@@ -42,6 +42,27 @@ public class AppPreferences
         new DashboardRowConfig { Id = "Shows", DisplayName = "Recent Episodes", Order = 3, IsVisible = true },
         new DashboardRowConfig { Id = "Videos", DisplayName = "Recent Videos", Order = 4, IsVisible = true }
     };
+	
+	// --- REMOTE CONTROL MAPPINGS ---
+    // Maps a WPF Key string to an HtpcCommand string
+    public System.Collections.Generic.Dictionary<string, string> KeyBindings { get; set; } = new()
+    {
+        { "Up", "Up" },
+        { "Down", "Down" },
+        { "Left", "Left" },
+        { "Right", "Right" },
+        { "Enter", "Select" },
+        { "Return", "Select" },
+        { "Escape", "Back" },
+        { "Back", "Back" },           // Standard Backspace
+        { "BrowserBack", "Back" },    // Dedicated remote "Back" button
+        { "MediaPlayPause", "PlayPause" },
+        { "MediaPreviousTrack", "SkipBackward" },
+        { "MediaNextTrack", "SkipForward" },
+        { "P", "PlayPause" },
+        { "C", "ToggleSubtitles" },
+        { "F", "Fullscreen" }
+    };
 }
 
 public static class PreferencesManager

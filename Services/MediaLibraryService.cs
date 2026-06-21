@@ -146,6 +146,67 @@ public class MediaLibraryService
             _masterMoviesCache = new List<MediaItem>();
         }
     }
+	
+	public async Task<MediaItem?> GetNextEpisodeAsync(MediaItem currentEpisode)
+    {
+        if (string.IsNullOrEmpty(currentEpisode.Title)) return null;
+
+        var server = _serverManager.GetActiveServer();
+        if (server == null) return null;
+
+        string baseUrl = $"http://{server.IpAddress}:{server.Port}";
+        string url = $"{baseUrl}/dvr/files"; 
+
+        try
+        {
+            var response = await _httpClient.GetStringAsync(url);
+            using (System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(response))
+            {
+                var episodes = new System.Collections.Generic.List<MediaItem>();
+                
+                foreach (System.Text.Json.JsonElement element in doc.RootElement.EnumerateArray())
+                {
+                    // Filter down to TV shows with the exact same Series Title
+                    if (element.TryGetProperty("Airing", out System.Text.Json.JsonElement airing))
+                    {
+                        string title = airing.TryGetProperty("Title", out var t) ? t.GetString() ?? "" : "";
+                        if (title.Equals(currentEpisode.Title, StringComparison.OrdinalIgnoreCase))
+                        {
+                            int season = airing.TryGetProperty("SeasonNumber", out var sn) ? sn.GetInt32() : 0;
+                            int epNum = airing.TryGetProperty("EpisodeNumber", out var en) ? en.GetInt32() : 0;
+                            
+                            string id = element.GetProperty("ID").GetString() ?? "";
+                            string episodeTitle = airing.TryGetProperty("EpisodeTitle", out var et) ? et.GetString() ?? "" : "";
+                            string rawImage = airing.TryGetProperty("Image", out var img) ? img.GetString() ?? "" : "";
+
+                            episodes.Add(new MediaItem 
+                            { 
+                                Id = id, 
+                                Title = title, 
+                                CurrentShowTitle = episodeTitle,
+                                SeasonNumber = season,
+                                EpisodeNumber = epNum,
+                                StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                                PosterUrl = FormatImageUrl(baseUrl, rawImage),
+                                Commercials = ParseDoubleArray(element, "commercials")
+                            });
+                        }
+                    }
+                }
+
+                // Sort chronologically and find the very next episode
+                var sorted = episodes.OrderBy(e => e.SeasonNumber).ThenBy(e => e.EpisodeNumber).ToList();
+                return sorted.FirstOrDefault(e => 
+                    e.SeasonNumber > currentEpisode.SeasonNumber || 
+                    (e.SeasonNumber == currentEpisode.SeasonNumber && e.EpisodeNumber > currentEpisode.EpisodeNumber));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error pre-fetching next episode: {ex.Message}");
+            return null;
+        }
+    }
 
     public async Task<bool> ToggleChannelFavoriteAsync(string baseUrl, string deviceId, string guideNumber)
     {

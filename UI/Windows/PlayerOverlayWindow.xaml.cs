@@ -33,6 +33,9 @@ public partial class PlayerOverlayWindow : Window
 	private DispatcherTimer _skipAdTimer;
     private double _skipTargetTime = 0;
     private bool _markersDrawn = false;
+	
+	private MediaItem? _nextEpisodeToPlay;
+    private bool _upNextPromptShown = false;
 
     public PlayerOverlayWindow(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -77,6 +80,19 @@ public partial class PlayerOverlayWindow : Window
         
         _isLiveTv = media.IsLiveTv; 
         
+		_upNextPromptShown = false;
+        UpNextPromptContainer.Visibility = Visibility.Collapsed;
+        _nextEpisodeToPlay = null;
+
+        if (!_isLiveTv)
+        {
+            _ = Task.Run(async () =>
+            {
+                // Silently grab the next stream URL in the background
+                _nextEpisodeToPlay = await _libraryService.GetNextEpisodeAsync(media);
+            });
+        }
+		
         if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
         else BufferingOverlay.Visibility = Visibility.Collapsed;
 
@@ -154,6 +170,11 @@ public partial class PlayerOverlayWindow : Window
                 {
                     if (MiniGuideList.SelectedItem is Channel selectedChannel) 
                         PlayChannelFromMiniGuide(selectedChannel);
+                }
+                else if (UpNextPromptContainer.Visibility == Visibility.Visible && UpNextButton.IsFocused)
+                {
+                    // Allow the user to press 'Enter' on the remote to skip to the next episode
+                    UpNextButton_Click(null!, null!);
                 }
                 else
                 {
@@ -284,6 +305,16 @@ public partial class PlayerOverlayWindow : Window
                 CurrentTimeText.Text = posTime.ToString(posTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
                 RemainingTimeText.Text = "-" + remTime.ToString(remTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
             }
+			
+			// --- NEW: WATCH NEXT THRESHOLD ---
+            if (_nextEpisodeToPlay != null && !_upNextPromptShown)
+            {
+                // Trigger when 120 seconds left OR 95% complete (whichever hits first)
+                if (duration > 0 && (duration - position <= 120 || position / duration >= 0.95))
+                {
+                    ShowUpNextPrompt();
+                }
+            }
         }
         else
         {
@@ -305,6 +336,26 @@ public partial class PlayerOverlayWindow : Window
                 RemainingTimeText.Text = "-" + remTime.ToString(remTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
             }
         }
+    }
+	
+	private void ShowUpNextPrompt()
+    {
+        _upNextPromptShown = true;
+        UpNextTitleText.Text = _nextEpisodeToPlay?.CurrentShowTitle ?? "Next Episode";
+        UpNextPromptContainer.Visibility = Visibility.Visible;
+        
+        WakeUpUi();
+        UpNextButton.Focus(); // Move hardware remote focus straight to the button!
+    }
+
+    private void UpNextButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_nextEpisodeToPlay == null) return;
+
+        // Instantly kill the current stream, reset the UI, and play the pre-fetched item
+        _mpvService.Stop();
+        _mpvService.PlayMedia(_nextEpisodeToPlay);
+        InitializeMedia(_nextEpisodeToPlay);
     }
     
     private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

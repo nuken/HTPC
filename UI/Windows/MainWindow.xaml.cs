@@ -334,4 +334,67 @@ public partial class MainWindow : Window
         this.Show(); 
         MainShellContainer.Focus(); 
     }
+	
+	// --- LOW LEVEL HARDWARE REMOTE CONTROL HOOKS ---
+    private const int WM_APPCOMMAND = 0x0319;
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        // Hook into the Windows message loop
+        var source = System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        source?.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        // Catch hardware media buttons that bypass WPF's KeyDown events
+        if (msg == WM_APPCOMMAND)
+        {
+            int cmd = (int)((uint)lParam >> 16) & ~0xf000;
+            
+            HTPC.Core.Input.HtpcCommand resolvedCommand = HTPC.Core.Input.HtpcCommand.None;
+
+            switch (cmd)
+            {
+                case 8:  // APPCOMMAND_BROWSER_BACKWARD
+                    resolvedCommand = HTPC.Core.Input.HtpcCommand.Back;
+                    break;
+                case 14: // APPCOMMAND_MEDIA_PLAY_PAUSE
+                    resolvedCommand = HTPC.Core.Input.HtpcCommand.PlayPause;
+                    break;
+                case 11: // APPCOMMAND_MEDIA_NEXTTRACK
+                    resolvedCommand = HTPC.Core.Input.HtpcCommand.SkipForward;
+                    break;
+                case 12: // APPCOMMAND_MEDIA_PREVIOUSTRACK
+                    resolvedCommand = HTPC.Core.Input.HtpcCommand.SkipBackward;
+                    break;
+            }
+
+            if (resolvedCommand != HTPC.Core.Input.HtpcCommand.None)
+            {
+                // Simulate a key press event so the active UserControl can handle it naturally
+                var keyEvent = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.None)
+                {
+                    RoutedEvent = UIElement.PreviewKeyDownEvent
+                };
+                
+                // FIX: Changed MainContent to MainShellContainer to match your UI
+                if (MainShellContainer.Content is UIElement activeView)
+                {
+                    // This forces standard handling as if they pressed a normal key
+                    if (resolvedCommand == HTPC.Core.Input.HtpcCommand.Back)
+                        activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.BrowserBack) { RoutedEvent = UIElement.PreviewKeyDownEvent });
+                    else if (resolvedCommand == HTPC.Core.Input.HtpcCommand.PlayPause)
+                        activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.MediaPlayPause) { RoutedEvent = UIElement.PreviewKeyDownEvent });
+                    else if (resolvedCommand == HTPC.Core.Input.HtpcCommand.SkipForward)
+                        activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.MediaNextTrack) { RoutedEvent = UIElement.PreviewKeyDownEvent });
+                    else if (resolvedCommand == HTPC.Core.Input.HtpcCommand.SkipBackward)
+                        activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.MediaPreviousTrack) { RoutedEvent = UIElement.PreviewKeyDownEvent });
+                }
+                handled = true;
+            }
+        }
+        return IntPtr.Zero;
+    }
 }
