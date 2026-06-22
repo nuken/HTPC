@@ -136,15 +136,16 @@ public class MpvPlaybackService : IDisposable
             // event_id 7 == MPV_EVENT_END_FILE (Video finished naturally)
             if (ev.event_id == 7)
             {
-                if (_currentMedia != null)
+                // FIX: Thread-safe snapshot
+                var media = _currentMedia;
+                if (media != null)
                 {
                     double duration = GetDuration();
-                    // Force the position to equal the duration so it triggers the "Watched" guardrail
-                    _ = SyncProgressToServerAsync(_currentMedia.Id, duration, duration);
+                    _ = SyncProgressToServerAsync(media.Id, duration, duration);
                 }
             }
             
-            // event_id 22 == MPV_EVENT_PROPERTY_CHANGE (For Commercial Skip)
+            // event_id 22 == MPV_EVENT_PROPERTY_CHANGE
             if (ev.event_id == 22) 
             {
                 var prop = Marshal.PtrToStructure<Libmpv.mpv_event_property>(ev.data);
@@ -159,44 +160,39 @@ public class MpvPlaybackService : IDisposable
 
     private void EvaluateCommercialBoundaries(double currentSeconds)
     {
-        if (_currentMedia?.Commercials == null || _currentMedia.Commercials.Count < 2) return;
+        // FIX: Thread-safe snapshot to prevent NullReferenceException if Stop() is called
+        var media = _currentMedia;
+        if (media?.Commercials == null || media.Commercials.Count < 2) return;
 
         var prefs = PreferencesManager.Load();
         if (prefs.CommercialSkipMode == 0) return; // Mode 0 = Off
 
-        var comms = _currentMedia.Commercials;
+        var comms = media.Commercials;
         
-        // Loop through pairs: [Start, End, Start, End...]
         for (int i = 0; i < comms.Count - 1; i += 2)
         {
             double start = comms[i];
             double end = comms[i + 1];
 
-            // THE FERAL ANTI-LOOP LOGIC:
-            // If the user manually scrubs backwards well before the commercial start,
-            // we re-enable the block so it can be skipped again.
             if (currentSeconds < start - 5)
             {
                 _disabledCommercialBlocks.Remove(i);
             }
 
-            // Are we currently inside a commercial break?
             if (currentSeconds >= start && currentSeconds < end)
             {
-                // If this block is disabled (because we already skipped it or the user 
-                // explicitly scrubbed into it), do nothing.
                 if (_disabledCommercialBlocks.Contains(i)) continue; 
 
-                if (prefs.CommercialSkipMode == 2) // Mode 2 = Auto Skip
+                if (prefs.CommercialSkipMode == 2) 
                 {
                     _logger.LogInformation($"Auto-skipping commercial block: {start}s to {end}s");
-                    _disabledCommercialBlocks.Add(i); // Mark as skipped
+                    _disabledCommercialBlocks.Add(i); 
                     SeekAbsolute(end); 
                 }
-                else if (prefs.CommercialSkipMode == 1) // Mode 1 = Prompt
+                else if (prefs.CommercialSkipMode == 1) 
                 {
-                    _disabledCommercialBlocks.Add(i); // Mark as triggered so we don't spam the UI
-                    OnCommercialPrompt?.Invoke(end);  // Fire the event to the WPF window
+                    _disabledCommercialBlocks.Add(i); 
+                    OnCommercialPrompt?.Invoke(end);  
                 }
             }
         }
@@ -359,7 +355,9 @@ public class MpvPlaybackService : IDisposable
 
     private void SaveCurrentPosition(object? state)
     {
-        if (_currentMedia == null || _mpvContext == IntPtr.Zero) return;
+        // FIX: Thread-safe snapshot for the background timer
+        var media = _currentMedia;
+        if (media == null || _mpvContext == IntPtr.Zero) return;
 
         int result = Libmpv.mpv_get_property(_mpvContext, "time-pos", 5, out double timeInSeconds);
         if (result < 0) return; 
@@ -368,10 +366,10 @@ public class MpvPlaybackService : IDisposable
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             
-            var playbackState = db.PlaybackStates.FirstOrDefault(s => s.MediaId == _currentMedia.Id);
+            var playbackState = db.PlaybackStates.FirstOrDefault(s => s.MediaId == media.Id);
             if (playbackState == null)
             {
-                playbackState = new PlaybackState { MediaId = _currentMedia.Id };
+                playbackState = new PlaybackState { MediaId = media.Id };
                 db.PlaybackStates.Add(playbackState);
             }
 

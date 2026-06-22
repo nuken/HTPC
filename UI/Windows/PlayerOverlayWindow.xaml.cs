@@ -413,6 +413,12 @@ public partial class PlayerOverlayWindow : Window
             
         WakeUpUi();
     }
+	
+	private void StatsButton_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleStatsForNerds();
+        WakeUpUi(); // Keep the controls visible when clicking
+    }
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {

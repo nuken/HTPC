@@ -196,6 +196,11 @@ public partial class SettingsView : UserControl
 	// --- NEW: Automatically physical-scroll the page to follow the remote focus! ---
     private void MainScroll_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
+        // FIX: If the user is actively clicking with the mouse, do NOT force a scroll!
+        // This prevents the screen from aggressively jumping when you click an item.
+        if (Mouse.LeftButton == MouseButtonState.Pressed)
+            return;
+
         if (e.NewFocus is FrameworkElement element)
         {
             ScrollToElement(MainScroll, element);

@@ -57,7 +57,7 @@ public partial class PlayerView : UserControl
             WindowStartupLocation = WindowStartupLocation.Manual
         };
 
-        // Track when the user drags or resizes the Main Window!
+        // Track when the user drags or resizes the Main Window
         var mainWindow = Application.Current.MainWindow;
         if (mainWindow != null)
         {
@@ -74,8 +74,9 @@ public partial class PlayerView : UserControl
         _overlayWindow.InitializeMedia(media);
         _overlayWindow.Show();
         
-        // Force the overlay to map exactly to the video size on boot
-        Application.Current.Dispatcher.BeginInvoke(new Action(SyncOverlayBounds), System.Windows.Threading.DispatcherPriority.Loaded);
+        // CRITICAL FIX: Delay the math until the XAML Layout Engine is 100% idle.
+        // This guarantees PointToScreen won't silently crash the app during screen transitions!
+        Application.Current.Dispatcher.BeginInvoke(new Action(SyncOverlayBounds), System.Windows.Threading.DispatcherPriority.ContextIdle);
 
         _overlayWindow.Activate();
         _overlayWindow.Focus();
@@ -88,34 +89,41 @@ public partial class PlayerView : UserControl
 
     private void SyncOverlayBounds()
     {
-        if (_overlayWindow == null || PresentationSource.FromVisual(this) == null) return;
+        // Don't calculate if the window isn't fully ready yet
+        if (_overlayWindow == null || !this.IsLoaded) return;
         
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget == null) return; 
+
         try 
         {
-            // 1. Get the raw physical screen coordinates of the video player
-            Point physicalScreenPos = this.PointToScreen(new Point(0, 0));
+            // 1. Get the physical pixel location of BOTH the Top-Left and Bottom-Right corners
+            Point physicalTopLeft = this.PointToScreen(new Point(0, 0));
+            Point physicalBottomRight = this.PointToScreen(new Point(this.ActualWidth, this.ActualHeight));
 
-            // 2. Get the current monitor's DPI scaling matrix
-            PresentationSource source = PresentationSource.FromVisual(this);
-            if (source?.CompositionTarget != null)
-            {
-                // 3. Convert physical pixels back into WPF Device-Independent Pixels (DIPs)
-                System.Windows.Media.Matrix transform = source.CompositionTarget.TransformFromDevice;
-                Point dipScreenPos = transform.Transform(physicalScreenPos);
+            // 2. Convert physical pixels back to WPF Device-Independent Pixels (DIPs)
+            var transform = source.CompositionTarget.TransformFromDevice;
+            Point dipTopLeft = transform.Transform(physicalTopLeft);
+            Point dipBottomRight = transform.Transform(physicalBottomRight);
 
-                // 4. Apply the perfectly scaled coordinates
-                _overlayWindow.Left = dipScreenPos.X;
-                _overlayWindow.Top = dipScreenPos.Y;
-                _overlayWindow.Width = this.ActualWidth;
-                _overlayWindow.Height = this.ActualHeight;
-            }
+            // 3. Calculate the true scaled width and height on the monitor
+            double trueScaledWidth = dipBottomRight.X - dipTopLeft.X;
+            double trueScaledHeight = dipBottomRight.Y - dipTopLeft.Y;
+
+            // 4. Apply exact coordinates to the overlay, perfectly matching the scaled video!
+            _overlayWindow.Left = dipTopLeft.X;
+            _overlayWindow.Top = dipTopLeft.Y;
+            _overlayWindow.Width = trueScaledWidth;
+            _overlayWindow.Height = trueScaledHeight;
         }
-        catch { /* Ignore if WPF visual tree isn't fully ready */ }
+        catch 
+        { 
+            // Failsafe catch block just in case of rapid screen swapping
+        }
     }
 
     public void StopPlayback()
     {
-        // Unhook the tracking events
         var mainWindow = Application.Current.MainWindow;
         if (mainWindow != null)
         {
@@ -131,7 +139,6 @@ public partial class PlayerView : UserControl
             _overlayWindow = null;
         }
 
-        // CRITICAL FIX: Restore the global mouse cursor so it isn't trapped invisible!
         Mouse.OverrideCursor = null; 
     }
 }
