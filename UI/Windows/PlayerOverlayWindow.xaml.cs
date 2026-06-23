@@ -240,14 +240,26 @@ public partial class PlayerOverlayWindow : Window
 
         if (MiniGuideList.Items.Count > 0)
         {
-            MiniGuideList.SelectedIndex = 0;
+            // 1. Break the scroll lock by clearing the old selection
+            MiniGuideList.SelectedIndex = -1;
             
+            // 2. The Focus Reclamation Hammer (Steal input back from MPV)
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
-                MiniGuideList.UpdateLayout();
-                var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(0) as ListBoxItem;
-                item?.Focus();
-            }), DispatcherPriority.Loaded);
+                MiniGuideList.UpdateLayout(); // Force WPF to redraw the list immediately
+                
+                var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                if (item != null)
+                {
+                    item.Focus();
+                    Keyboard.Focus(item); // Force hardware remote to this item
+                }
+                else
+                {
+                    MiniGuideList.Focus();
+                    Keyboard.Focus(MiniGuideList);
+                }
+            }), DispatcherPriority.Input); // Input priority ensures it beats MPV
         }
     }
 
@@ -255,7 +267,19 @@ public partial class PlayerOverlayWindow : Window
     {
         MiniGuideContainer.Visibility = Visibility.Collapsed;
         BottomBar.Visibility = Visibility.Visible; 
-        this.Focus(); 
+        
+        // Hand the remote control back to the main player window safely
+        var window = Window.GetWindow(this);
+        if (window != null)
+        {
+            window.Focus();
+            Keyboard.Focus(window);
+        }
+        else
+        {
+            this.Focus();
+            Keyboard.Focus(this);
+        }
     }
 
     private void PlayChannelFromMiniGuide(Channel channel)

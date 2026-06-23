@@ -122,12 +122,18 @@ public class MediaLibraryService
                         isFavorite = f2.ValueKind == JsonValueKind.Number && f2.GetInt64() > 0;
                     }
 
+                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+
                     _masterMoviesCache.Add(new MediaItem
                     {
+						Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
                         Title = string.IsNullOrEmpty(title) ? "Unknown Movie" : title,
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
-                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        
+                        // CHANGED THIS LINE
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        
                         CreatedAt = createdAt,
                         ReleaseYear = year,
                         Genres = ParseStringArray(element, "genres"),
@@ -178,15 +184,22 @@ public class MediaLibraryService
                             string id = element.GetProperty("ID").GetString() ?? "";
                             string episodeTitle = airing.TryGetProperty("EpisodeTitle", out var et) ? et.GetString() ?? "" : "";
                             string rawImage = airing.TryGetProperty("Image", out var img) ? img.GetString() ?? "" : "";
+                            
+                            // ADD THIS LINE
+                            string videoUrl = element.TryGetProperty("VideoURL", out var vUrl) ? vUrl.GetString() ?? "" : "";
 
                             episodes.Add(new MediaItem 
                             { 
+							    Path = GetStringOrNumber(element, "Path", "path"),
                                 Id = id, 
                                 Title = title, 
                                 CurrentShowTitle = episodeTitle,
                                 SeasonNumber = season,
                                 EpisodeNumber = epNum,
-                                StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                                
+                                // CHANGED THIS LINE
+                                StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                                
                                 PosterUrl = FormatImageUrl(baseUrl, rawImage),
                                 Commercials = ParseDoubleArray(element, "commercials")
                             });
@@ -691,13 +704,19 @@ public class MediaLibraryService
                         isFavorite = f2.ValueKind == JsonValueKind.Number && f2.GetInt64() > 0;
                     }
 
+                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+
                     _masterEpisodesCache.Add(new MediaItem
-                    {
+                    { 
+					    Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
                         Title = string.IsNullOrEmpty(showTitle) ? "Unknown Show" : showTitle,
                         CurrentShowTitle = episodeTitle,
                         PosterUrl = FormatImageUrl(baseUrl, imagePath),
-                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        
+                        // CHANGED THIS LINE
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        
                         Summary = summary,
                         SeasonNumber = season,
                         EpisodeNumber = episode,
@@ -723,7 +742,10 @@ public class MediaLibraryService
         if (activeServer == null) return new List<MediaItem>();
 
         string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        string apiUrl = $"{baseUrl}/api/v1/shows"; 
+        
+        // FIX 1: Ask the API to sort by recently added/updated
+        string apiUrl = $"{baseUrl}/api/v1/shows?sort=date_added&dir=desc"; 
+        
         var showsList = new List<MediaItem>();
 
         try
@@ -739,20 +761,27 @@ public class MediaLibraryService
                     string title = GetStringOrNumber(element, "title", "name");
                     string summary = GetStringOrNumber(element, "summary", "full_summary");
                     
-                    string imagePath = GetStringOrNumber(element, "image_url", "thumbnail_url", "image", "thumbnail", "art", "cover_url");
+                    string imagePath = GetStringOrNumber(element, "thumbnail_url", "image_url", "image", "thumbnail", "art", "cover_url");
                     if (Uri.TryCreate(imagePath, UriKind.Absolute, out Uri? uri) && uri.AbsolutePath == "/")
                     {
                         imagePath = ""; 
                     }
 
-                    long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
+                    // FIX 2: TV Show folders use 'last_recorded_at' to track true DVR recording events!
+                    long createdAt = 0;
+                    if (element.TryGetProperty("last_recorded_at", out var lProp) && lProp.ValueKind == JsonValueKind.Number) 
+                        createdAt = lProp.GetInt64();
+                    else if (element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number) 
+                        createdAt = cProp.GetInt64();
 
                     showsList.Add(new MediaItem
-                    {
+                    {   
+                        Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
                         Title = string.IsNullOrEmpty(title) ? "Unknown Show" : title,
                         Summary = summary,
-                        PosterUrl = FormatImageUrl(baseUrl, imagePath)                        
+                        PosterUrl = FormatImageUrl(baseUrl, imagePath),
+                        CreatedAt = createdAt
                     });
                 }
             }
@@ -772,6 +801,7 @@ public class MediaLibraryService
 
         string StripArticles(string title)
         {
+            if (string.IsNullOrWhiteSpace(title)) return "";
             string lower = title.ToLower();
             if (lower.StartsWith("the ")) return title.Substring(4);
             if (lower.StartsWith("a ")) return title.Substring(2);
@@ -783,6 +813,8 @@ public class MediaLibraryService
         {
             "Alphabetical (A-Z)" => showsQuery.OrderBy(s => StripArticles(s.Title)),
             "Alphabetical (Z-A)" => showsQuery.OrderByDescending(s => StripArticles(s.Title)),
+            
+            // FIX 3: Because we fixed the property parser above, this C# sort will now perfectly map to new recordings!
             _ => showsQuery.OrderByDescending(s => s.CreatedAt)
         };
 
@@ -840,7 +872,8 @@ public class MediaLibraryService
 
                     groups.Add(new MediaItem
                     {
-                        Id = id,
+                        Path = GetStringOrNumber(element, "Path", "path"),
+						Id = id,
                         Title = string.IsNullOrEmpty(name) ? "Unknown Folder" : name,
                         PosterUrl = FormatImageUrl(baseUrl, imagePath)
                     });
@@ -906,12 +939,17 @@ public class MediaLibraryService
                         isFavorite = f2.ValueKind == JsonValueKind.Number && f2.GetInt64() > 0;
                     }
 
+                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+
                     videos.Add(new MediaItem
                     {
-                        Id = id,
+                        Path = GetStringOrNumber(element, "Path", "path"),
+						Id = id,
                         Title = string.IsNullOrEmpty(title) ? "Unknown Video" : title,
                         PosterUrl = FormatImageUrl(baseUrl, imagePath),
-                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        
+                        // CHANGED THIS LINE
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         IsWatched = isWatched,
                         IsFavorite = isFavorite,
 						Commercials = ParseDoubleArray(element, "commercials")
@@ -942,7 +980,8 @@ public class MediaLibraryService
         if (activeServer == null) return new List<MediaItem>();
 
         string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        string apiUrl = $"{baseUrl}/api/v1/movies?order=desc"; 
+        // FIX: Explicitly tell the API to sort by creation date
+        string apiUrl = $"{baseUrl}/api/v1/movies?sort=createdAt&dir=desc"; 
 
         try
         {
@@ -961,20 +1000,25 @@ public class MediaLibraryService
                     string rawImageUrl = GetStringOrNumber(element, "image_url");
                     long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
                     
+                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+
                     movies.Add(new MediaItem
                     {
+                        Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
                         Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
-                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         CreatedAt = createdAt,
-						Commercials = ParseDoubleArray(element, "commercials")
+                        Commercials = ParseDoubleArray(element, "commercials")
                     });
-
-                    if (movies.Count >= limit) break;
+                    
+                    // We removed the 'break' statement here so it processes the whole list!
                 }
             }
-            return movies;
+            
+            // FIX: Bulletproof C# sorting. We mathematically force the absolute newest items to the front.
+            return movies.OrderByDescending(m => m.CreatedAt).Take(limit).ToList();
         }
         catch (Exception ex)
         {
@@ -989,7 +1033,7 @@ public class MediaLibraryService
         if (activeServer == null) return new List<MediaItem>();
 
         string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        string apiUrl = $"{baseUrl}/api/v1/episodes?order=desc"; 
+        string apiUrl = $"{baseUrl}/api/v1/episodes?sort=createdAt&dir=desc"; 
 
         try
         {
@@ -1009,21 +1053,24 @@ public class MediaLibraryService
                     string rawImageUrl = GetStringOrNumber(element, "thumbnail_url", "image_url");
                     long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
                     
+                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+
                     episodes.Add(new MediaItem
                     {
+                        Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
                         Title = showTitle,
                         CurrentShowTitle = episodeTitle, 
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
-                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         CreatedAt = createdAt,
-						Commercials = ParseDoubleArray(element, "commercials")
+                        Commercials = ParseDoubleArray(element, "commercials")
                     });
-
-                    if (episodes.Count >= limit) break;
                 }
             }
-            return episodes;
+            
+            // Bulletproof C# sorting
+            return episodes.OrderByDescending(e => e.CreatedAt).Take(limit).ToList();
         }
         catch (Exception ex)
         {
@@ -1071,14 +1118,21 @@ public class MediaLibraryService
                     {
                         playbackTime = pbElement.GetDouble();
                     }
+                    
+                    // ADD THIS LINE
+                    string videoUrl = element.TryGetProperty("VideoURL", out var vUrl) ? vUrl.GetString() ?? "" : "";
 
                     items.Add(new MediaItem
                     {
-                        Id = id,
+                        Path = GetStringOrNumber(element, "Path", "path"),
+						Id = id,
                         Title = title,
                         PosterUrl = posterUrl,
-                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                        Commercials = ParseDoubleArray(element, "commercials"), // Keep our skip engine working!
+                        
+                        // CHANGED THIS LINE
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        
+                        Commercials = ParseDoubleArray(element, "commercials"),
                         StartOffset = playbackTime // We will use this to tell MPV where to start
                     });
                 }
@@ -1098,7 +1152,7 @@ public class MediaLibraryService
         if (activeServer == null) return new List<MediaItem>();
 
         string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        string apiUrl = $"{baseUrl}/api/v1/videos?order=desc"; 
+        string apiUrl = $"{baseUrl}/api/v1/videos?sort=createdAt&dir=desc"; 
 
         try
         {
@@ -1134,23 +1188,26 @@ public class MediaLibraryService
                         isFavorite = f2.ValueKind == JsonValueKind.Number && f2.GetInt64() > 0;
                     }
 
+                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+
                     videos.Add(new MediaItem
                     {
+                        Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
                         Title = groupTitle,
                         CurrentShowTitle = videoTitle,
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
-                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         CreatedAt = createdAt,
                         IsWatched = isWatched,
                         IsFavorite = isFavorite,
-						Commercials = ParseDoubleArray(element, "commercials")
+                        Commercials = ParseDoubleArray(element, "commercials")
                     });
-
-                    if (videos.Count >= limit) break;
                 }
             }
-            return videos;
+            
+            // Bulletproof C# sorting
+            return videos.OrderByDescending(v => v.CreatedAt).Take(limit).ToList();
         }
         catch (Exception ex)
         {
@@ -1349,8 +1406,8 @@ public class MediaLibraryService
         if (isVirtualChannel && airing != null && !string.IsNullOrWhiteSpace(airing.Source))
         {
             string fileId = airing.Source.Split('/').Last();
-            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/dvr/files/{fileId}/hls/stream.m3u8";
-            
+            // media.StreamUrl = $"{baseUrl.TrimEnd('/')}/dvr/files/{fileId}/hls/stream.m3u8";
+            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/devices/ANY/channels/{channel.Number}/stream.mpg?format=ts";
             var airStart = airing.StartTime; 
             if (airStart != DateTime.MinValue)
             {
@@ -1364,5 +1421,42 @@ public class MediaLibraryService
         }
 
         return media;
+    }
+	
+	public async Task<MediaItem> ResolveStreamLinkAsync(MediaItem item)
+    {
+        // 1. If it's a normal recorded file, just return it instantly
+        if (string.IsNullOrWhiteSpace(item.Path)) return item;
+        if (!item.Path.EndsWith(".strm", StringComparison.OrdinalIgnoreCase) && 
+            !item.Path.EndsWith(".strmlnk", StringComparison.OrdinalIgnoreCase)) return item;
+
+        var server = _serverManager.GetActiveServer();
+        if (server == null) return item;
+
+        try 
+        {
+            // 2. Fetch the FULL file payload from Channels DVR
+            string url = $"http://{server.IpAddress}:{server.Port}/dvr/files/{item.Id}";
+            string json = await _httpClient.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(json);
+            
+            var streamLinks = ParseStringArray(doc.RootElement, "StreamLinks", "stream_links");
+            string videoUrl = GetStringOrNumber(doc.RootElement, "VideoURL", "video_url");
+
+            // 3. Feral Logic: Browser links first, Native proxy streams second
+            if (streamLinks.Count > 0) 
+            {
+                item.StreamUrl = streamLinks[0];
+                item.RequiresBrowser = true;
+            } 
+            else if (!string.IsNullOrWhiteSpace(videoUrl)) 
+            {
+                item.StreamUrl = videoUrl;
+                item.RequiresBrowser = false;
+            }
+        } 
+        catch { }
+        
+        return item;
     }
 }

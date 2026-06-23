@@ -27,6 +27,9 @@ public class MediaItem : INotifyPropertyChanged
     public List<string> Directors { get; set; } = new List<string>();
 	
 	public List<double>? Commercials { get; set; } = new List<double>();
+	
+	public string Path { get; set; } = string.Empty;
+    public bool RequiresBrowser { get; set; } = false;
     
     // --- DVR METADATA ---
     private bool _isWatched;

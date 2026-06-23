@@ -11,24 +11,27 @@
     <AssemblyName>HTPC</AssemblyName>
     
     <StartupObject>HTPC.Program</StartupObject>
-    
+    <ApplicationIcon>Assets\favicon.ico</ApplicationIcon>
     <TieredCompilation>true</TieredCompilation>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
-    
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <PlatformTarget>x64</PlatformTarget>
+    <NoWarn>NU1903;CS4014</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    
+     <Resource Include="Assets\favicon.ico" />
     <None Update="mpv-2.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.8" />
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.11" />
+    
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
   
   <ItemGroup>

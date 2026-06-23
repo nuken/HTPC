@@ -47,8 +47,22 @@ public partial class PlayerView : UserControl
         SyncOverlayBounds();
     }
 
-    public void StartPlayback(MediaItem media)
+    public async void StartPlayback(MediaItem media)
     {
+        // --- NEW FERAL INTERCEPT LOGIC ---
+        // Dynamically fetch stream links if this is a .strm or .strmlnk file
+        media = await _libraryService.ResolveStreamLinkAsync(media);
+
+        if (media.RequiresBrowser)
+        {
+            LaunchExternalBrowser(media.StreamUrl);
+            
+            // Auto-trigger the back button so the blank video player closes
+            OnBackRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+        // ---------------------------------
+
         _mpvService.PlayMedia(media);
 
         _overlayWindow = new PlayerOverlayWindow(_mpvService, _libraryService, _serverManager)
@@ -74,12 +88,31 @@ public partial class PlayerView : UserControl
         _overlayWindow.InitializeMedia(media);
         _overlayWindow.Show();
         
-        // CRITICAL FIX: Delay the math until the XAML Layout Engine is 100% idle.
-        // This guarantees PointToScreen won't silently crash the app during screen transitions!
         Application.Current.Dispatcher.BeginInvoke(new Action(SyncOverlayBounds), System.Windows.Threading.DispatcherPriority.ContextIdle);
 
         _overlayWindow.Activate();
         _overlayWindow.Focus();
+    }
+
+    // --- NEW: Feral Browser Launcher ---
+    private void LaunchExternalBrowser(string url)
+    {
+        try
+        {
+            if (url.Contains("netflix.com") || url.Contains("disneyplus.com") || url.Contains("youtube.com"))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { 
+                    FileName = "msedge", 
+                    Arguments = $"--app=\"{url}\" --start-fullscreen", 
+                    UseShellExecute = true 
+                });
+            }
+            else
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+        }
+        catch { }
     }
 
     private void MainWindow_BoundsChanged(object? sender, EventArgs e)

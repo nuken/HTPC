@@ -80,7 +80,7 @@ public partial class DashboardView : UserControl
         }
     }
 
-    // 2. THIS IS YOUR UPDATED ONLOADED METHOD
+    // 2. THIS IS YOUR UPDATED ONLOADED METHOD (Now 100% Null-Safe & Scope-Safe)
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         var activeServer = _serverManager.GetActiveServer();
@@ -92,41 +92,43 @@ public partial class DashboardView : UserControl
             return; 
         } 
         
-        // --- CACHED LOAD (Returning from Settings) ---
+        // --- 1. INSTANT UI LOAD ---
         if (FeaturedMovies.Count > 0) 
         {
             if (LoadingOverlay != null) LoadingOverlay.Visibility = Visibility.Collapsed;
-            
-            // WE CALL THE LAYOUT METHOD HERE SO IT UPDATES INSTANTLY!
             ApplyDashboardLayout();
             
-            // USE THE HEAVY HAMMER:
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
-                HomeNavBtn.Focus();          // <-- Changed
-                Keyboard.Focus(HomeNavBtn);  // <-- Changed
+                HomeNavBtn?.Focus();          
+                if (HomeNavBtn != null) Keyboard.Focus(HomeNavBtn);  
             }), DispatcherPriority.ApplicationIdle);
-            
-            return;
+        }
+        else
+        {
+            if (LoadingOverlay != null) LoadingOverlay.Visibility = Visibility.Visible;
         }
 
-        // --- FRESH LOAD (First Startup) ---
-        LoadingOverlay.Visibility = Visibility.Visible;
-
-        // 1. Fetch Collections
+        // --- 2. BACKGROUND DATA REFRESH ---
         var collections = await _libraryService.GetCollectionsAsync();
         var allChannels = new ChannelCollection { Id = "", Name = "All Channels" };
         collections.Insert(0, allChannels);
-        CollectionDropdown.ItemsSource = collections;
-
+        
+        // FIX: Declare savedCollection OUTSIDE the if-block so it can be used later!
         var savedCollection = collections.FirstOrDefault(c => c.Id == activeServer?.DefaultCollectionId);
-        CollectionDropdown.SelectedItem = savedCollection ?? allChannels;
+
+        // Safely update the dropdown
+        if (CollectionDropdown != null)
+        {
+            CollectionDropdown.ItemsSource = collections;
+            CollectionDropdown.SelectedItem = savedCollection ?? allChannels;
+        }
         _isUpdatingDropdown = false; 
 
-        // 2. AWAIT ALL SERVER DATA
         await LoadLiveTvData(savedCollection ?? allChannels);
         
         var movies = await _libraryService.GetFeaturedMoviesAsync();
+        FeaturedMovies.Clear(); 
         foreach (var movie in movies) FeaturedMovies.Add(movie);
         
         var episodes = await _libraryService.GetRecentEpisodesAsync(15);
@@ -139,23 +141,21 @@ public partial class DashboardView : UserControl
 
         var upNextItems = await _libraryService.GetUpNextAsync();
         UpNextQueue.Clear();
-        foreach (var item in upNextItems)
-        {
-            UpNextQueue.Add(item);
-        }
+        foreach (var item in upNextItems) UpNextQueue.Add(item);
         
-        // WE CALL THE LAYOUT METHOD HERE FOR THE INITIAL LOAD!
         ApplyDashboardLayout();
 
-        // --- THE DATA IS READY, HIDE THE LOADING SCREEN ---
-        LoadingOverlay.Visibility = Visibility.Collapsed;
-
-        // 3. Return focus to the UI
-        _ = Dispatcher.BeginInvoke(new Action(() => 
+        // --- 3. FINAL CLEANUP ---
+        // Safely check if the overlay exists before touching its properties
+        if (LoadingOverlay != null && LoadingOverlay.Visibility == Visibility.Visible)
         {
-            HomeNavBtn.Focus();
-            Keyboard.Focus(HomeNavBtn); // Sync hardware keyboard instantly!
-        }), DispatcherPriority.ApplicationIdle);
+            LoadingOverlay.Visibility = Visibility.Collapsed;
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                HomeNavBtn?.Focus();
+                if (HomeNavBtn != null) Keyboard.Focus(HomeNavBtn); 
+            }), DispatcherPriority.ApplicationIdle);
+        }
     }
 
     private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
