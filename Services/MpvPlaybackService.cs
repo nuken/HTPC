@@ -47,19 +47,37 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "osd-bar", "no");
         Libmpv.mpv_set_option_string(_mpvContext, "terminal", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "msg-level", "all=info"); 
-        Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
-        Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
-        Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
         
-        // --- PRE-BUFFER CACHE SETTINGS (Eliminates Stutter) ---
+        // --- 1. RENDERER STABILITY ---
+        // 'gpu' is significantly more stable for live broadcast/IPTV streams than the experimental 'gpu-next'
+        Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu");
+        Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
+        
+        // Use 'd3d11va' (Direct hardware decode) instead of 'auto-copy' to prevent the 15fps flip-book bottleneck
+        Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "d3d11va");
+        
+        // --- 2. THE DOUBLE-FRAME FIX ---
+        // Force hardware deinterlacing to cure the "frame on top of a frame" visual artifact
+        Libmpv.mpv_set_option_string(_mpvContext, "deinterlace", "yes");
+        
+        // --- 3. PRE-BUFFER CACHE SETTINGS ---
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000");
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
         Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
 
+        // --- NEW: LINKPI & HARDWARE ENCODER FIXES ---
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+genpts");
+        Libmpv.mpv_set_option_string(_mpvContext, "video-sync", "display-resample");
+        Libmpv.mpv_set_option_string(_mpvContext, "autosync", "30");
+
+        // --- NEW: THE "LAW & ORDER" TELECINE FIX ---
+        // Automatically detect 1080i broadcasts and reverse the 3:2 pulldown 
+        // to restore the cinematic 24fps pacing of shows like SVU.
+        Libmpv.mpv_set_option_string(_mpvContext, "deinterlace", "auto");
+
         int result = Libmpv.mpv_initialize(_mpvContext);
         if (result < 0) throw new Exception($"Failed to initialize libmpv context. Error: {result}");
-
         _positionTimer = new Timer(SaveCurrentPosition, null, Timeout.Infinite, Timeout.Infinite);
 		
 		// Format 5 is MPV_FORMAT_DOUBLE. We tell MPV to notify us whenever time-pos changes.
