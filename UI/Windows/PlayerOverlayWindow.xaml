@@ -187,10 +187,22 @@
                         <TextBlock x:Name="RemainingTimeText" Grid.Column="2" Text="-00:00:00" Foreground="#AAAAAA" FontSize="14" Margin="15,0,0,0" VerticalAlignment="Center"/>
                     </Grid>
 
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Button Content="⏮" Style="{StaticResource TransportButtonStyle}" ToolTip="-10 Seconds" Click="SkipBackward_Click"/>
+                   <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        
+                        <Button Content="⏪" Style="{StaticResource TransportButtonStyle}" ToolTip="Start from Beginning" Click="Restart_Click"/>
+
+                        <Button Content="⏮" Style="{StaticResource TransportButtonStyle}" ToolTip="-10 Seconds (Hold to Scan)" 
+                                PreviewMouseLeftButtonDown="SkipBackward_MouseDown" 
+                                PreviewMouseLeftButtonUp="Skip_MouseUp" 
+                                MouseLeave="Skip_MouseUp" />
+                                
                         <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource TransportButtonStyle}" FontSize="36" Margin="20,0" Click="PlayPause_Click"/>
-                        <Button Content="⏭" Style="{StaticResource TransportButtonStyle}" ToolTip="+30 Seconds" Click="SkipForward_Click"/>
+                        
+                        <Button Content="⏭" Style="{StaticResource TransportButtonStyle}" ToolTip="+30 Seconds (Hold to Scan)" 
+                                PreviewMouseLeftButtonDown="SkipForward_MouseDown" 
+                                PreviewMouseLeftButtonUp="Skip_MouseUp" 
+                                MouseLeave="Skip_MouseUp" />
+                        
                         <StackPanel Orientation="Horizontal" Margin="30,0,0,0">
                             <Button x:Name="AnimeButton" Content="✨" Style="{StaticResource TransportButtonStyle}" FontSize="24" ToolTip="Toggle Anime4K Upscaler" Margin="0,0,15,0" Click="Anime_Click" Visibility="Collapsed"/>
                             <Button x:Name="CcButton" Content="CC" Style="{StaticResource TransportButtonStyle}" FontSize="20" ToolTip="Toggle Subtitles" Margin="0,0,15,0" Click="CC_Click"/>

@@ -33,6 +33,12 @@ public partial class PlayerOverlayWindow : Window
     private DispatcherTimer _skipAdTimer;
     private double _skipTargetTime = 0;
     private bool _markersDrawn = false;
+	
+	private readonly DispatcherTimer _holdTimer;
+    private readonly DispatcherTimer _scrubTimer;
+    private int _scrubDirection = 0;
+    private bool _isScrubbing = false;
+    private bool _wasPlayingBeforeScrub = false;
     
     private MediaItem? _nextEpisodeToPlay;
     private bool _upNextPromptShown = false;
@@ -62,6 +68,15 @@ public partial class PlayerOverlayWindow : Window
 
         _statsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _statsTimer.Tick += StatsTimer_Tick;
+		
+		_holdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _holdTimer.Tick += HoldTimer_Tick;
+
+        _scrubTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        _scrubTimer.Tick += ScrubTimer_Tick;
+        
+        // Listen for when the user lets go of a button on the hardware remote
+        this.PreviewKeyUp += Window_PreviewKeyUp;
 
         this.Closed += Window_Closed;
     }
@@ -195,7 +210,9 @@ public partial class PlayerOverlayWindow : Window
                 if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
                 
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
-                    SkipBackward_Click(null!, null!);
+                {
+                    if (!e.IsRepeat) BeginSkipAction(-1); // Only start on the initial press
+                }
                 break;
 
             case HtpcCommand.Right:
@@ -203,7 +220,9 @@ public partial class PlayerOverlayWindow : Window
                 if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
                 
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
-                    SkipForward_Click(null!, null!);
+                {
+                    if (!e.IsRepeat) BeginSkipAction(1); // Only start on the initial press
+                }
                 break;
 
             case HtpcCommand.PlayPause:
@@ -216,6 +235,18 @@ public partial class PlayerOverlayWindow : Window
         }
 
         e.Handled = true;
+    }
+	
+	private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Left || command == HtpcCommand.Right || 
+            command == HtpcCommand.SkipBackward || command == HtpcCommand.SkipForward)
+        {
+            EndSkipAction();
+            e.Handled = true;
+        }
     }
     
     private void Back_Click(object? sender, RoutedEventArgs? e)
@@ -407,20 +438,83 @@ public partial class PlayerOverlayWindow : Window
         await Task.Delay(300);
         _isDragging = false;
     }
-
-    private void SkipBackward_Click(object sender, RoutedEventArgs e)
+	
+	// --- THE NEW SCRUB & SKIP ENGINE ---
+    
+    private void Restart_Click(object sender, RoutedEventArgs e)
     {
-        _mpvService.SeekRelative(-10); 
+        _mpvService.SeekAbsolute(0); 
         WakeUpUi();
         SyncTimer_Tick(null, EventArgs.Empty); 
     }
 
-    private void SkipForward_Click(object sender, RoutedEventArgs e)
+    private void BeginSkipAction(int direction)
     {
-        _mpvService.SeekRelative(30); 
-        WakeUpUi();
-        SyncTimer_Tick(null, EventArgs.Empty); 
+        if (_isLiveTv || _scrubDirection != 0) return; 
+        
+        _scrubDirection = direction;
+        _isScrubbing = false;
+        _holdTimer.Start();
     }
+
+    private void EndSkipAction()
+    {
+        if (_scrubDirection == 0) return;
+
+        _holdTimer.Stop();
+
+        if (_isScrubbing)
+        {
+            // We are done scrubbing, turn the video back on!
+            _scrubTimer.Stop();
+            _isScrubbing = false;
+            
+            if (_wasPlayingBeforeScrub) 
+            {
+                _mpvService.Resume();
+                _isPlaying = true;
+            }
+        }
+        else
+        {
+            // The timer never fired. It was just a quick tap!
+            if (_scrubDirection == 1) _mpvService.SeekRelative(30);
+            else _mpvService.SeekRelative(-10);
+        }
+
+        _scrubDirection = 0;
+        WakeUpUi();
+        SyncTimer_Tick(null, EventArgs.Empty);
+    }
+
+    private void HoldTimer_Tick(object? sender, EventArgs e)
+    {
+        _holdTimer.Stop();
+        _isScrubbing = true;
+        
+        // Pause the video while scanning so it doesn't aggressively stutter
+        _wasPlayingBeforeScrub = _isPlaying;
+        if (_isPlaying)
+        {
+            _mpvService.Pause();
+            _isPlaying = false; 
+        }
+
+        _scrubTimer.Start();
+    }
+
+    private void ScrubTimer_Tick(object? sender, EventArgs e)
+    {
+        // Jump 5 seconds every 100ms (Roughly 50x scan speed)
+        _mpvService.SeekRelative(5 * _scrubDirection);
+        WakeUpUi();
+        SyncTimer_Tick(null, EventArgs.Empty);
+    }
+
+    // --- MOUSE & TOUCH BINDINGS ---
+    private void SkipBackward_MouseDown(object sender, MouseButtonEventArgs e) { BeginSkipAction(-1); e.Handled = true; }
+    private void SkipForward_MouseDown(object sender, MouseButtonEventArgs e) { BeginSkipAction(1); e.Handled = true; }
+    private void Skip_MouseUp(object sender, MouseEventArgs e) { EndSkipAction(); }
 
     private void CC_Click(object sender, RoutedEventArgs e)
     {

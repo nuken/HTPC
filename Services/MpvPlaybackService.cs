@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,14 +16,14 @@ public class MpvPlaybackService : IDisposable
 {
     private readonly ILogger<MpvPlaybackService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-	
-	private readonly ServerManagerService _serverManager;
+    
+    private readonly ServerManagerService _serverManager;
     private static readonly System.Net.Http.HttpClient _httpClient = new System.Net.Http.HttpClient();
     
-	private IntPtr _mpvContext;    
+    private IntPtr _mpvContext;    
     private Timer? _positionTimer;
     private MediaItem? _currentMedia;
-	private Thread? _eventLoopThread;
+    private Thread? _eventLoopThread;
     private bool _isDisposed = false;
     private HashSet<int> _disabledCommercialBlocks = new HashSet<int>();
 
@@ -44,49 +45,38 @@ public class MpvPlaybackService : IDisposable
 
         _mpvContext = Libmpv.mpv_create();
         if (_mpvContext == IntPtr.Zero) throw new Exception("Failed to create libmpv context.");
+        
+        // --- FIX: Prevent Subtitles from Auto-Playing ---
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-visibility", "no");
+
         Libmpv.mpv_set_option_string(_mpvContext, "osd-bar", "no");
         Libmpv.mpv_set_option_string(_mpvContext, "terminal", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "msg-level", "all=info"); 
-        
-        // --- 1. RENDERER STABILITY ---
-        // 'gpu' is significantly more stable for live broadcast/IPTV streams than the experimental 'gpu-next'
-        Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu");
+        Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
+        Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy"); // Keeping your lighter hardware setting
         
-        // Use 'd3d11va' (Direct hardware decode) instead of 'auto-copy' to prevent the 15fps flip-book bottleneck
-        Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "d3d11va");
-        
-        // --- 2. THE DOUBLE-FRAME FIX ---
-        // Force hardware deinterlacing to cure the "frame on top of a frame" visual artifact
-        Libmpv.mpv_set_option_string(_mpvContext, "deinterlace", "yes");
-        
-        // --- 3. PRE-BUFFER CACHE SETTINGS ---
+        // --- PRE-BUFFER CACHE SETTINGS ---
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000");
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
-
-        // --- NEW: LINKPI & HARDWARE ENCODER FIXES ---
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+genpts");
-        Libmpv.mpv_set_option_string(_mpvContext, "video-sync", "display-resample");
-        Libmpv.mpv_set_option_string(_mpvContext, "autosync", "30");
-
-        // --- NEW: THE "LAW & ORDER" TELECINE FIX ---
-        // Automatically detect 1080i broadcasts and reverse the 3:2 pulldown 
-        // to restore the cinematic 24fps pacing of shows like SVU.
-        Libmpv.mpv_set_option_string(_mpvContext, "deinterlace", "auto");
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "8");
+        
+        // --- FIX: Prevent Hard Freezes on Network Dips ---
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "no");
+		Libmpv.mpv_set_option_string(_mpvContext, "pause", "no");
 
         int result = Libmpv.mpv_initialize(_mpvContext);
         if (result < 0) throw new Exception($"Failed to initialize libmpv context. Error: {result}");
-        _positionTimer = new Timer(SaveCurrentPosition, null, Timeout.Infinite, Timeout.Infinite);
-		
-		// Format 5 is MPV_FORMAT_DOUBLE. We tell MPV to notify us whenever time-pos changes.
-    Libmpv.mpv_observe_property(_mpvContext, 1, "time-pos", 5);
 
-    _eventLoopThread = new Thread(EventLoop);
-    _eventLoopThread.IsBackground = true;
-    _eventLoopThread.Name = "MpvEventLoop";
-    _eventLoopThread.Start();
+        _positionTimer = new Timer(SaveCurrentPosition, null, Timeout.Infinite, Timeout.Infinite);
+        
+        // Format 5 is MPV_FORMAT_DOUBLE. We tell MPV to notify us whenever time-pos changes.
+        Libmpv.mpv_observe_property(_mpvContext, 1, "time-pos", 5);
+
+        _eventLoopThread = new Thread(EventLoop);
+        _eventLoopThread.IsBackground = true;
+        _eventLoopThread.Name = "MpvEventLoop";
+        _eventLoopThread.Start();
     }
 
     public void AttachToWindow(IntPtr hwnd)
@@ -94,8 +84,8 @@ public class MpvPlaybackService : IDisposable
         string windowIdStr = hwnd.ToInt64().ToString();
         Libmpv.mpv_set_property_string(_mpvContext, "wid", windowIdStr);
     }
-	
-	public string GetMpvProperty(string propertyName)
+    
+    public string GetMpvProperty(string propertyName)
     {
         // Safely fetch the property string from MPV
         var ptr = HTPC.Core.Interop.Libmpv.mpv_get_property_string(_mpvContext, propertyName); 
@@ -141,8 +131,8 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{media.StreamUrl}\"");
         _positionTimer?.Change(5000, 5000);
     }
-	
-	private void EventLoop()
+    
+    private void EventLoop()
     {
         while (!_isDisposed)
         {
@@ -154,7 +144,6 @@ public class MpvPlaybackService : IDisposable
             // event_id 7 == MPV_EVENT_END_FILE (Video finished naturally)
             if (ev.event_id == 7)
             {
-                // FIX: Thread-safe snapshot
                 var media = _currentMedia;
                 if (media != null)
                 {
@@ -178,7 +167,6 @@ public class MpvPlaybackService : IDisposable
 
     private void EvaluateCommercialBoundaries(double currentSeconds)
     {
-        // FIX: Thread-safe snapshot to prevent NullReferenceException if Stop() is called
         var media = _currentMedia;
         if (media?.Commercials == null || media.Commercials.Count < 2) return;
 
@@ -215,8 +203,8 @@ public class MpvPlaybackService : IDisposable
             }
         }
     }
-	
-	private async Task SyncProgressToServerAsync(string fileId, double duration, double position)
+    
+    private async Task SyncProgressToServerAsync(string fileId, double duration, double position)
     {
         if (string.IsNullOrEmpty(fileId)) return;
 
@@ -252,30 +240,34 @@ public class MpvPlaybackService : IDisposable
             _logger.LogError($"Failed to sync playback progress to Channels DVR: {ex.Message}");
         }
     }
-	
-	private bool _isAnimeModeActive = false;
+    
+    private bool _isAnimeModeActive = false;
 
     public void ApplyUpscalerSettings()
     {
         var prefs = PreferencesManager.Load();
 
-        // 1. Clear any existing external shaders from the pipeline (crucial for hot-swapping)
-        Libmpv.mpv_set_option_string(_mpvContext, "glsl-shaders", "");
+        // --- FIX: Use PROPERTY to allow hot-swapping active shaders ---
+        Libmpv.mpv_set_property_string(_mpvContext, "glsl-shaders", "");
 
-        // 2. Set the high-quality native base (Tier 3)
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "scale", "spline36");
 
-        // 3. If upscaling is disabled globally, stop right here
         if (!prefs.EnableUpscaling) return;
 
         string shaderPath = string.Empty;
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-        // 4. Determine which shader to inject
         if (_isAnimeModeActive)
         {
-            shaderPath = System.IO.Path.Combine(baseDir, "Shaders", "Anime4K_Restore_CNN_M.glsl");
+            // --- FIX: Properly chained Anime4K algorithm ---
+            string restoreShader = System.IO.Path.Combine(baseDir, "Shaders", "Anime4K_Restore_CNN_M.glsl");
+            string upscaleShader = System.IO.Path.Combine(baseDir, "Shaders", "Anime4K_Upscale_CNN_x2_M.glsl");
+            
+            if (System.IO.File.Exists(restoreShader) && System.IO.File.Exists(upscaleShader))
+            {
+                shaderPath = $"{restoreShader};{upscaleShader}"; 
+            }
         }
         else if (prefs.UpscalerPreset == "RAVU")
         {
@@ -286,17 +278,17 @@ public class MpvPlaybackService : IDisposable
             shaderPath = System.IO.Path.Combine(baseDir, "Shaders", "ArtCNN_C4F32.glsl");
         }
 
-        // 5. Inject the shader directly into the active MPV renderer
-        if (!string.IsNullOrEmpty(shaderPath) && System.IO.File.Exists(shaderPath))
+        if (!string.IsNullOrEmpty(shaderPath))
         {
-            Libmpv.mpv_set_option_string(_mpvContext, "glsl-shaders", shaderPath);
+            // --- FIX: Use PROPERTY to inject into the active video stream ---
+            Libmpv.mpv_set_property_string(_mpvContext, "glsl-shaders", shaderPath);
         }
     }
 
     public bool ToggleAnimeMode()
     {
         _isAnimeModeActive = !_isAnimeModeActive;
-        ApplyUpscalerSettings(); // Instantly re-apply pipeline without stopping video
+        ApplyUpscalerSettings(); 
         return _isAnimeModeActive;
     }
     
@@ -317,13 +309,11 @@ public class MpvPlaybackService : IDisposable
         _positionTimer?.Change(Timeout.Infinite, Timeout.Infinite); 
         SaveCurrentPosition(null); 
 
-        // --- NEW: Sync to Channels Server ---
         if (_currentMedia != null)
         {
             double duration = GetDuration();
             double position = GetPosition();
             
-            // Fire and forget the async task so it doesn't block the UI from closing
             _ = SyncProgressToServerAsync(_currentMedia.Id, duration, position);
         }
 
@@ -373,7 +363,6 @@ public class MpvPlaybackService : IDisposable
 
     private void SaveCurrentPosition(object? state)
     {
-        // FIX: Thread-safe snapshot for the background timer
         var media = _currentMedia;
         if (media == null || _mpvContext == IntPtr.Zero) return;
 
@@ -400,10 +389,24 @@ public class MpvPlaybackService : IDisposable
 
     public void Dispose()
     {
+        if (_isDisposed) return;
         _isDisposed = true; // Signals the while-loop to stop
+
         _positionTimer?.Dispose();
+
         if (_mpvContext != IntPtr.Zero)
         {
+            // --- FIX: Safe thread teardown ---
+            // Send an explicit quit command to unblock mpv_wait_event gracefully
+            Libmpv.mpv_command_string(_mpvContext, "quit");
+
+            // Wait up to 1 second for the event loop thread to finish processing and exit
+            if (_eventLoopThread != null && _eventLoopThread.IsAlive)
+            {
+                _eventLoopThread.Join(1000); 
+            }
+
+            // Safely destroy the context
             Libmpv.mpv_terminate_destroy(_mpvContext);
             _mpvContext = IntPtr.Zero;
         }

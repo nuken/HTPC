@@ -155,7 +155,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="20,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
             <Button x:Name="HomeNavBtn" Content="Home" Style="{StaticResource NavPillActiveStyle}"/>
             <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>

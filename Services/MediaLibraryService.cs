@@ -1405,18 +1405,24 @@ public class MediaLibraryService
 
         if (isVirtualChannel && airing != null && !string.IsNullOrWhiteSpace(airing.Source))
         {
+            // Extract the actual file ID the virtual channel is currently playing
             string fileId = airing.Source.Split('/').Last();
-            // media.StreamUrl = $"{baseUrl.TrimEnd('/')}/dvr/files/{fileId}/hls/stream.m3u8";
-            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/devices/ANY/channels/{channel.Number}/stream.mpg?format=ts";
+            
+            // FIX 1: Stream the raw file directly to bypass the live-remuxer and avoid timestamp discontinuities
+            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/dvr/files/{fileId}/stream.mpg?format=ts";
+            
             var airStart = airing.StartTime; 
             if (airStart != DateTime.MinValue)
             {
                 int offset = (int)(DateTime.Now - airStart).TotalSeconds;
-                media.StartOffsetSeconds = offset > 0 ? offset : 0;
+                
+                // FIX 2: Use the correct 'StartOffset' property that your MpvPlaybackService expects
+                media.StartOffset = offset > 0 ? offset : 0;
             }
         }
         else
         {
+            // Standard live TV channels remain untouched
             media.StreamUrl = $"{baseUrl.TrimEnd('/')}/devices/ANY/channels/{channel.Number}/hls/master.m3u8";
         }
 
