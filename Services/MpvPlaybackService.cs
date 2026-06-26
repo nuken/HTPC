@@ -45,25 +45,36 @@ public class MpvPlaybackService : IDisposable
 
         _mpvContext = Libmpv.mpv_create();
         if (_mpvContext == IntPtr.Zero) throw new Exception("Failed to create libmpv context.");
-        
-        // --- FIX: Prevent Subtitles from Auto-Playing ---
-        Libmpv.mpv_set_option_string(_mpvContext, "sub-visibility", "no");
-
         Libmpv.mpv_set_option_string(_mpvContext, "osd-bar", "no");
+        
+        // 1. FIX THE "ODD TEXT": This totally silences MPV's system messages
+        Libmpv.mpv_set_option_string(_mpvContext, "osd-level", "0"); 
+        
         Libmpv.mpv_set_option_string(_mpvContext, "terminal", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "msg-level", "all=info"); 
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
-        Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy"); // Keeping your lighter hardware setting
+        Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
         
         // --- PRE-BUFFER CACHE SETTINGS ---
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000");
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "8");
-        
-        // --- FIX: Prevent Hard Freezes on Network Dips ---
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "no");
-		Libmpv.mpv_set_option_string(_mpvContext, "pause", "no");
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
+
+        // --- HARDWARE ENCODER FIXES ---
+        // 2. FIX THE SYNC: Removed 'fflags=+genpts'. display-resample is enough to keep LinkPi smooth!
+        Libmpv.mpv_set_option_string(_mpvContext, "video-sync", "display-resample");
+        Libmpv.mpv_set_option_string(_mpvContext, "autosync", "30");
+        Libmpv.mpv_set_option_string(_mpvContext, "deinterlace", "auto");
+
+        // --- CLOSED CAPTION & SUBTITLE STYLING ---
+        // 3. FIX THE MOVIES: Start with CCs loaded but physically hidden
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-visibility", "no"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-font-size", "45"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-color", "#FFFFFFFF"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-border-color", "#FF000000"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-border-size", "3");
 
         int result = Libmpv.mpv_initialize(_mpvContext);
         if (result < 0) throw new Exception($"Failed to initialize libmpv context. Error: {result}");
@@ -358,9 +369,11 @@ public class MpvPlaybackService : IDisposable
     public void CycleSubtitles()
     {
         if (_mpvContext == IntPtr.Zero) return;
-        Libmpv.mpv_command_string(_mpvContext, "cycle sub");
+        
+        // FIX: Toggle the visual layer on and off instead of changing the underlying track
+        Libmpv.mpv_command_string(_mpvContext, "cycle sub-visibility");
     }
-
+	
     private void SaveCurrentPosition(object? state)
     {
         var media = _currentMedia;

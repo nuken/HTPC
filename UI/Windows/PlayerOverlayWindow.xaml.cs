@@ -180,13 +180,33 @@ public partial class PlayerOverlayWindow : Window
                 break;
 
             case HtpcCommand.Up:
-                if (_isLiveTv && MiniGuideContainer.Visibility == Visibility.Collapsed) 
-                    await OpenMiniGuideAsync(); 
+                if (_isLiveTv && MiniGuideContainer.Visibility == Visibility.Collapsed)
+                {
+                    await OpenMiniGuideAsync();
+                }
+                else if (MiniGuideContainer.Visibility == Visibility.Collapsed)
+                {
+                    // FOCUS BRIDGE: Explicitly escape Volume Slider UP to the Timeline
+                    if (Keyboard.FocusedElement is Slider s && s.Name == "VolumeSlider")
+                        TimelineSlider.Focus();
+                    else
+                        (Keyboard.FocusedElement as FrameworkElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.Up));
+                }
                 break;
 
             case HtpcCommand.Down:
-                if (MiniGuideContainer.Visibility == Visibility.Visible) 
+                if (MiniGuideContainer.Visibility == Visibility.Visible)
+                {
                     CloseMiniGuide();
+                }
+                else if (MiniGuideContainer.Visibility == Visibility.Collapsed)
+                {
+                    // FOCUS BRIDGE: Explicitly escape Volume Slider DOWN back to the Button row
+                    if (Keyboard.FocusedElement is Slider s && s.Name == "VolumeSlider")
+                        StatsButton.Focus();
+                    else
+                        (Keyboard.FocusedElement as FrameworkElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.Down));
+                }
                 break;
 
             case HtpcCommand.Select:
@@ -199,6 +219,11 @@ public partial class PlayerOverlayWindow : Window
                 {
                     UpNextButton_Click(null!, null!);
                 }
+                else if (Keyboard.FocusedElement is Button)
+                {
+                    // Let WPF natively click whichever button is currently highlighted (CC, Stats, Skip, etc.)
+                    return; 
+                }
                 else
                 {
                     PlayPause_Click(null!, null!);
@@ -208,20 +233,55 @@ public partial class PlayerOverlayWindow : Window
             case HtpcCommand.Left:
             case HtpcCommand.SkipBackward: 
                 if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
-                
+
+                if (command == HtpcCommand.Left)
+                {
+                    if (Keyboard.FocusedElement is Button)
+                    {
+                        (Keyboard.FocusedElement as FrameworkElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.Left));
+                        break;
+                    }
+                    else if (Keyboard.FocusedElement is Slider s && s.Name == "VolumeSlider")
+                    {
+                        // EDGE ESCAPE: If volume is 0 and they press Left, jump back to Stats button
+                        if (s.Value <= s.Minimum)
+                        {
+                            StatsButton.Focus();
+                            break;
+                        }
+                        return; // Let WPF natively slide the volume thumb
+                    }
+                }
+
+                // If focus is on the Timeline, scrub!
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
                 {
-                    if (!e.IsRepeat) BeginSkipAction(-1); // Only start on the initial press
+                    if (!e.IsRepeat) BeginSkipAction(-1); 
                 }
                 break;
 
             case HtpcCommand.Right:
             case HtpcCommand.SkipForward:
                 if (MiniGuideContainer.Visibility == Visibility.Visible) return; 
-                
+
+                if (command == HtpcCommand.Right)
+                {
+                    // If focus is in the control buttons, navigate UI instead of scrubbing
+                    if (Keyboard.FocusedElement is Button)
+                    {
+                        (Keyboard.FocusedElement as FrameworkElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.Right));
+                        break;
+                    }
+                    else if (Keyboard.FocusedElement is Slider s && s.Name == "VolumeSlider")
+                    {
+                        return; // Let WPF natively slide the volume thumb
+                    }
+                }
+
+                // If focus is on the Timeline, scrub!
                 if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
                 {
-                    if (!e.IsRepeat) BeginSkipAction(1); // Only start on the initial press
+                    if (!e.IsRepeat) BeginSkipAction(1); 
                 }
                 break;
 
@@ -518,7 +578,17 @@ public partial class PlayerOverlayWindow : Window
 
     private void CC_Click(object sender, RoutedEventArgs e)
     {
+        // Toggle the visual layer on/off
         _mpvService.CycleSubtitles();
+        
+        // Fetch the exact visibility state instantly
+        string currentVis = _mpvService.GetMpvProperty("sub-visibility");
+        bool isCcActive = currentVis == "yes";
+
+        // Turn the CC button Blue when ON, White when OFF
+        CcButton.Foreground = new System.Windows.Media.SolidColorBrush(
+            isCcActive ? System.Windows.Media.Color.FromRgb(0, 164, 239) : System.Windows.Media.Colors.White);
+
         WakeUpUi();
     }
     
@@ -625,7 +695,7 @@ public partial class PlayerOverlayWindow : Window
         }
     }
 
-    private void WakeUpUi()
+   private void WakeUpUi()
     {
         Mouse.OverrideCursor = null;
 
@@ -633,6 +703,16 @@ public partial class PlayerOverlayWindow : Window
         {
             _isControlsVisible = true;
             FadeControls(1.0); 
+        }
+
+        // AGGRESSIVE FOCUS FIX: Evaluate focus every time you touch the remote, 
+        // not just when the UI fades in. If focus is lost in the void (Window/Grid), 
+        // instantly snap it back to Play/Pause.
+        var currentFocus = Keyboard.FocusedElement as FrameworkElement;
+        if (currentFocus == null || currentFocus == this || currentFocus is Grid || currentFocus is Border)
+        {
+            PlayPauseButton.Focus();
+            Keyboard.Focus(PlayPauseButton);
         }
 
         _idleTimer?.Stop();
