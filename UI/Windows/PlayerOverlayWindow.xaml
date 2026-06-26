@@ -27,7 +27,7 @@
                                 <Setter Property="Foreground" Value="#00A4EF"/>
                                 <Setter Property="RenderTransform">
                                     <Setter.Value>
-                                        <ScaleTransform ScaleX="1.3" ScaleY="1.3"/>
+                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
                                     </Setter.Value>
                                 </Setter>
                                 <Setter Property="Effect">
@@ -69,6 +69,7 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+		
 
         <Style x:Key="MiniGuideItemStyle" TargetType="ListBoxItem">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -240,7 +241,7 @@
                                 PreviewMouseLeftButtonUp="Skip_MouseUp" 
                                 MouseLeave="Skip_MouseUp" />
                                 
-                        <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource TransportButtonStyle}" FontSize="36" Margin="20,0" Click="PlayPause_Click"/>
+                        <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource TransportButtonStyle}" Margin="20,0" Click="PlayPause_Click"/>
                         
                         <Button Content="⏭" Style="{StaticResource TransportButtonStyle}" ToolTip="+30 Seconds (Hold to Scan)" 
                                 PreviewMouseLeftButtonDown="SkipForward_MouseDown" 

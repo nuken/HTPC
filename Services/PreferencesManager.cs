@@ -28,7 +28,7 @@ public class AppPreferences
     public double UiScaleMultiplier { get; set; } = 1.0; 
 	public string LastMultiviewCollection { get; set; } = "All Channels";
 	public int CommercialSkipMode { get; set; } = 2;
-	
+	public int Volume { get; set; } = 100;
 	// --- NEW: MPV ENGINE SETTINGS ---
     public string HardwareDecoding { get; set; } = "d3d11va";
     public string VideoSync { get; set; } = "audio";

@@ -77,12 +77,32 @@ public partial class PlayerOverlayWindow : Window
         
         // Listen for when the user lets go of a button on the hardware remote
         this.PreviewKeyUp += Window_PreviewKeyUp;
+		if (Application.Current.MainWindow != null)
+        {
+            Application.Current.MainWindow.StateChanged += MainWindow_StateChanged;
+        }
 
         this.Closed += Window_Closed;
+    }
+	
+	private void MainWindow_StateChanged(object? sender, EventArgs e)
+    {
+        // When fullscreen is toggled, the OS steals focus. 
+        // This snatches it back with Input Priority to ensure the remote keeps working.
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            this.Focus();
+            WakeUpUi(); 
+        }), DispatcherPriority.Input);
     }
     
     private void Window_Closed(object? sender, EventArgs e)
     {
+        if (Application.Current.MainWindow != null)
+        {
+            Application.Current.MainWindow.StateChanged -= MainWindow_StateChanged;
+        }
+        
         _mpvService.OnCommercialPrompt -= ShowSkipAdPrompt; 
         _idleTimer?.Stop();
         _syncTimer?.Stop();
@@ -127,7 +147,7 @@ public partial class PlayerOverlayWindow : Window
         
         var prefs = PreferencesManager.Load();
         AnimeButton.Visibility = prefs.EnableUpscaling ? Visibility.Visible : Visibility.Collapsed;
-        
+        VolumeSlider.Value = prefs.Volume;
         AnimeButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White);
         
         _syncTimer.Start(); 
@@ -480,8 +500,18 @@ public partial class PlayerOverlayWindow : Window
     
     private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        _mpvService?.SetVolume((int)e.NewValue);
-        WakeUpUi();
+        if (_mpvService != null)
+        {
+            int newVolume = (int)e.NewValue;
+            _mpvService.SetVolume(newVolume);
+            WakeUpUi();
+
+            // NEW: Save the volume so it survives a restart
+            var prefs = PreferencesManager.Load();
+            prefs.Volume = newVolume;
+            // Assuming your manager has a save method, it usually looks like this:
+            PreferencesManager.Save(prefs); 
+        }
     }
 
     private void Timeline_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) 
