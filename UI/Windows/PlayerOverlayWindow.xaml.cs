@@ -187,6 +187,48 @@ public partial class PlayerOverlayWindow : Window
             e.Handled = true;
             return;
         }
+		
+		if (e.Key == Key.Space)
+        {
+            // Don't trigger if they are actively navigating the guide
+            if (MiniGuideContainer.Visibility == Visibility.Collapsed)
+            {
+                PlayPause_Click(null!, null!);
+            }
+            e.Handled = true; return;
+        }
+
+        if (e.Key == Key.C)
+        {
+            CC_Click(null!, null!);
+            e.Handled = true; return;
+        }
+
+        if (e.Key == Key.A)
+        {
+            Anime_Click(null!, null!);
+            e.Handled = true; return;
+        }
+
+        if (e.Key == Key.M)
+        {
+            _mpvService.ToggleMute();
+            e.Handled = true; return;
+        }
+
+        // Handle Volume Up (+ or =)
+        if (e.Key == Key.OemPlus || e.Key == Key.Add)
+        {
+            if (VolumeSlider.Value < 100) VolumeSlider.Value += 5;
+            e.Handled = true; return;
+        }
+
+        // Handle Volume Down (- or _)
+        if (e.Key == Key.OemMinus || e.Key == Key.Subtract)
+        {
+            if (VolumeSlider.Value > 0) VolumeSlider.Value -= 5;
+            e.Handled = true; return;
+        }
 
         var command = InputMapper.GetCommand(e.Key);
 
@@ -606,14 +648,16 @@ public partial class PlayerOverlayWindow : Window
     private void SkipForward_MouseDown(object sender, MouseButtonEventArgs e) { BeginSkipAction(1); e.Handled = true; }
     private void Skip_MouseUp(object sender, MouseEventArgs e) { EndSkipAction(); }
 
-    private void CC_Click(object sender, RoutedEventArgs e)
+    private async void CC_Click(object sender, RoutedEventArgs e)
     {
-        // Toggle the visual layer on/off
         _mpvService.CycleSubtitles();
         
-        // Fetch the exact visibility state instantly
-        string currentVis = _mpvService.GetMpvProperty("sub-visibility");
-        bool isCcActive = currentVis == "yes";
+        // Give MPV 50ms to officially change the subtitle track internally
+        await Task.Delay(50);
+        
+        // Fetch the exact active track ID
+        string currentSid = _mpvService.GetMpvProperty("sid");
+        bool isCcActive = currentSid != "no" && currentSid != "N/A" && !string.IsNullOrWhiteSpace(currentSid);
 
         // Turn the CC button Blue when ON, White when OFF
         CcButton.Foreground = new System.Windows.Media.SolidColorBrush(

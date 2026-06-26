@@ -243,6 +243,26 @@ public partial class MultiviewPlayerWindow : Window
             e.Handled = true;
             return;
         }
+		
+		if (e.Key == Key.M)
+        {
+            // Send the raw mute toggle command directly to the active MPV context
+            if (_mpvContexts[_activeIndex] != IntPtr.Zero)
+            {
+                Libmpv.mpv_command_string(_mpvContexts[_activeIndex], "cycle mute");
+            }
+            e.Handled = true; return;
+        }
+
+        if (e.Key == Key.C)
+        {
+            // Send the raw subtitle visibility toggle to the active MPV context
+            if (_mpvContexts[_activeIndex] != IntPtr.Zero)
+            {
+                Libmpv.mpv_command_string(_mpvContexts[_activeIndex], "cycle sub-visibility");
+            }
+            e.Handled = true; return;
+        }
 
         // Map remote D-pad commands to standard keys for the navigation handler
         Key navKey = e.Key;

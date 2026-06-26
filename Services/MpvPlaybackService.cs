@@ -70,8 +70,15 @@ public class MpvPlaybackService : IDisposable
 
         // --- CLOSED CAPTION & SUBTITLE STYLING ---
         // 3. FIX THE MOVIES: Start with CCs loaded but physically hidden
-        Libmpv.mpv_set_option_string(_mpvContext, "sub-visibility", "no"); 
-        Libmpv.mpv_set_option_string(_mpvContext, "sub-font-size", "45"); 
+		// --- CLOSED CAPTION & SUBTITLE STYLING ---
+        Libmpv.mpv_set_option_string(_mpvContext, "slang", "eng,en,en-US");
+        Libmpv.mpv_set_option_string(_mpvContext, "alang", "eng,en,en-US");
+        
+        // FIX: Make the subtitle layer visible, but default the active track to 'no' (off)
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-visibility", "yes"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "sid", "no"); 
+        
+        Libmpv.mpv_set_option_string(_mpvContext, "sub-font-size", "45");
         Libmpv.mpv_set_option_string(_mpvContext, "sub-color", "#FFFFFFFF"); 
         Libmpv.mpv_set_option_string(_mpvContext, "sub-border-color", "#FF000000"); 
         Libmpv.mpv_set_option_string(_mpvContext, "sub-border-size", "3");
@@ -119,27 +126,32 @@ public class MpvPlaybackService : IDisposable
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var state = db.PlaybackStates.FirstOrDefault(s => s.MediaId == media.Id);
             
-            // Priority 1: Channels API explicitly gave us a StartOffset (from the Up Next queue)
             if (media.StartOffset > 0)
             {
                 Libmpv.mpv_set_option_string(_mpvContext, "start", media.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 _logger.LogInformation($"Up Next: Resuming at {media.StartOffset} seconds.");
             }
-            // Priority 2: Otherwise, check the local database like normal
             else if (state != null && state.PositionTicks > 0)
             {
                 double startSeconds = TimeSpan.FromTicks(state.PositionTicks).TotalSeconds;
                 Libmpv.mpv_set_option_string(_mpvContext, "start", startSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 _logger.LogInformation($"Resuming at {startSeconds} seconds.");
             }
-            // Fallback: Start from the beginning
             else
             {
                 Libmpv.mpv_set_option_string(_mpvContext, "start", "0");
             }
         }
 
+        // 1. THE FIX: Load the main video stream ONCE, after the start time is set!
         Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{media.StreamUrl}\"");
+
+        // 2. Explicitly inject the external subtitle file
+        if (!string.IsNullOrWhiteSpace(media.SubtitleUrl))
+        {
+            Libmpv.mpv_command_string(_mpvContext, $"sub-add \"{media.SubtitleUrl}\"");
+        }
+
         _positionTimer?.Change(5000, 5000);
     }
     
@@ -370,8 +382,16 @@ public class MpvPlaybackService : IDisposable
     {
         if (_mpvContext == IntPtr.Zero) return;
         
-        // FIX: Toggle the visual layer on and off instead of changing the underlying track
-        Libmpv.mpv_command_string(_mpvContext, "cycle sub-visibility");
+        // FIX: Cycle through the actual subtitle tracks (1, 2, 3, no) 
+        Libmpv.mpv_command_string(_mpvContext, "cycle sub");
+    }
+	
+	public void ToggleMute()
+    {
+        if (_mpvContext == IntPtr.Zero) return;
+        
+        // Tells MPV to toggle its internal mute state on/off
+        Libmpv.mpv_command_string(_mpvContext, "cycle mute");
     }
 	
     private void SaveCurrentPosition(object? state)

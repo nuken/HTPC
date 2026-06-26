@@ -128,6 +128,7 @@ public class MediaLibraryService
                     {
 						Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
+						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                         Title = string.IsNullOrEmpty(title) ? "Unknown Movie" : title,
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
                         
@@ -192,6 +193,7 @@ public class MediaLibraryService
                             { 
 							    Path = GetStringOrNumber(element, "Path", "path"),
                                 Id = id, 
+								SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                                 Title = title, 
                                 CurrentShowTitle = episodeTitle,
                                 SeasonNumber = season,
@@ -710,6 +712,7 @@ public class MediaLibraryService
                     { 
 					    Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
+						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                         Title = string.IsNullOrEmpty(showTitle) ? "Unknown Show" : showTitle,
                         CurrentShowTitle = episodeTitle,
                         PosterUrl = FormatImageUrl(baseUrl, imagePath),
@@ -945,6 +948,7 @@ public class MediaLibraryService
                     {
                         Path = GetStringOrNumber(element, "Path", "path"),
 						Id = id,
+						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                         Title = string.IsNullOrEmpty(title) ? "Unknown Video" : title,
                         PosterUrl = FormatImageUrl(baseUrl, imagePath),
                         
@@ -1006,6 +1010,7 @@ public class MediaLibraryService
                     {
                         Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
+						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                         Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
                         StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
@@ -1059,6 +1064,7 @@ public class MediaLibraryService
                     {
                         Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
+						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                         Title = showTitle,
                         CurrentShowTitle = episodeTitle, 
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),
@@ -1126,6 +1132,7 @@ public class MediaLibraryService
                     {
                         Path = GetStringOrNumber(element, "Path", "path"),
 						Id = id,
+						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                         Title = title,
                         PosterUrl = posterUrl,
                         
@@ -1194,6 +1201,7 @@ public class MediaLibraryService
                     {
                         Path = GetStringOrNumber(element, "Path", "path"),
                         Id = id,
+						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
                         Title = groupTitle,
                         CurrentShowTitle = videoTitle,
                         PosterUrl = FormatImageUrl(baseUrl, rawImageUrl),

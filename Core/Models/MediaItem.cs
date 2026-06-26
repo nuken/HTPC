@@ -12,6 +12,7 @@ public class MediaItem : INotifyPropertyChanged
     public string Title { get; set; } = string.Empty;
     public string PosterUrl { get; set; } = string.Empty;
     public string StreamUrl { get; set; } = string.Empty;
+	public string? SubtitleUrl { get; set; }
     
     public bool IsLiveTv { get; set; } = false;
     public DateTime StartTime { get; set; }
