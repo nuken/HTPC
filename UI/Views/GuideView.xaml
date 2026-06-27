@@ -360,7 +360,7 @@
                                                                     <Border Grid.Column="0" Width="4" Background="{Binding CategoryColor}" CornerRadius="2" Margin="0,0,10,0"/>
                                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                                         <TextBlock Text="{Binding DisplayTitle}" Foreground="White" FontWeight="Bold" FontSize="14" TextTrimming="CharacterEllipsis"/>
-                                                                        <TextBlock Text="{Binding DisplaySummary}" Foreground="#AAAAAA" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+                                                                        
                                                                     </StackPanel>
                                                                 </Grid>
                                                             </Border>
