@@ -412,10 +412,17 @@ public partial class MultiviewPlayerWindow : Window
     {
         for (int i = 0; i < 4; i++)
         {
+            // Set BorderThickness based on layout: 
+            // 4 if Quad, 0 (hidden) for all others
+            _borders[i].BorderThickness = (_currentLayout == LayoutMode.Quad) ? new Thickness(4) : new Thickness(0);
+
             if (i == _activeIndex)
             {
-                _borders[i].BorderBrush = new SolidColorBrush(Colors.White);
-                if (_currentLayout != LayoutMode.PiP) Panel.SetZIndex(_borders[i], 1); 
+                // Only apply the white highlight if we are in Quad mode
+                _borders[i].BorderBrush = (_currentLayout == LayoutMode.Quad) ? new SolidColorBrush(Colors.White) : new SolidColorBrush(Colors.Transparent);
+                
+                if (_currentLayout != LayoutMode.PiP) 
+                    Panel.SetZIndex(_borders[i], 1); 
             }
             else
             {

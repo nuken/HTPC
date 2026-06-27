@@ -22,24 +22,35 @@
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#22FFFFFF"/>
-                                <Setter Property="Foreground" Value="#00A4EF"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                    </Setter.Value>
-                                </Setter>
-                                <Setter Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect BlurRadius="15" ShadowDepth="0" Color="#00A4EF" Opacity="0.8"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="#00A4EF"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
+    <Trigger Property="IsKeyboardFocused" Value="False">
+        <Setter TargetName="bg" Property="Background" Value="Transparent"/>
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Effect" Value="{x:Null}"/>
+    </Trigger>
+
+    <Trigger Property="IsKeyboardFocused" Value="True">
+        <Setter TargetName="bg" Property="Background" Value="#22FFFFFF"/>
+        <Setter Property="Foreground" Value="#dce1e3"/>
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="15" ShadowDepth="0" Color="#00A4EF" Opacity="0.8"/>
+            </Setter.Value>
+        </Setter>
+    </Trigger>
+
+    <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Foreground" Value="#00A4EF"/>
+    </Trigger>
+</ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -234,24 +245,24 @@
 
                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         
-                        <Button Content="⏪" Style="{StaticResource TransportButtonStyle}" ToolTip="Start from Beginning" Click="Restart_Click"/>
+                        <Button Content="⏪" Style="{StaticResource TransportButtonStyle}" Click="Restart_Click"/>
 
-                        <Button Content="⏮" Style="{StaticResource TransportButtonStyle}" ToolTip="-10 Seconds (Hold to Scan)" 
+                        <Button Content="⏮" Style="{StaticResource TransportButtonStyle}" 
                                 PreviewMouseLeftButtonDown="SkipBackward_MouseDown" 
                                 PreviewMouseLeftButtonUp="Skip_MouseUp" 
                                 MouseLeave="Skip_MouseUp" />
                                 
                         <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource TransportButtonStyle}" Margin="20,0" Click="PlayPause_Click"/>
                         
-                        <Button Content="⏭" Style="{StaticResource TransportButtonStyle}" ToolTip="+30 Seconds (Hold to Scan)" 
+                        <Button Content="⏭" Style="{StaticResource TransportButtonStyle}"
                                 PreviewMouseLeftButtonDown="SkipForward_MouseDown" 
                                 PreviewMouseLeftButtonUp="Skip_MouseUp" 
                                 MouseLeave="Skip_MouseUp" />
                         
                         <StackPanel Orientation="Horizontal" Margin="30,0,0,0">
-                            <Button x:Name="AnimeButton" Content="✨" Style="{StaticResource TransportButtonStyle}" FontSize="24" ToolTip="Toggle Anime4K Upscaler" Margin="0,0,15,0" Click="Anime_Click" Visibility="Collapsed"/>
-                            <Button x:Name="CcButton" Content="CC" Style="{StaticResource TransportButtonStyle}" FontSize="20" ToolTip="Toggle Subtitles" Margin="0,0,15,0" Click="CC_Click"/>
-                            <Button x:Name="StatsButton" Content="📊" Style="{StaticResource TransportButtonStyle}" FontSize="20" ToolTip="Stats for Nerds" Click="StatsButton_Click"/>
+                            <Button x:Name="AnimeButton" Content="✨" Style="{StaticResource TransportButtonStyle}" FontSize="24" Margin="0,0,15,0" Click="Anime_Click" Visibility="Collapsed"/>
+                            <Button x:Name="CcButton" Content="CC" Style="{StaticResource TransportButtonStyle}" FontSize="20" Margin="0,0,15,0" Click="CC_Click"/>
+                            <Button x:Name="StatsButton" Content="📊" Style="{StaticResource TransportButtonStyle}" FontSize="20" Click="StatsButton_Click"/>
                         </StackPanel>
                         
                         <StackPanel Orientation="Horizontal" Margin="40,0,0,0">

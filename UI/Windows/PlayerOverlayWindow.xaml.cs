@@ -233,6 +233,18 @@ public partial class PlayerOverlayWindow : Window
         var command = InputMapper.GetCommand(e.Key);
 
         if (command == HtpcCommand.None) return;
+		
+		if (command == HtpcCommand.Up || command == HtpcCommand.Down || 
+            command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            var currentFocus = Keyboard.FocusedElement as FrameworkElement;
+            if (currentFocus == null || currentFocus == this || currentFocus is Grid || currentFocus is Border)
+            {
+                PlayPauseButton.Focus();
+                e.Handled = true; 
+                return;
+            }
+        }
 
         switch (command)
         {
@@ -779,15 +791,7 @@ public partial class PlayerOverlayWindow : Window
             FadeControls(1.0); 
         }
 
-        // AGGRESSIVE FOCUS FIX: Evaluate focus every time you touch the remote, 
-        // not just when the UI fades in. If focus is lost in the void (Window/Grid), 
-        // instantly snap it back to Play/Pause.
-        var currentFocus = Keyboard.FocusedElement as FrameworkElement;
-        if (currentFocus == null || currentFocus == this || currentFocus is Grid || currentFocus is Border)
-        {
-            PlayPauseButton.Focus();
-            Keyboard.Focus(PlayPauseButton);
-        }
+        // *** WE DELETED THE FOCUS TRAP FROM HERE ***
 
         _idleTimer?.Stop();
         _idleTimer?.Start();
