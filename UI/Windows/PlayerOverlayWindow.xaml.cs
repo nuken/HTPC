@@ -389,44 +389,76 @@ public partial class PlayerOverlayWindow : Window
     }
 
    private async Task OpenMiniGuideAsync()
+{
+    BottomBar.Visibility = Visibility.Collapsed; 
+    MiniGuideContainer.Visibility = Visibility.Visible;
+
+    if (MiniGuideList.Items.Count == 0)
     {
-        BottomBar.Visibility = Visibility.Collapsed; 
-        MiniGuideContainer.Visibility = Visibility.Visible;
+        var activeServer = _serverManager.GetActiveServer();
+        var collections = await _libraryService.GetCollectionsAsync();
+        var savedCollection = collections.FirstOrDefault(c => c.Id == activeServer?.DefaultCollectionId) ?? collections.FirstOrDefault();
 
-        if (MiniGuideList.Items.Count == 0)
-        {
-            var activeServer = _serverManager.GetActiveServer();
-            var collections = await _libraryService.GetCollectionsAsync();
-            var savedCollection = collections.FirstOrDefault(c => c.Id == activeServer?.DefaultCollectionId) ?? collections.FirstOrDefault();
-
-            var channels = await _libraryService.GetGuideChannelsAsync(savedCollection, 1);
-            MiniGuideList.ItemsSource = channels;
-        }
-
-        if (MiniGuideList.Items.Count > 0)
-        {
-            // 1. Break the scroll lock by clearing the old selection
-            MiniGuideList.SelectedIndex = -1;
-            
-            // 2. The Focus Reclamation Hammer (Steal input back from MPV)
-            _ = Dispatcher.BeginInvoke(new Action(() => 
-            {
-                MiniGuideList.UpdateLayout(); // Force WPF to redraw the list immediately
-                
-                var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-                if (item != null)
-                {
-                    item.Focus();
-                    Keyboard.Focus(item); // Force hardware remote to this item
-                }
-                else
-                {
-                    MiniGuideList.Focus();
-                    Keyboard.Focus(MiniGuideList);
-                }
-            }), DispatcherPriority.Input); // Input priority ensures it beats MPV
-        }
+        var channels = await _libraryService.GetGuideChannelsAsync(savedCollection, 1);
+        MiniGuideList.ItemsSource = channels;
     }
+
+    if (MiniGuideList.Items.Count > 0)
+    {
+        // The Focus Reclamation Hammer (Steal input back from MPV)
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            MiniGuideList.UpdateLayout(); // Force WPF to redraw the list immediately
+            
+            int targetIndex = 0; // Default to the first item if we can't find a match
+
+            // --- NEW: SYNC TO CURRENTLY PLAYING CHANNEL ---
+            if (_isLiveTv && _currentMedia != null)
+            {
+                var channels = MiniGuideList.ItemsSource as System.Collections.Generic.IEnumerable<Channel>;
+                if (channels != null)
+                {
+                    // Find the channel that matches the currently playing media
+                    var currentChannel = channels.FirstOrDefault(c => c.Id == _currentMedia.Id);
+                    
+                    if (currentChannel != null)
+                    {
+                        targetIndex = MiniGuideList.Items.IndexOf(currentChannel);
+                        
+                        // Select it to give it a visual highlight state
+                        MiniGuideList.SelectedItem = currentChannel;
+                        
+                        // Force WPF to physically scroll the horizontal list to this item
+                        MiniGuideList.ScrollIntoView(currentChannel);
+                        
+                        // Force a second layout update so the UI element is actually generated in the visual tree
+                        MiniGuideList.UpdateLayout(); 
+                    }
+                }
+            }
+            else
+            {
+                MiniGuideList.SelectedIndex = -1; // Clear selection if not Live TV
+            }
+            // ----------------------------------------------
+            
+            // Get the physical UI container for the target index
+            var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
+            
+            if (item != null)
+            {
+                item.Focus();
+                Keyboard.Focus(item); // Force hardware remote to this item
+            }
+            else
+            {
+                // Fallback just in case virtualized UI elements haven't rendered yet
+                MiniGuideList.Focus();
+                Keyboard.Focus(MiniGuideList);
+            }
+        }), DispatcherPriority.Input); // Input priority ensures it beats MPV
+    }
+}
 
     private void CloseMiniGuide()
     {
