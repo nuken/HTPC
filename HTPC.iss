@@ -38,3 +38,20 @@ Name: "{autodesktop}\Nucleus HTPC"; Filename: "{app}\HTPC.exe"; IconFilename: "{
 [Run]
 ; Automatically launches the app when the installer finishes
 Filename: "{app}\HTPC.exe"; Description: "{cm:LaunchProgram,Nucleus HTPC}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// This function checks the Windows Registry to see if the 64-bit C++ Redist is installed
+function IsVCRedistInstalled(): Boolean;
+var
+  RegKey: String;
+begin
+  RegKey := 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64';
+  Result := RegKeyExists(HKEY_LOCAL_MACHINE, RegKey);
+end;
+
+[Run]
+// This downloads and silently installs the C++ redistributable if the check above fails
+Filename: "https://aka.ms/vs/17/release/vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; Flags: runascurrentuser shellexec waituntilterminated; Check: not IsVCRedistInstalled
+
+// This launches your app after the installer finishes
+Filename: "{app}\HTPC.exe"; Description: "{cm:LaunchProgram,Nucleus HTPC}"; Flags: nowait postinstall skipifsilent
