@@ -45,7 +45,7 @@ public class UpdateService
                 ? release.TagName.Substring(1) 
                 : release.TagName;
 
-            if (!Version.TryParse(cleanGitHubVersion, out Version githubVersion))
+            if (!Version.TryParse(cleanGitHubVersion, out Version? githubVersion))
                 return (false, string.Empty, string.Empty);
 
             // 3. Get the actual version of the running Nucleus HTPC application
