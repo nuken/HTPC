@@ -405,58 +405,57 @@ public partial class PlayerOverlayWindow : Window
 
     if (MiniGuideList.Items.Count > 0)
     {
-        // The Focus Reclamation Hammer (Steal input back from MPV)
+        // STEP 1: Process the logical match and physical scroll immediately
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
-            MiniGuideList.UpdateLayout(); // Force WPF to redraw the list immediately
-            
-            int targetIndex = 0; // Default to the first item if we can't find a match
+            MiniGuideList.UpdateLayout(); 
+            int targetIndex = 0; 
 
-            // --- NEW: SYNC TO CURRENTLY PLAYING CHANNEL ---
             if (_isLiveTv && _currentMedia != null)
             {
                 var channels = MiniGuideList.ItemsSource as System.Collections.Generic.IEnumerable<Channel>;
                 if (channels != null)
                 {
-                    // Find the channel that matches the currently playing media
-                    var currentChannel = channels.FirstOrDefault(c => c.Id == _currentMedia.Id);
+                    // AGGRESSIVE MATCHING: Check ID, then Number, then Title
+                    var currentChannel = channels.FirstOrDefault(c => 
+                        c.Id == _currentMedia.Id || 
+                        c.Number == _currentMedia.Id || 
+                        c.Name == _currentMedia.Title);
                     
                     if (currentChannel != null)
                     {
                         targetIndex = MiniGuideList.Items.IndexOf(currentChannel);
-                        
-                        // Select it to give it a visual highlight state
                         MiniGuideList.SelectedItem = currentChannel;
                         
-                        // Force WPF to physically scroll the horizontal list to this item
+                        // Force the scroll
                         MiniGuideList.ScrollIntoView(currentChannel);
-                        
-                        // Force a second layout update so the UI element is actually generated in the visual tree
-                        MiniGuideList.UpdateLayout(); 
                     }
                 }
             }
             else
             {
-                MiniGuideList.SelectedIndex = -1; // Clear selection if not Live TV
+                MiniGuideList.SelectedIndex = -1; 
             }
-            // ----------------------------------------------
-            
-            // Get the physical UI container for the target index
-            var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
-            
-            if (item != null)
+
+            // STEP 2: Wait for WPF to finish drawing the scroll, THEN grab the focus.
+            // Using ContextIdle ensures the VirtualizingStackPanel has completely finished creating the UI element.
+            Dispatcher.BeginInvoke(new Action(() =>
             {
-                item.Focus();
-                Keyboard.Focus(item); // Force hardware remote to this item
-            }
-            else
-            {
-                // Fallback just in case virtualized UI elements haven't rendered yet
-                MiniGuideList.Focus();
-                Keyboard.Focus(MiniGuideList);
-            }
-        }), DispatcherPriority.Input); // Input priority ensures it beats MPV
+                var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
+                
+                if (item != null)
+                {
+                    item.Focus();
+                    Keyboard.Focus(item);
+                }
+                else
+                {
+                    MiniGuideList.Focus();
+                    Keyboard.Focus(MiniGuideList);
+                }
+            }), DispatcherPriority.ContextIdle);
+
+        }), DispatcherPriority.Input); 
     }
 }
 
