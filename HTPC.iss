@@ -35,10 +35,6 @@ Source: "bin\Release\net10.0-windows\win-x64\publish\*.db"; DestDir: "{app}"; Fl
 Name: "{group}\Nucleus HTPC"; Filename: "{app}\HTPC.exe"; IconFilename: "{app}\Assets\favicon.ico"
 Name: "{autodesktop}\Nucleus HTPC"; Filename: "{app}\HTPC.exe"; IconFilename: "{app}\Assets\favicon.ico"
 
-[Run]
-; Automatically launches the app when the installer finishes
-Filename: "{app}\HTPC.exe"; Description: "{cm:LaunchProgram,Nucleus HTPC}"; Flags: nowait postinstall skipifsilent
-
 [Code]
 // This function checks the Windows Registry to see if the 64-bit C++ Redist is installed
 function IsVCRedistInstalled(): Boolean;
