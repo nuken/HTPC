@@ -26,6 +26,9 @@ public partial class DashboardView : UserControl
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
     private bool _isUpdatingDropdown = true;
+	private readonly UpdateService _updateService;
+    private string _latestReleaseUrl = string.Empty;
+    private string _latestReleaseVersion = string.Empty;
 
     // ObservableCollection automatically notifies the UI when items are added/removed
     public ObservableCollection<MediaItem> FeaturedMovies { get; set; } = new ObservableCollection<MediaItem>();
@@ -34,14 +37,15 @@ public partial class DashboardView : UserControl
     public ObservableCollection<MediaItem> RecentVideos { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> UpNextQueue { get; set; } = new ObservableCollection<MediaItem>();
 	
-    public DashboardView(MediaLibraryService libraryService, ServerManagerService serverManager)
-    {
-        InitializeComponent();
-        _libraryService = libraryService;
-        _serverManager = serverManager;
-        this.DataContext = this;
-        Loaded += OnLoaded;
-    }
+    public DashboardView(MediaLibraryService libraryService, ServerManagerService serverManager, UpdateService updateService)
+{
+    InitializeComponent();
+    _libraryService = libraryService;
+    _serverManager = serverManager;
+    _updateService = updateService; // Save the injected service
+    this.DataContext = this;
+    Loaded += OnLoaded;
+}
 
     // 1. THIS IS THE NEW HELPER METHOD
     private void ApplyDashboardLayout()
@@ -82,15 +86,20 @@ public partial class DashboardView : UserControl
 
     // 2. THIS IS YOUR UPDATED ONLOADED METHOD (Now 100% Null-Safe & Scope-Safe)
     private async void OnLoaded(object sender, RoutedEventArgs e)
+{
+    var activeServer = _serverManager.GetActiveServer();
+    
+    // Redirect to settings if the database is empty or missing a server IP
+    if (activeServer == null || string.IsNullOrWhiteSpace(activeServer.IpAddress))
     {
-        var activeServer = _serverManager.GetActiveServer();
-        
-        // Redirect to settings if the database is empty or missing a server IP
-        if (activeServer == null || string.IsNullOrWhiteSpace(activeServer.IpAddress))
-        {
-            OnSettingsRequested?.Invoke(this, EventArgs.Empty);
-            return; 
-        } 
+        OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+        return; 
+    } 
+    
+    // --- NEW: FIRE AND FORGET THE UPDATE CHECK ---
+    // We don't await this directly because we don't want a slow network 
+    // to block the UI from loading the media library below.
+    _ = CheckForUpdatesAsync();
         
         // --- 1. INSTANT UI LOAD ---
         if (FeaturedMovies.Count > 0) 
@@ -341,6 +350,56 @@ public partial class DashboardView : UserControl
             MainScroll.RaiseEvent(eventArg);
         }
     }
+	
+	private async Task CheckForUpdatesAsync()
+{
+    var update = await _updateService.CheckForUpdatesAsync();
+    
+    if (update.UpdateAvailable)
+    {
+        var prefs = PreferencesManager.Load();
+        
+        // Only show if it's a version they haven't explicitly ignored yet, OR if their 1-week timeout expired
+        if (prefs.LastIgnoredVersion != update.LatestVersion || DateTime.Now > prefs.IgnoreUntilDate)
+        {
+            _latestReleaseUrl = update.ReleaseUrl;
+            _latestReleaseVersion = update.LatestVersion;
+            
+            // Execute on the UI thread since we are modifying visual elements from an async background task
+            Dispatcher.Invoke(() => 
+            {
+                UpdateMessageText.Text = $"Nucleus HTPC {update.LatestVersion} is available!";
+                UpdateBanner.Visibility = Visibility.Visible;
+            });
+        }
+    }
+}
+
+private void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
+{
+    if (!string.IsNullOrEmpty(_latestReleaseUrl))
+    {
+        // Modern .NET requires UseShellExecute to bounce the URL out to the default OS browser
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = _latestReleaseUrl,
+            UseShellExecute = true
+        });
+    }
+}
+
+private void BtnIgnoreUpdate_Click(object sender, RoutedEventArgs e)
+{
+    // Update preferences to ignore this specific version for 7 days
+    var prefs = PreferencesManager.Load();
+    prefs.LastIgnoredVersion = _latestReleaseVersion;
+    prefs.IgnoreUntilDate = DateTime.Now.AddDays(7);
+    PreferencesManager.Save(prefs);
+    
+    // Hide the banner and safely drop focus back down to the main navigation menu
+    UpdateBanner.Visibility = Visibility.Collapsed;
+    HomeNavBtn?.Focus();
+}
 
     // Standard WPF VisualTree trick to find the hidden ScrollViewer inside a ListBox
     private ScrollViewer? GetScrollViewer(DependencyObject depObj)

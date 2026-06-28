@@ -151,13 +151,29 @@
         <Grid Margin="0,40,0,0" KeyboardNavigation.DirectionalNavigation="Continue" KeyboardNavigation.TabNavigation="Cycle">
         
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>    </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="20,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
-            <Button x:Name="HomeNavBtn" Content="Home" Style="{StaticResource NavPillActiveStyle}"/>
-            <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
+            <Border x:Name="UpdateBanner" Grid.Row="0" Background="#1A73E8" Visibility="Collapsed" Padding="20,15" Margin="20,0,20,30" CornerRadius="12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="🚀" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock x:Name="UpdateMessageText" Foreground="White" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" Text="A new update is available!"/>
+                    </StackPanel>
+                    
+                    <Button x:Name="BtnDownloadUpdate" Grid.Column="1" Content="Download" Margin="0,0,15,0" Style="{StaticResource NavPillActiveStyle}" Click="BtnDownloadUpdate_Click" Background="White" Foreground="Black"/>
+                    <Button x:Name="BtnIgnoreUpdate" Grid.Column="2" Content="Ignore for 1 week" Style="{StaticResource NavPillStyle}" Click="BtnIgnoreUpdate_Click" Background="#33FFFFFF" Foreground="White"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="20,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
+                <Button x:Name="HomeNavBtn" Content="Home" Style="{StaticResource NavPillActiveStyle}"/>
+                <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
@@ -166,7 +182,7 @@
                 <Button Content="Exit HTPC" Click="ExitApp_Click" Style="{StaticResource NavPillExitStyle}"/>
             </StackPanel>
 
-            <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"
+            <ScrollViewer x:Name="MainScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"
                           KeyboardNavigation.DirectionalNavigation="Continue">
                           
                 <StackPanel x:Name="DashboardContentPanel" Margin="0,0,0,60" KeyboardNavigation.DirectionalNavigation="Continue">

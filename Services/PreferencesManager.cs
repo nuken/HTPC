@@ -29,6 +29,8 @@ public class AppPreferences
 	public string LastMultiviewCollection { get; set; } = "All Channels";
 	public int CommercialSkipMode { get; set; } = 2;
 	public int Volume { get; set; } = 100;
+	public string LastIgnoredVersion { get; set; } = string.Empty;
+    public DateTime IgnoreUntilDate { get; set; } = DateTime.MinValue;
 	// --- NEW: MPV ENGINE SETTINGS ---
     public string HardwareDecoding { get; set; } = "d3d11va";
     public string VideoSync { get; set; } = "audio";

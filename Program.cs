@@ -60,6 +60,8 @@ public class Program
                 services.AddSingleton<MpvPlaybackService>();
                 services.AddDbContext<HTPC.Core.Data.AppDbContext>();
                 services.AddSingleton<ServerManagerService>();
+				services.AddHttpClient();
+				services.AddSingleton<UpdateService>();
                 
                 // NEW: Register the native HTTP connection factory
                 services.AddHttpClient();
