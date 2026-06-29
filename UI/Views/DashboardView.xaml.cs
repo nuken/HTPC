@@ -375,15 +375,35 @@ public partial class DashboardView : UserControl
     }
 }
 
-private void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
+private async void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
 {
-    if (!string.IsNullOrEmpty(_latestReleaseUrl))
+    // 1. Give visual feedback
+    BtnDownloadUpdate.Content = "Downloading...";
+    BtnDownloadUpdate.IsEnabled = false;
+
+    // 2. Run download in the background using the tag name
+    var installerPath = await _updateService.DownloadInstallerAsync(_latestReleaseVersion);
+
+    if (installerPath != null && System.IO.File.Exists(installerPath))
     {
-        // Modern .NET requires UseShellExecute to bounce the URL out to the default OS browser
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = _latestReleaseUrl,
-            UseShellExecute = true
+        // 3. Launch the installer
+        var startInfo = new System.Diagnostics.ProcessStartInfo(installerPath) { UseShellExecute = true };
+        System.Diagnostics.Process.Start(startInfo);
+
+        // Give the installer 500ms to open, then securely close the app
+        await Task.Delay(500); 
+        Application.Current.Shutdown();
+    }
+    else
+    {
+        // 4. Fallback: If background download fails, open browser as a safety net
+        BtnDownloadUpdate.Content = "Retry / Open Browser";
+        BtnDownloadUpdate.IsEnabled = true;
+        
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo 
+        { 
+            FileName = _latestReleaseUrl, 
+            UseShellExecute = true 
         });
     }
 }
