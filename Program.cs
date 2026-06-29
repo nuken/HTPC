@@ -50,7 +50,7 @@ public class Program
                 });
                 
                 // Bind Kestrel to port 5001 (accessible locally and on your network)
-                webBuilder.UseUrls("http://0.0.0.0:5001"); 
+                webBuilder.UseUrls("http://localhost:55001");
             })
             
             // Configure Dependency Injection
