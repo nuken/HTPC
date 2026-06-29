@@ -381,7 +381,7 @@ private async void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
     BtnDownloadUpdate.Content = "Downloading...";
     BtnDownloadUpdate.IsEnabled = false;
 
-    // 2. Run download in the background using the tag name
+    // 2. Run download in the background 
     var installerPath = await _updateService.DownloadInstallerAsync(_latestReleaseVersion);
 
     if (installerPath != null && System.IO.File.Exists(installerPath))
