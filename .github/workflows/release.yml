@@ -37,9 +37,8 @@ jobs:
 
       - name: 🚀 Create GitHub Release
         uses: softprops/action-gh-release@v3
-        # Only create the release if this was triggered by a tag
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          # Make sure this filename matches exactly what HTPC.iss outputs!
-          files: Output/NucleusHTPC_Installer_v1.1.4.exe
+          # Use a wildcard to catch the newly compiled installer regardless of the version number
+          files: Output/NucleusHTPC_Installer_*.exe
           generate_release_notes: true
