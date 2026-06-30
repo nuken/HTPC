@@ -415,6 +415,19 @@ public class MediaLibraryService
                 {
                     string currentDeviceId = GetStringOrNumber(deviceBlock, "DeviceID");
 
+                    // --- NEW: Check if the entire source/device is disabled in Channels DVR ---
+                    bool isDisabled = false;
+                    if (deviceBlock.TryGetProperty("Disabled", out var disabledNode))
+                    {
+                        isDisabled = disabledNode.ValueKind == JsonValueKind.True || 
+                                     (disabledNode.ValueKind == JsonValueKind.Number && disabledNode.GetInt32() == 1);
+                    }
+                    
+                    if (isDisabled)
+                    {
+                        continue; // Skip this entire device and all its channels
+                    }
+
                     if (deviceBlock.TryGetProperty("Channels", out var channelsArray) && channelsArray.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var channelProp in channelsArray.EnumerateArray())
@@ -478,8 +491,14 @@ public class MediaLibraryService
                                                 StartTime = startTime,
                                                 Duration = duration,
                                                 Source = GetStringOrNumber(a, "Source", "source"), 
-                                                CategoryColor = DetermineColor(ParseStringArray(a, "Categories", "Genres")),
-                                                SeriesId = GetStringOrNumber(a, "SeriesID", "seriesid"),
+                                            CategoryColor = DetermineColor(ParseStringArray(a, "Categories", "Genres")),
+                                            
+                                            // --- FIX: Parse each JSON array exactly by its distinct name ---
+                                            Genres = ParseStringArray(a, "Genres"),
+                                            Categories = ParseStringArray(a, "Categories"),
+                                            Tags = ParseStringArray(a, "Tags"),
+                                            
+                                            SeriesId = GetStringOrNumber(a, "SeriesID", "seriesid"),
                                                 ProgramId = GetStringOrNumber(a, "ProgramID", "programid")
                                             });
                                         }
@@ -502,12 +521,17 @@ public class MediaLibraryService
 
                             if (activeCollection != null && !string.IsNullOrEmpty(activeCollection.Id))
                             {
+                                // FIX: Check the 'currentDeviceId' to properly exclude sources like "M3U-testadb"
                                 bool isExcluded = activeCollection.ExcludedSources.Any(ex => 
+                                    (!string.IsNullOrEmpty(currentDeviceId) && currentDeviceId.Equals(ex, StringComparison.OrdinalIgnoreCase)) ||
                                     (!string.IsNullOrEmpty(channelId) && channelId.Contains(ex, StringComparison.OrdinalIgnoreCase)) || 
                                     (!string.IsNullOrEmpty(channelNumber) && channelNumber.Contains(ex, StringComparison.OrdinalIgnoreCase)));
+                                
                                 if (isExcluded) continue;
 
                                 bool inCollection = false;
+                                
+                                // 1. Check Explicit Channel Inclusions
                                 for (int i = 0; i < activeCollection.Channels.Count; i++)
                                 {
                                     string colChannel = activeCollection.Channels[i].Trim();
@@ -528,7 +552,26 @@ public class MediaLibraryService
                                     var currentAiring = airings.FirstOrDefault(a => a.IsAiringNow) ?? airings[0];
                                     string searchBlock = $"{currentAiring.Title} {currentAiring.EpisodeTitle} {currentAiring.DisplaySummary}".ToLower();
                                     
-                                    if (activeCollection.Keywords.Any(k => searchBlock.Contains(k.ToLower()))) inCollection = true;
+                                   // 2. Check Keywords
+                                    if (activeCollection.Keywords.Any(k => searchBlock.Contains(k.ToLower()))) 
+                                    {
+                                        inCollection = true;
+                                    }
+                                    
+                                    // 3. Check Smart Rules (Genres and Categories)
+                                    if (!inCollection)
+                                    {
+                                        // Check if the current program's Genres array contains the collection's required Genre (e.g. "News")
+                                        if (activeCollection.Genres.Any(g => currentAiring.Genres.Contains(g, StringComparer.OrdinalIgnoreCase))) 
+                                        {
+                                            inCollection = true;
+                                        }
+                                        // Check Categories independently
+                                        else if (activeCollection.Categories.Any(c => currentAiring.Categories.Contains(c, StringComparer.OrdinalIgnoreCase))) 
+                                        {
+                                            inCollection = true;
+                                        }
+                                    }
                                 }
 
                                 if (!inCollection) continue;

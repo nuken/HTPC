@@ -71,6 +71,10 @@ public class Airing
     
     public string? SeriesId { get; set; }
     public string? ProgramId { get; set; }
+	
+	public List<string> Genres { get; set; } = new List<string>();
+    public List<string> Categories { get; set; } = new List<string>();
+    public List<string> Tags { get; set; } = new List<string>();
     
     public DateTime StartTime { get; set; }
     public double? Duration { get; set; }
