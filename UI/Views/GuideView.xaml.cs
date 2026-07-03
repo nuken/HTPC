@@ -17,6 +17,7 @@ public partial class GuideView : UserControl
 {
     public event EventHandler? OnHomeRequested;
     public event EventHandler? OnMoviesRequested;
+	public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
@@ -616,6 +617,7 @@ public partial class GuideView : UserControl
 
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
+	private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);

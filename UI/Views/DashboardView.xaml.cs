@@ -19,6 +19,7 @@ public partial class DashboardView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnMoviesRequested;
+	public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
 	public event EventHandler? OnMultiviewRequested;
@@ -209,6 +210,12 @@ public partial class DashboardView : UserControl
     {
         OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     }
+	
+	private void Recordings_Click(object sender, RoutedEventArgs e)
+    {
+        OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
+    }
+	
 	private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
 	    
     private void Shows_Click(object sender, RoutedEventArgs e)
@@ -287,11 +294,34 @@ public partial class DashboardView : UserControl
         }
     }
 
-    private void ListBoxItem_MouseUp(object sender, MouseButtonEventArgs e)
+    // --- TOUCH & MOUSE SCROLLING SAFETY LOGIC ---
+    private Point? _touchDownPosition;
+
+    private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // Capture the position BEFORE the ScrollViewer can intercept it
+        _touchDownPosition = e.GetPosition(this);
+    }
+
+    private void ListBoxItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_touchDownPosition == null) return;
+
+        // 1. Calculate how far the finger/mouse moved
+        var currentPosition = e.GetPosition(this);
+        double distanceX = Math.Abs(currentPosition.X - _touchDownPosition.Value.X);
+        double distanceY = Math.Abs(currentPosition.Y - _touchDownPosition.Value.Y);
+
+        _touchDownPosition = null; // Reset for the next interaction
+
+        // 2. If it moved more than 15 pixels, it was a swipe/pan. Ignore the click!
+        if (distanceX > 15 || distanceY > 15) return;
+
+        // 3. Otherwise, it was a clean mouse click or screen tap. Play the media.
         if (sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
             OnPlayRequested?.Invoke(this, movie);
+            e.Handled = true; // Tell WPF we handled this, stopping the ScrollViewer from interfering
         }
     }
 

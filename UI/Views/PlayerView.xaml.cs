@@ -20,6 +20,7 @@ public partial class PlayerView : UserControl
     
     private PlayerOverlayWindow? _overlayWindow;
     private bool _isMpvAttached = false;
+	private Point _lastMousePosition;
 
     public PlayerView(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -35,6 +36,8 @@ public partial class PlayerView : UserControl
         
         // Sync overlay when the player changes size
         this.SizeChanged += (s, e) => SyncOverlayBounds();
+		this.PreviewKeyDown += PlayerView_PreviewKeyDown;
+        this.PreviewMouseMove += PlayerView_PreviewMouseMove;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -92,6 +95,25 @@ public partial class PlayerView : UserControl
 
         _overlayWindow.Activate();
         _overlayWindow.Focus();
+    }
+	
+	private void PlayerView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        // Instantly hide the cursor on any remote/keyboard input
+        Mouse.OverrideCursor = Cursors.None;
+    }
+
+    private void PlayerView_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        Point currentPosition = e.GetPosition(this);
+
+        // Only restore the cursor if the mouse physically moved more than 2 pixels
+        if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
+            Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
+        {
+            _lastMousePosition = currentPosition;
+            Mouse.OverrideCursor = null; 
+        }
     }
 
     // --- NEW: Feral Browser Launcher ---

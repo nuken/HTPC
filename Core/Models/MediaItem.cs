@@ -21,9 +21,16 @@ public class MediaItem : INotifyPropertyChanged
     public string CurrentShowTitle { get; set; } = string.Empty;
     public string CurrentShowPosterUrl { get; set; } = string.Empty;
     public long CreatedAt { get; set; }
+	
+	// --- NEW: DATE PROPERTY FOR WPF GROUPING ---
+    public DateTime CreatedAtDate => CreatedAt > 0 
+        ? DateTimeOffset.FromUnixTimeSeconds(CreatedAt).LocalDateTime.Date 
+        : DateTime.MinValue.Date;
     
     public int ReleaseYear { get; set; }
     public List<string> Genres { get; set; } = new List<string>();
+	public List<string> Categories { get; set; } = new List<string>();
+	public bool IsImported { get; set; }
     public List<string> Cast { get; set; } = new List<string>();
     public List<string> Directors { get; set; } = new List<string>();
 	
@@ -50,6 +57,23 @@ public class MediaItem : INotifyPropertyChanged
     public int SeasonNumber { get; set; }
     public int EpisodeNumber { get; set; }
     public string Summary { get; set; } = string.Empty;
+
+    // --- NEW: IN-PROGRESS RECORDING FLAG ---
+    private bool _isCompleted = true;
+    public bool IsCompleted 
+    { 
+        get => _isCompleted; 
+        set { _isCompleted = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsRecording)); } 
+    }
+    
+    // --- FIX: WPF HELPER FOR BINDING ---
+    public bool IsRecording => !IsCompleted;
+    
+    // --- NEW: SCHEDULED RECORDINGS FLAGS ---
+    public bool IsScheduled { get; set; }
+    public string DisplayTime { get; set; } = string.Empty;
+	
+
 	public double StartOffset { get; set; }
     public int StartOffsetSeconds { get; set; }
 

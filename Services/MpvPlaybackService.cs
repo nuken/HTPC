@@ -4,6 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using HTPC.Core.Interop;
@@ -26,9 +29,10 @@ public class MpvPlaybackService : IDisposable
     private Thread? _eventLoopThread;
     private bool _isDisposed = false;
     private HashSet<int> _disabledCommercialBlocks = new HashSet<int>();
+	private double _lastSyncedPosition = 0;
+    private bool _hasMarkedWatched = false;
+    private string _tempChapterFile = string.Empty;
 
-    // This event lets the UI know it should show the "Click to Skip" button overlay
-    // It passes the 'targetTime' so the UI knows where to jump if clicked.
     public event Action<double>? OnCommercialPrompt;
 
     public MpvPlaybackService(ILogger<MpvPlaybackService> logger, IServiceScopeFactory scopeFactory, ServerManagerService serverManager)
@@ -37,6 +41,33 @@ public class MpvPlaybackService : IDisposable
         _scopeFactory = scopeFactory;
         _serverManager = serverManager; 
         InitializeMpv();
+    }
+	
+    private string GenerateCommercialChapters(List<double>? commercials)
+    {
+        if (commercials == null || commercials.Count == 0) return string.Empty;
+        
+        string tempPath = Path.Combine(Path.GetTempPath(), $"mpv_chapters_{Guid.NewGuid()}.txt");
+        var sb = new StringBuilder();
+        int chapterIndex = 1;
+        
+        if (commercials[0] > 0)
+        {
+            sb.AppendLine($"CHAPTER{chapterIndex:D2}=00:00:00.000");
+            sb.AppendLine($"CHAPTER{chapterIndex:D2}NAME=Show");
+            chapterIndex++;
+        }
+
+        for (int i = 0; i < commercials.Count; i++)
+        {
+            TimeSpan ts = TimeSpan.FromSeconds(commercials[i]);
+            sb.AppendLine($"CHAPTER{chapterIndex:D2}={ts:hh\\:mm\\:ss\\.fff}");
+            sb.AppendLine($"CHAPTER{chapterIndex:D2}NAME={(i % 2 == 0 ? "Commercial" : "Show")}");
+            chapterIndex++;
+        }
+
+        File.WriteAllText(tempPath, sb.ToString());
+        return tempPath;
     }
 
     private void InitializeMpv()
@@ -47,37 +78,31 @@ public class MpvPlaybackService : IDisposable
         if (_mpvContext == IntPtr.Zero) throw new Exception("Failed to create libmpv context.");
         Libmpv.mpv_set_option_string(_mpvContext, "osd-bar", "no");
         
-        // 1. FIX THE "ODD TEXT": This totally silences MPV's system messages
         Libmpv.mpv_set_option_string(_mpvContext, "osd-level", "0"); 
-        
         Libmpv.mpv_set_option_string(_mpvContext, "terminal", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "msg-level", "all=info"); 
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
         Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
         
-        // --- PRE-BUFFER CACHE SETTINGS ---
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000");
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000"); 
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
+        
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "no");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-initial", "no");
 
-        // --- HARDWARE ENCODER FIXES ---
-        // 2. FIX THE SYNC: Removed 'fflags=+genpts'. display-resample is enough to keep LinkPi smooth!
+        // The lavf fastseek command ensures HLS playlists probe instantly without stalling
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+fastseek");
+
         Libmpv.mpv_set_option_string(_mpvContext, "video-sync", "display-resample");
         Libmpv.mpv_set_option_string(_mpvContext, "autosync", "30");
         Libmpv.mpv_set_option_string(_mpvContext, "deinterlace", "auto");
 
-        // --- CLOSED CAPTION & SUBTITLE STYLING ---
-        // 3. FIX THE MOVIES: Start with CCs loaded but physically hidden
-		// --- CLOSED CAPTION & SUBTITLE STYLING ---
         Libmpv.mpv_set_option_string(_mpvContext, "slang", "eng,en,en-US");
         Libmpv.mpv_set_option_string(_mpvContext, "alang", "eng,en,en-US");
-        
-        // FIX: Make the subtitle layer visible, but default the active track to 'no' (off)
         Libmpv.mpv_set_option_string(_mpvContext, "sub-visibility", "yes"); 
         Libmpv.mpv_set_option_string(_mpvContext, "sid", "no"); 
-        
         Libmpv.mpv_set_option_string(_mpvContext, "sub-font-size", "45");
         Libmpv.mpv_set_option_string(_mpvContext, "sub-color", "#FFFFFFFF"); 
         Libmpv.mpv_set_option_string(_mpvContext, "sub-border-color", "#FF000000"); 
@@ -87,8 +112,6 @@ public class MpvPlaybackService : IDisposable
         if (result < 0) throw new Exception($"Failed to initialize libmpv context. Error: {result}");
 
         _positionTimer = new Timer(SaveCurrentPosition, null, Timeout.Infinite, Timeout.Infinite);
-        
-        // Format 5 is MPV_FORMAT_DOUBLE. We tell MPV to notify us whenever time-pos changes.
         Libmpv.mpv_observe_property(_mpvContext, 1, "time-pos", 5);
 
         _eventLoopThread = new Thread(EventLoop);
@@ -105,7 +128,6 @@ public class MpvPlaybackService : IDisposable
     
     public string GetMpvProperty(string propertyName)
     {
-        // Safely fetch the property string from MPV
         var ptr = HTPC.Core.Interop.Libmpv.mpv_get_property_string(_mpvContext, propertyName); 
         if (ptr != IntPtr.Zero)
         {
@@ -120,6 +142,19 @@ public class MpvPlaybackService : IDisposable
     {
         _currentMedia = media;
         _logger.LogInformation($"Loading media: {media.Title}");
+
+        _lastSyncedPosition = 0;
+        _hasMarkedWatched = false;
+        if (!string.IsNullOrEmpty(_tempChapterFile) && System.IO.File.Exists(_tempChapterFile))
+        {
+            try { System.IO.File.Delete(_tempChapterFile); } catch { }
+        }
+
+        _tempChapterFile = GenerateCommercialChapters(media.Commercials);
+        if (!string.IsNullOrEmpty(_tempChapterFile))
+        {
+            Libmpv.mpv_set_property_string(_mpvContext, "chapter-file", _tempChapterFile);
+        }
 
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -143,10 +178,29 @@ public class MpvPlaybackService : IDisposable
             }
         }
 
-        // 1. THE FIX: Load the main video stream ONCE, after the start time is set!
-        Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{media.StreamUrl}\"");
+        string streamUrl = media.StreamUrl ?? media.Path;
+        
+        // --- ARCHITECTURE FIX: HARD LOCK ABR FOR HLS ---
+        if (streamUrl.Contains(".m3u8"))
+        {
+            var server = _serverManager.GetActiveServer();
+            bool isLocal = server != null && (server.IpAddress.StartsWith("192.168.") || server.IpAddress.StartsWith("10.") || server.IpAddress.StartsWith("127."));
+            
+            if (isLocal) 
+            {
+                // Local network: Lock ABR OFF and force strict audio/video copy. 
+                // This permanently stops MPV from requesting lower resolutions and causing transcoder restarts.
+                streamUrl += streamUrl.Contains("?") ? "&abr=false&vcodec=copy&acodec=copy" : "?abr=false&vcodec=copy&acodec=copy";
+            }
+            else
+            {
+                // Remote network: Lock ABR to a stable 4Mbps 720p stream
+                streamUrl += streamUrl.Contains("?") ? "&abr=false&vcodec=h264&acodec=aac&vbitrate=4000&resolution=720" : "?abr=false&vcodec=h264&acodec=aac&vbitrate=4000&resolution=720";
+            }
+        }
 
-        // 2. Explicitly inject the external subtitle file
+        Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{streamUrl}\"");
+
         if (!string.IsNullOrWhiteSpace(media.SubtitleUrl))
         {
             Libmpv.mpv_command_string(_mpvContext, $"sub-add \"{media.SubtitleUrl}\"");
@@ -164,7 +218,6 @@ public class MpvPlaybackService : IDisposable
 
             var ev = Marshal.PtrToStructure<Libmpv.mpv_event>(eventPtr);
             
-            // event_id 7 == MPV_EVENT_END_FILE (Video finished naturally)
             if (ev.event_id == 7)
             {
                 var media = _currentMedia;
@@ -175,7 +228,6 @@ public class MpvPlaybackService : IDisposable
                 }
             }
             
-            // event_id 22 == MPV_EVENT_PROPERTY_CHANGE
             if (ev.event_id == 22) 
             {
                 var prop = Marshal.PtrToStructure<Libmpv.mpv_event_property>(ev.data);
@@ -183,18 +235,31 @@ public class MpvPlaybackService : IDisposable
                 {
                     double timePos = Marshal.PtrToStructure<double>(prop.data);
                     EvaluateCommercialBoundaries(timePos);
+
+                    double duration = GetDuration();
+                    bool isWatchedThreshold = duration > 0 && (timePos >= duration - 180 || (timePos / duration) >= 0.9);
+                    
+                    if (Math.Abs(timePos - _lastSyncedPosition) >= 20 || (isWatchedThreshold && !_hasMarkedWatched))
+                    {
+                        _lastSyncedPosition = timePos;
+                        var media = _currentMedia;
+                        if (media != null)
+                        {
+                            _ = SyncProgressToServerAsync(media.Id, duration, timePos);
+                        }
+                    }
                 }
             }
         }
-    }
-
+	}	
+		
     private void EvaluateCommercialBoundaries(double currentSeconds)
     {
         var media = _currentMedia;
         if (media?.Commercials == null || media.Commercials.Count < 2) return;
 
         var prefs = PreferencesManager.Load();
-        if (prefs.CommercialSkipMode == 0) return; // Mode 0 = Off
+        if (prefs.CommercialSkipMode == 0) return;
 
         var comms = media.Commercials;
         
@@ -230,13 +295,7 @@ public class MpvPlaybackService : IDisposable
     private async Task SyncProgressToServerAsync(string fileId, double duration, double position)
     {
         if (string.IsNullOrEmpty(fileId)) return;
-
-        // Guard 1: The "Accidental Click" (Under 60 seconds)
-        if (position < 60)
-        {
-            _logger.LogInformation("Playback under 60 seconds. Ignoring progress sync.");
-            return;
-        }
+        if (position < 60) return;
 
         var server = _serverManager.GetActiveServer();
         if (server == null) return;
@@ -245,22 +304,24 @@ public class MpvPlaybackService : IDisposable
 
         try
         {
-            // Guard 2: The "Credits" Threshold (Within 3 minutes of the end)
-            if (duration > 0 && position >= duration - 180)
+            if (duration > 0 && (position >= duration - 180 || (position / duration) >= 0.9))
             {
-                _logger.LogInformation($"Playback within 3 minutes of end. Marking {fileId} as Watched.");
-                await _httpClient.PutAsync($"{baseUrl}/dvr/files/{fileId}/watch", new System.Net.Http.StringContent(""));
+                if (!_hasMarkedWatched)
+                {
+                    _logger.LogInformation($"Playback reached Watched threshold. Marking {fileId} as Watched.");
+                    await _httpClient.PutAsync($"{baseUrl}/dvr/files/{fileId}/watch", new System.Net.Http.StringContent(""));
+                    _hasMarkedWatched = true;
+                }
             }
             else
             {
-                // Standard progress save
                 _logger.LogInformation($"Saving progress for {fileId} at {position} seconds.");
-                await _httpClient.PutAsync($"{baseUrl}/dvr/files/{fileId}/playback_time/{position}", new System.Net.Http.StringContent(""));
+                await _httpClient.PutAsync($"{baseUrl}/dvr/files/{fileId}/playback_time/{(int)position}", new System.Net.Http.StringContent(""));
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Failed to sync playback progress to Channels DVR: {ex.Message}");
+            _logger.LogError($"Failed to sync playback progress: {ex.Message}");
         }
     }
     
@@ -270,9 +331,7 @@ public class MpvPlaybackService : IDisposable
     {
         var prefs = PreferencesManager.Load();
 
-        // --- FIX: Use PROPERTY to allow hot-swapping active shaders ---
         Libmpv.mpv_set_property_string(_mpvContext, "glsl-shaders", "");
-
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "scale", "spline36");
 
@@ -283,7 +342,6 @@ public class MpvPlaybackService : IDisposable
 
         if (_isAnimeModeActive)
         {
-            // --- FIX: Properly chained Anime4K algorithm ---
             string restoreShader = System.IO.Path.Combine(baseDir, "Shaders", "Anime4K_Restore_CNN_M.glsl");
             string upscaleShader = System.IO.Path.Combine(baseDir, "Shaders", "Anime4K_Upscale_CNN_x2_M.glsl");
             
@@ -303,7 +361,6 @@ public class MpvPlaybackService : IDisposable
 
         if (!string.IsNullOrEmpty(shaderPath))
         {
-            // --- FIX: Use PROPERTY to inject into the active video stream ---
             Libmpv.mpv_set_property_string(_mpvContext, "glsl-shaders", shaderPath);
         }
     }
@@ -338,12 +395,44 @@ public class MpvPlaybackService : IDisposable
             double position = GetPosition();
             
             _ = SyncProgressToServerAsync(_currentMedia.Id, duration, position);
+            _ = StopServerSessionAsync(_currentMedia); 
         }
 
         Libmpv.mpv_command_string(_mpvContext, "stop"); 
         _currentMedia = null;
     }
     
+    private async Task StopServerSessionAsync(MediaItem media)
+    {
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null || string.IsNullOrEmpty(media.Id)) return;
+        
+        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+
+        try
+        {
+            string json = await _httpClient.GetStringAsync($"{baseUrl}/api/v1/sessions");
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var session in doc.RootElement.EnumerateArray())
+                {
+                    if (session.TryGetProperty("ID", out var idProp))
+                    {
+                        string sessionId = idProp.GetString() ?? "";
+                        if (sessionId.Contains($"file{media.Id}"))
+                        {
+                            await _httpClient.DeleteAsync($"{baseUrl}/api/v1/sessions/{sessionId}");
+                            _logger.LogInformation($"Killed hanging transcoder session: {sessionId}");
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+	
     public void SetVolume(int volume)
     {
         if (_mpvContext != IntPtr.Zero)
@@ -381,16 +470,12 @@ public class MpvPlaybackService : IDisposable
     public void CycleSubtitles()
     {
         if (_mpvContext == IntPtr.Zero) return;
-        
-        // FIX: Cycle through the actual subtitle tracks (1, 2, 3, no) 
         Libmpv.mpv_command_string(_mpvContext, "cycle sub");
     }
 	
 	public void ToggleMute()
     {
         if (_mpvContext == IntPtr.Zero) return;
-        
-        // Tells MPV to toggle its internal mute state on/off
         Libmpv.mpv_command_string(_mpvContext, "cycle mute");
     }
 	
@@ -423,23 +508,19 @@ public class MpvPlaybackService : IDisposable
     public void Dispose()
     {
         if (_isDisposed) return;
-        _isDisposed = true; // Signals the while-loop to stop
+        _isDisposed = true; 
 
         _positionTimer?.Dispose();
 
         if (_mpvContext != IntPtr.Zero)
         {
-            // --- FIX: Safe thread teardown ---
-            // Send an explicit quit command to unblock mpv_wait_event gracefully
             Libmpv.mpv_command_string(_mpvContext, "quit");
 
-            // Wait up to 1 second for the event loop thread to finish processing and exit
             if (_eventLoopThread != null && _eventLoopThread.IsAlive)
             {
                 _eventLoopThread.Join(1000); 
             }
 
-            // Safely destroy the context
             Libmpv.mpv_terminate_destroy(_mpvContext);
             _mpvContext = IntPtr.Zero;
         }

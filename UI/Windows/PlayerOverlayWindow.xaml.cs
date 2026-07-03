@@ -168,7 +168,8 @@ public partial class PlayerOverlayWindow : Window
     
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        WakeUpUi(); 
+        Mouse.OverrideCursor = Cursors.None;
+		WakeUpUi(); 
 
         if (e.Key == Key.F)
         {
@@ -772,49 +773,54 @@ public partial class PlayerOverlayWindow : Window
     }
 
     private void DrawCommercialMarkers(double totalDuration)
+{
+    CommercialMarkersCanvas.Children.Clear();
+    
+    if (_currentMedia?.Commercials == null || _currentMedia.Commercials.Count < 2 || totalDuration <= 0 || CommercialMarkersCanvas.ActualWidth <= 0) 
+        return;
+
+    var comms = _currentMedia.Commercials;
+    
+    for (int i = 0; i < comms.Count - 1; i += 2)
     {
-        CommercialMarkersCanvas.Children.Clear();
-        
-        if (_currentMedia?.Commercials == null || _currentMedia.Commercials.Count < 2 || totalDuration <= 0 || CommercialMarkersCanvas.ActualWidth <= 0) 
-            return;
+        double start = comms[i];
+        double end = comms[i + 1];
 
-        var comms = _currentMedia.Commercials;
-        
-        for (int i = 0; i < comms.Count - 1; i += 2)
+        double startPct = start / totalDuration;
+        double widthPct = (end - start) / totalDuration;
+
+        var rect = new System.Windows.Shapes.Rectangle
         {
-            double start = comms[i];
-            double end = comms[i + 1];
+            // CHANGED: 100% Opaque Gold for maximum contrast against the dark UI
+            Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 215, 0)),
+            Width = CommercialMarkersCanvas.ActualWidth * widthPct,
+            Height = CommercialMarkersCanvas.ActualHeight
+        };
 
-            double startPct = start / totalDuration;
-            double widthPct = (end - start) / totalDuration;
-
-            var rect = new System.Windows.Shapes.Rectangle
-            {
-                Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 255, 165, 0)),
-                Width = CommercialMarkersCanvas.ActualWidth * widthPct,
-                Height = CommercialMarkersCanvas.ActualHeight
-            };
-
-            Canvas.SetLeft(rect, CommercialMarkersCanvas.ActualWidth * startPct);
-            CommercialMarkersCanvas.Children.Add(rect);
-        }
+        Canvas.SetLeft(rect, CommercialMarkersCanvas.ActualWidth * startPct);
+        CommercialMarkersCanvas.Children.Add(rect);
     }
+}
 
     private void Window_MouseMove(object sender, MouseEventArgs e)
-    {
-        Point currentPosition = e.GetPosition(this);
+{
+    Point currentPosition = e.GetPosition(this);
 
-        if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
-            Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
-        {
-            _lastMousePosition = currentPosition;
-            WakeUpUi();
-        }
+    if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
+        Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
+    {
+        _lastMousePosition = currentPosition;
+        
+       
+        Mouse.OverrideCursor = null; 
+        
+        WakeUpUi();
     }
+}
 
    private void WakeUpUi()
     {
-        Mouse.OverrideCursor = null;
+        //Mouse.OverrideCursor = null;
 
         if (!_isControlsVisible)
         {

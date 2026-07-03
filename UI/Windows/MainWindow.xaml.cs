@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly MoviesView _moviesView;
     private readonly ShowsView _showsView;
     private readonly VideosView _videosView;
+	private readonly RecordingsView _recordingsView;
     
     // --- THE MULTIVIEW VARIABLES ---
     private readonly MultiviewSetupView _multiviewSetupView;
@@ -24,8 +25,9 @@ public partial class MainWindow : Window
     
     private object? _previousView;
     private bool _isFullscreen = true;
+	private Point _lastMousePosition;
 
-    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, MultiviewSetupView multiviewSetupView, ServerManagerService serverManager)
+    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, RecordingsView recordingsView, MultiviewSetupView multiviewSetupView, ServerManagerService serverManager)
     {
         InitializeComponent();
         
@@ -36,6 +38,7 @@ public partial class MainWindow : Window
         _moviesView = moviesView; 
         _showsView = showsView;
         _videosView = videosView;
+        _recordingsView = recordingsView; // Assign the injected view
         _multiviewSetupView = multiviewSetupView;
         _serverManager = serverManager;
 
@@ -54,6 +57,7 @@ public partial class MainWindow : Window
         _settingsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _settingsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _settingsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _settingsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _dashboardView.OnPlayRequested += PlayMedia;
         _dashboardView.OnExitRequested += Dashboard_ExitRequested;
@@ -62,12 +66,14 @@ public partial class MainWindow : Window
         _dashboardView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _dashboardView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _dashboardView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _dashboardView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _guideView.OnHomeRequested += NavigateToDashboard;
         _guideView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _guideView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _guideView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _guideView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _guideView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         _guideView.OnPlayRequested += PlayMedia;
         
         _moviesView.OnHomeRequested += NavigateToDashboard;
@@ -76,6 +82,7 @@ public partial class MainWindow : Window
         _moviesView.OnPlayRequested += PlayMedia;
         _moviesView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _moviesView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _moviesView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _showsView.OnHomeRequested += NavigateToDashboard;
         _showsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -83,13 +90,25 @@ public partial class MainWindow : Window
         _showsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _showsView.OnPlayRequested += PlayMedia;
         _showsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _showsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _videosView.OnHomeRequested += NavigateToDashboard;
         _videosView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _videosView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _videosView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _videosView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _videosView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         _videosView.OnPlayRequested += PlayMedia;
+        
+        // --- NEW: RECORDINGS VIEW OUTBOUND NAVIGATION ---
+        _recordingsView.OnHomeRequested += NavigateToDashboard;
+        _recordingsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _recordingsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _recordingsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _recordingsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _recordingsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _recordingsView.OnPlayRequested += PlayMedia;
+        _recordingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
 		
 		_dashboardView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _settingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
@@ -97,21 +116,24 @@ public partial class MainWindow : Window
         _moviesView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _showsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _videosView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
-		
+        
 		_multiviewSetupView.OnHomeRequested += NavigateToDashboard;
         _multiviewSetupView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _multiviewSetupView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _multiviewSetupView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _multiviewSetupView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _multiviewSetupView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _multiviewSetupView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
+
 
         MainShellContainer.Content = _dashboardView;
         
         // --- Restore window layout preferences on boot ---
         InitializeWindowState();
 		ApplyGlobalUiScale();
+		this.PreviewMouseMove += Window_PreviewMouseMove;
     }
     
     // ==========================================
@@ -196,6 +218,23 @@ public partial class MainWindow : Window
         prefs.IsFullscreen = _isFullscreen;
         PreferencesManager.Save(prefs);
     }
+	
+	private void Window_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        Point currentPosition = e.GetPosition(this);
+
+        // Only restore the cursor if the mouse physically moved more than 2 pixels
+        if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
+            Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
+        {
+            if (Mouse.OverrideCursor == Cursors.None)
+            {
+                Mouse.OverrideCursor = null; // Unhide the cursor
+            }
+            
+            _lastMousePosition = currentPosition;
+        }
+    }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -220,7 +259,8 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        // 1. THE 'F' KEY HANDLER
+        Mouse.OverrideCursor = Cursors.None;
+		// 1. THE 'F' KEY HANDLER
         if (e.Key == Key.F)
         {
             // CRITICAL: Ignore if the user is typing into a search box or IP address field

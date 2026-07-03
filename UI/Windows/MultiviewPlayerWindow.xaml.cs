@@ -221,7 +221,8 @@ public partial class MultiviewPlayerWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        WakeUpUi();
+        Mouse.OverrideCursor = Cursors.None;
+		WakeUpUi();
 
         if (_isClosing) return;
 
@@ -444,13 +445,14 @@ public partial class MultiviewPlayerWindow : Window
         if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
         {
             _lastMousePosition = currentPosition;
+			Mouse.OverrideCursor = null;
             WakeUpUi();
         }
     }
 
     private void WakeUpUi()
     {
-        Mouse.OverrideCursor = null;
+        //Mouse.OverrideCursor = null;
         if (!_isControlsVisible)
         {
             _isControlsVisible = true;

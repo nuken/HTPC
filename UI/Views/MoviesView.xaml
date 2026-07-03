@@ -152,6 +152,7 @@
             <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
 			<Button Content="Movies" Style="{StaticResource NavPillActiveStyle}"/>
+			<Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>

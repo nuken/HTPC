@@ -76,6 +76,8 @@ public class Program
 				services.AddTransient<HTPC.UI.Views.ShowsView>();
 				services.AddTransient<HTPC.UI.Views.VideosView>();
 				services.AddTransient<HTPC.UI.Views.MultiviewSetupView>();
+				services.AddTransient<HTPC.UI.ViewModels.RecordingsViewModel>();
+                services.AddTransient<HTPC.UI.Views.RecordingsView>();
             });
 
         using var host = hostBuilder.Build();
