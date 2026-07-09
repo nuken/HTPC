@@ -23,6 +23,7 @@ public partial class DashboardView : UserControl
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
 	public event EventHandler? OnMultiviewRequested;
+	public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -227,6 +228,8 @@ public partial class DashboardView : UserControl
     {
         OnVideosRequested?.Invoke(this, EventArgs.Empty);
     }
+	
+	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 
     // --- NATIVE NAVIGATION FIXES ---
 

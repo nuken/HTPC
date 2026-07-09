@@ -21,8 +21,10 @@ public partial class ShowsView : UserControl
     public event EventHandler? OnMoviesRequested;
 	public event EventHandler? OnRecordingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
+	public event EventHandler<(System.Collections.Generic.List<MediaItem> Queue, int StartIndex)>? OnPlayQueueRequested;
     public event EventHandler? OnVideosRequested;
 	public event EventHandler? OnMultiviewRequested;
+	public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
 	private readonly ServerManagerService _serverManager;
@@ -270,6 +272,9 @@ public partial class ShowsView : UserControl
     {
         var command = InputMapper.GetCommand(e.Key);
 
+        // NEW: If the Binge Prompt is open, don't let this master handler interfere
+        if (BingeChoiceOverlay.Visibility == Visibility.Visible) return;
+
         // If the Modal is open and the user presses Back on the remote, close the modal
         if (EpisodesOverlay.Visibility == Visibility.Visible && command == HtpcCommand.Back)
         {
@@ -467,18 +472,65 @@ public partial class ShowsView : UserControl
             }
             e.Handled = true;
         }
-        else if (command == HtpcCommand.Left || command == HtpcCommand.Back)
+       else if (command == HtpcCommand.Left)
         {
-            // FOCUS BRIDGE: Jump Left to escape back to the main grid
+            // FOCUS BRIDGE: Jump Left to the Action Buttons
+            BingeShowBtn.Focus(); 
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            // FOCUS BRIDGE: Escape back to the main grid
             CloseOverlay_Click(null!, null!);
             ShowsGrid.Focus();
             e.Handled = true;
         }
-        else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+    }
+	
+	// --- 10-FOOT UI ROUTING FOR OVERLAY BUTTONS ---
+    private void OverlayButtons_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Right)
         {
-            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            (sender as ListBoxItem)?.MoveFocus(new TraversalRequest(direction));
+            // FOCUS BRIDGE: Jump Right into the Seasons List
+            if (SeasonsList.Items.Count > 0)
+            {
+                SeasonsList.UpdateLayout();
+                int targetIndex = SeasonsList.SelectedIndex >= 0 ? SeasonsList.SelectedIndex : 0;
+                var seasonItem = SeasonsList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
+                seasonItem?.Focus();
+            }
             e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back || command == HtpcCommand.Left)
+        {
+            // Escape the overlay and go back to the library
+            CloseOverlay_Click(null!, null!);
+            ShowsGrid.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Up && sender == BingeShowBtn)
+        {
+            // Explicitly force focus up to the Back button to bypass WPF spatial traps
+            BackToLibraryBtn.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Down && sender == BackToLibraryBtn)
+        {
+            // Explicitly force focus down to the Binge button
+            BingeShowBtn.Focus();
+            e.Handled = true;
+        }
+        // --- NEW: FOCUS TRAPS ---
+        else if (command == HtpcCommand.Down && sender == BingeShowBtn)
+        {
+            e.Handled = true; // Trap focus on the bottom button
+        }
+        else if (command == HtpcCommand.Up && sender == BackToLibraryBtn)
+        {
+            e.Handled = true; // Trap focus on the top button
         }
     }
 
@@ -561,6 +613,80 @@ public partial class ShowsView : UserControl
             e.Handled = true;
         }
     }
+	
+	// --- BINGE WATCH QUEUE ENGINE ---
+
+    private void BingeShow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_allEpisodesForSelectedShow == null || _allEpisodesForSelectedShow.Count == 0) return;
+
+        int firstUnwatchedIndex = _allEpisodesForSelectedShow.FindIndex(ep => !ep.IsWatched);
+        
+        if (firstUnwatchedIndex > 0)
+        {
+            BingeChoiceOverlay.Visibility = Visibility.Visible;
+            
+            // FIX: Wait for WPF to completely finish drawing the popup before snatching focus
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                BingeResumeBtn.Focus();
+                Keyboard.Focus(BingeResumeBtn); // Forcefully snatch hardware focus
+            }), DispatcherPriority.ContextIdle);
+        }
+        else
+        {
+            LaunchBingeQueue(0);
+        }
+    }
+
+    private void BingeResume_Click(object sender, RoutedEventArgs e)
+    {
+        int startIndex = _allEpisodesForSelectedShow.FindIndex(ep => !ep.IsWatched);
+        LaunchBingeQueue(startIndex);
+    }
+
+    private void BingeBeginning_Click(object sender, RoutedEventArgs e)
+    {
+        LaunchBingeQueue(0);
+    }
+
+    private void LaunchBingeQueue(int startIndex)
+    {
+        // Hide all overlays
+        BingeChoiceOverlay.Visibility = Visibility.Collapsed;
+        EpisodesOverlay.Visibility = Visibility.Collapsed;
+        
+        // Send the queue to the player
+        OnPlayQueueRequested?.Invoke(this, (_allEpisodesForSelectedShow, startIndex));
+    }
+
+    private void BingeCancel_Click(object sender, RoutedEventArgs e)
+    {
+        BingeChoiceOverlay.Visibility = Visibility.Collapsed;
+        BingeShowBtn.Focus(); // Return focus back to the original Binge button
+    }
+
+    // --- 10-FOOT UI ROUTING FOR BINGE PROMPT ---
+    private void BingeChoice_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Back || command == HtpcCommand.Left)
+        {
+            BingeCancel_Click(null!, null!);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as Button)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Right)
+        {
+            e.Handled = true; // Prevent focus from flying off to the right side of the screen
+        }
+    }
 
     // --- UPDATED NAVIGATION SIGNATURES (RoutedEventArgs) ---
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
@@ -570,4 +696,5 @@ public partial class ShowsView : UserControl
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
 	private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }

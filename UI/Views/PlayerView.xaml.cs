@@ -1,7 +1,8 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input; // <-- NEEDED FOR THE MOUSE FIX
+using System.Windows.Input;
+using System.Windows.Threading;
 using HTPC.Core.Models;
 using HTPC.Services;
 using HTPC.UI.Controls;
@@ -21,6 +22,11 @@ public partial class PlayerView : UserControl
     private PlayerOverlayWindow? _overlayWindow;
     private bool _isMpvAttached = false;
 	private Point _lastMousePosition;
+	
+	// --- BINGE WATCH QUEUE STATE ---
+    private System.Collections.Generic.List<MediaItem> _playbackQueue = new();
+    private int _currentQueueIndex = 0;
+    private bool _isTransitioning = false;
 
     public PlayerView(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -50,23 +56,30 @@ public partial class PlayerView : UserControl
         SyncOverlayBounds();
     }
 
-    public async void StartPlayback(MediaItem media)
+    // Standard entry point for single files
+    public void StartPlayback(MediaItem media)
     {
-        // --- NEW FERAL INTERCEPT LOGIC ---
-        // Dynamically fetch stream links if this is a .strm or .strmlnk file
-        media = await _libraryService.ResolveStreamLinkAsync(media);
+        StartPlaybackQueue(new System.Collections.Generic.List<MediaItem> { media }, 0);
+    }
 
-        if (media.RequiresBrowser)
+    // Dynamic entry point for serial binge-watching
+    public void StartPlaybackQueue(System.Collections.Generic.List<MediaItem> queue, int startIndex)
+    {
+        _playbackQueue = queue ?? new System.Collections.Generic.List<MediaItem>();
+        _currentQueueIndex = startIndex;
+        _isTransitioning = false;
+
+        if (_playbackQueue.Count == 0 || _currentQueueIndex >= _playbackQueue.Count) return;
+
+        MediaItem currentItem = _playbackQueue[_currentQueueIndex];
+
+        _mpvService.Stop();
+        _mpvService.PlayMedia(currentItem);
+
+        if (_overlayWindow != null)
         {
-            LaunchExternalBrowser(media.StreamUrl);
-            
-            // Auto-trigger the back button so the blank video player closes
-            OnBackRequested?.Invoke(this, EventArgs.Empty);
-            return;
+            _overlayWindow.Close();
         }
-        // ---------------------------------
-
-        _mpvService.PlayMedia(media);
 
         _overlayWindow = new PlayerOverlayWindow(_mpvService, _libraryService, _serverManager)
         {
@@ -74,27 +87,39 @@ public partial class PlayerView : UserControl
             WindowStartupLocation = WindowStartupLocation.Manual
         };
 
-        // Track when the user drags or resizes the Main Window
-        var mainWindow = Application.Current.MainWindow;
-        if (mainWindow != null)
-        {
-            mainWindow.LocationChanged += MainWindow_BoundsChanged;
-            mainWindow.SizeChanged += MainWindow_BoundsChanged;
-        }
-
         _overlayWindow.OnBackRequested += (s, e) =>
         {
             StopPlayback();
             OnBackRequested?.Invoke(this, EventArgs.Empty);
         };
+        
+        // NEW: Listen for the overlay telling us it's time to play the next item
+        _overlayWindow.OnPlayNextInQueue += OverlayWindow_OnPlayNextInQueue;
 
-        _overlayWindow.InitializeMedia(media);
+        // Determine if there is a next item in our queue
+        MediaItem? nextItem = (_currentQueueIndex + 1 < _playbackQueue.Count) 
+            ? _playbackQueue[_currentQueueIndex + 1] 
+            : null;
+
+        // Pass the current AND next item to the overlay
+        _overlayWindow.InitializeMedia(currentItem, nextItem);
         _overlayWindow.Show();
         
-        Application.Current.Dispatcher.BeginInvoke(new Action(SyncOverlayBounds), System.Windows.Threading.DispatcherPriority.ContextIdle);
+        Application.Current.Dispatcher.BeginInvoke(new Action(SyncOverlayBounds), DispatcherPriority.ContextIdle);
 
         _overlayWindow.Activate();
         _overlayWindow.Focus();
+    }
+
+    private void OverlayWindow_OnPlayNextInQueue(object? sender, MediaItem nextItem)
+    {
+        // Prevent double-firing if the user clicks "Play Next" right as the video ends
+        if (_isTransitioning) return;
+        _isTransitioning = true;
+        
+        // Advance the queue and fire up the next video seamlessly!
+        _currentQueueIndex++;
+        StartPlaybackQueue(_playbackQueue, _currentQueueIndex);
     }
 	
 	private void PlayerView_PreviewKeyDown(object sender, KeyEventArgs e)

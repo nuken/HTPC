@@ -70,6 +70,228 @@ public class MediaLibraryService
 
         return stackedChannels;
     }
+	
+	// --- NEW: LIBRARY COLLECTIONS ENDPOINTS ---
+    
+    public async Task<List<CollectionItem>> GetLibraryCollectionsAsync()
+    {
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null) return new List<CollectionItem>();
+
+        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+        string apiUrl = $"{baseUrl}/api/v1/collections"; 
+
+        try
+        {
+            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+            using JsonDocument doc = JsonDocument.Parse(jsonResponse);
+            var collections = new List<CollectionItem>();
+            
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var element in doc.RootElement.EnumerateArray())
+                {
+                    string id = GetStringOrNumber(element, "id");
+                    if (string.IsNullOrEmpty(id)) continue;
+
+                    collections.Add(new CollectionItem
+                    {
+                        Id = id,
+                        Name = GetStringOrNumber(element, "name"),
+                        CollectionType = GetStringOrNumber(element, "collection_type"),
+                        ImageUrl = GetBestImageUrl(baseUrl, element, id),
+                        ContentCount = element.TryGetProperty("content_count", out var cc) && cc.ValueKind == JsonValueKind.Number ? cc.GetInt32() : 0
+                    });
+                }
+            }
+            return collections;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to fetch Library Collections: {ex.Message}");
+            return new List<CollectionItem>();
+        }
+    }
+
+    public async Task<List<MediaItem>> GetCollectionMediaAsync(string collectionId)
+    {
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null || string.IsNullOrWhiteSpace(collectionId)) return new List<MediaItem>();
+
+        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+        // The API sorts based on the user's custom preference by default
+        string apiUrl = $"{baseUrl}/api/v1/collections/{collectionId}/content"; 
+
+        try
+        {
+            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+            using JsonDocument doc = JsonDocument.Parse(jsonResponse);
+            var items = new List<MediaItem>();
+            
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var element in doc.RootElement.EnumerateArray())
+{
+    string id = GetStringOrNumber(element, "id");
+    if (string.IsNullOrEmpty(id)) continue;
+
+    string title = GetStringOrNumber(element, "title", "name"); // Added "name" as fallback
+    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+    
+    // NEW: Extract the Categories array so the UI knows if it's a Show or Movie
+    var categories = new List<string>();
+    if (element.TryGetProperty("categories", out var catElement) && catElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+    {
+        foreach (var cat in catElement.EnumerateArray())
+        {
+            if (cat.ValueKind == System.Text.Json.JsonValueKind.String)
+                categories.Add(cat.GetString() ?? "");
+        }
+    }
+
+    if (element.TryGetProperty("episode_count", out _))
+    {
+        if (!categories.Contains("Series")) 
+        {
+            categories.Add("Series");
+        }
+    }
+
+    items.Add(new MediaItem
+    {
+        Id = id,
+        Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
+        Categories = categories, // <--- Now guaranteed to include "Series" for all shows
+        PosterUrl = GetBestImageUrl(baseUrl, element, id),
+        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+        Path = GetStringOrNumber(element, "Path", "path"),
+        Summary = GetStringOrNumber(element, "summary", "full_summary"),
+        Commercials = ParseDoubleArray(element, "commercials")
+    });
+}
+            }
+            return items;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to fetch content for collection {collectionId}: {ex.Message}");
+            return new List<MediaItem>();
+        }
+    }
+	
+	public async Task<List<MediaItem>> GetShowEpisodesAsync(string showId)
+    {
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null || string.IsNullOrWhiteSpace(showId)) return new List<MediaItem>();
+
+        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+        string encodedShowId = Uri.EscapeDataString(showId);
+        string apiUrl = $"{baseUrl}/api/v1/shows/{encodedShowId}/episodes"; 
+
+        try
+        {
+            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+            using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(jsonResponse);
+            var items = new List<MediaItem>();
+            
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var element in doc.RootElement.EnumerateArray())
+                {
+                    string id = GetStringOrNumber(element, "id");
+                    string episodeTitle = GetStringOrNumber(element, "episode_title");
+                    string showTitle = GetStringOrNumber(element, "title");
+                    
+                    int seasonNum = element.TryGetProperty("season_number", out var sn) && sn.ValueKind == System.Text.Json.JsonValueKind.Number ? sn.GetInt32() : 0;
+                    int epNum = element.TryGetProperty("episode_number", out var en) && en.ValueKind == System.Text.Json.JsonValueKind.Number ? en.GetInt32() : 0;
+
+                    items.Add(new MediaItem
+                    {
+                        Id = id,
+                        Title = !string.IsNullOrEmpty(episodeTitle) ? episodeTitle : showTitle,
+                        CurrentShowTitle = showTitle,
+                        SeasonNumber = seasonNum,
+                        EpisodeNumber = epNum,
+                        PosterUrl = GetBestImageUrl(baseUrl, element, id),
+                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        Path = GetStringOrNumber(element, "path", "Path"),
+                        Summary = GetStringOrNumber(element, "summary"),
+                        IsWatched = element.TryGetProperty("watched", out var w) && w.GetBoolean(),
+                        IsFavorite = element.TryGetProperty("favorited", out var f) && f.GetBoolean()
+                    });
+                }
+            }
+            return items;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to fetch all episodes for show {showId}: {ex.Message}");
+            return new List<MediaItem>();
+        }
+    }
+	
+	public async Task<MediaItem?> GetNextUnwatchedEpisodeAsync(string showId)
+    {
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null || string.IsNullOrWhiteSpace(showId)) return null;
+
+        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+        string encodedShowId = Uri.EscapeDataString(showId);
+        string apiUrl = $"{baseUrl}/api/v1/shows/{encodedShowId}/episodes";
+        try
+        {
+            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+            using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(jsonResponse);
+            
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var unwatchedEpisodes = new System.Collections.Generic.List<System.Text.Json.JsonElement>();
+
+                // 1. Gather all unwatched episodes
+                foreach (var element in doc.RootElement.EnumerateArray())
+                {
+                    bool isWatched = element.TryGetProperty("watched", out var w) && w.GetBoolean();
+                    if (!isWatched)
+                    {
+                        unwatchedEpisodes.Add(element);
+                    }
+                }
+
+                // 2. If we found unwatched episodes, play the oldest one first
+                if (unwatchedEpisodes.Count > 0)
+                {
+                    // Sort by 'created_at' ascending (oldest first)
+                    var nextEpisode = System.Linq.Enumerable.OrderBy(unwatchedEpisodes, e => 
+                        e.TryGetProperty("created_at", out var c) && c.ValueKind == System.Text.Json.JsonValueKind.Number 
+                        ? c.GetInt64() 
+                        : long.MaxValue).First();
+
+                    string id = GetStringOrNumber(nextEpisode, "id");
+                    string episodeTitle = GetStringOrNumber(nextEpisode, "episode_title");
+                    string showTitle = GetStringOrNumber(nextEpisode, "title");
+                    
+                    return new MediaItem
+                    {
+                        Id = id,
+                        // Use episode_title if it exists, otherwise fallback to the show title
+                        Title = !string.IsNullOrEmpty(episodeTitle) ? episodeTitle : showTitle,
+                        CurrentShowTitle = showTitle,
+                        PosterUrl = GetBestImageUrl(baseUrl, nextEpisode, id),
+                        // Construct the native MPEG-TS stream URL
+                        StreamUrl = $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        Path = GetStringOrNumber(nextEpisode, "path", "Path"),
+                        Summary = GetStringOrNumber(nextEpisode, "summary") // Will safely be empty if not present
+                    };
+                }
+            }
+            return null; // All episodes are watched, or show has no episodes
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to fetch episodes for show {showId}: {ex.Message}");
+            return null;
+        }
+    }
 
     private async Task EnsureMoviesCacheAsync()
     {

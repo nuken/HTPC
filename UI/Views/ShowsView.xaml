@@ -10,7 +10,7 @@
             <Setter Property="Foreground" Value="#B3B3B3"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="16"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/> 
             <Setter Property="Margin" Value="0,0,15,0"/>
             <Setter Property="Padding" Value="20,10"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -18,17 +18,18 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="20" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="2" CornerRadius="20" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="Bg" Property="Background" Value="#333333"/>
                             </Trigger>
+                            
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="White"/>
-                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="White"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -119,6 +120,7 @@
                 <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
 				<Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+				<Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
 				<Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Shows" Style="{StaticResource NavPillActiveStyle}"/>
                 <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
@@ -237,11 +239,17 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Margin="0,0,30,0" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <Button Content="🔙 Back to Shows" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,20" Click="CloseOverlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
-                    
-                    <Border CornerRadius="12" ClipToBounds="True" Margin="0,0,0,20">
-                        <Image x:Name="OverlayShowPoster" Width="270" Height="400" Stretch="UniformToFill"/>
-                    </Border>
+            <Button x:Name="BackToLibraryBtn" Content="🔙 Back to Library" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,20" Click="CloseOverlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="OverlayButtons_PreviewKeyDown"/>
+            
+            <Button x:Name="BingeShowBtn" Content="🍿 Binge Watch" Background="#00A4EF" Foreground="White" BorderThickness="0" FontSize="18" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,20" Padding="15,8" Click="BingeShow_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="OverlayButtons_PreviewKeyDown">
+                <Button.Resources>
+                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
+                </Button.Resources>
+            </Button>
+            
+            <Border CornerRadius="12" ClipToBounds="True" Margin="0,0,0,20">
+                <Image x:Name="OverlayShowPoster" Width="270" Height="400" Stretch="UniformToFill"/>
+            </Border>
                     
                     <TextBlock x:Name="OverlayShowTitle" Text="Show Title" Foreground="White" FontSize="28" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,10"/>
                     <TextBlock x:Name="OverlayShowSummary" Text="Summary will appear here..." Foreground="#AAAAAA" FontSize="15" TextWrapping="Wrap" LineHeight="22" TextTrimming="CharacterEllipsis" MaxHeight="200"/>
@@ -435,6 +443,26 @@
 
                 <Button Grid.Row="3" Content="Close" Width="120" Height="40" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseMediaInfo_Click" HorizontalAlignment="Right" FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
             </Grid>
+        </Border>
+		<Border x:Name="BingeChoiceOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
+            <Border Background="#1A1A1A" BorderBrush="#333333" BorderThickness="1" CornerRadius="16" Padding="40" HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="450">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="10" Opacity="0.8"/>
+                </Border.Effect>
+                <StackPanel KeyboardNavigation.DirectionalNavigation="Continue">
+                    <TextBlock Text="Binge Watch Options" Foreground="White" FontSize="26" FontWeight="Bold" Margin="0,0,0,25" HorizontalAlignment="Center"/>
+                    
+                    <Button x:Name="BingeResumeBtn" Content="▶ Resume Where I Left Off" Background="#00A4EF" Foreground="White" BorderThickness="0" FontSize="18" FontWeight="Bold" Cursor="Hand" Margin="0,0,0,15" Padding="20,12" Click="BingeResume_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="BingeChoice_PreviewKeyDown">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+                    
+                    <Button x:Name="BingeBeginningBtn" Content="⏪ Start from the Beginning" Background="#333333" Foreground="White" BorderThickness="0" FontSize="18" FontWeight="Bold" Cursor="Hand" Margin="0,0,0,15" Padding="20,12" Click="BingeBeginning_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="BingeChoice_PreviewKeyDown">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+
+                    <Button x:Name="BingeCancelBtn" Content="Cancel" Background="Transparent" Foreground="#AAAAAA" BorderThickness="0" FontSize="18" FontWeight="SemiBold" Cursor="Hand" Padding="20,12" Click="BingeCancel_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="BingeChoice_PreviewKeyDown"/>
+                </StackPanel>
+            </Border>
         </Border>
     </Grid>
 </UserControl>

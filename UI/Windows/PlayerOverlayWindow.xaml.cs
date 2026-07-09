@@ -15,6 +15,9 @@ namespace HTPC.UI.Windows;
 public partial class PlayerOverlayWindow : Window
 {
     public event EventHandler? OnBackRequested;
+	
+	public event EventHandler<MediaItem>? OnPlayNextInQueue;
+    private bool _autoAdvanceTriggered = false;
 
     private readonly MpvPlaybackService _mpvService;
     private readonly MediaLibraryService _libraryService;
@@ -111,9 +114,10 @@ public partial class PlayerOverlayWindow : Window
         Mouse.OverrideCursor = null; 
     }
 
-    public void InitializeMedia(MediaItem media)
+    public void InitializeMedia(MediaItem media, MediaItem? nextInQueue = null)
     {
         _currentMedia = media;
+        _autoAdvanceTriggered = false; // Reset for new video
         
         ShowTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? "" : media.Title;
         MediaTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? media.Title : media.CurrentShowTitle;
@@ -124,14 +128,19 @@ public partial class PlayerOverlayWindow : Window
         UpNextPromptContainer.Visibility = Visibility.Collapsed;
         _nextEpisodeToPlay = null;
 
-        if (!_isLiveTv)
+        // NEW: Override the API lookup if the Binge Queue passed us the next item explicitly
+        if (nextInQueue != null)
+        {
+            _nextEpisodeToPlay = nextInQueue;
+        }
+        else if (!_isLiveTv)
         {
             _ = Task.Run(async () =>
             {
                 _nextEpisodeToPlay = await _libraryService.GetNextEpisodeAsync(media);
             });
         }
-        
+       
         if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
         else BufferingOverlay.Visibility = Visibility.Collapsed;
 
@@ -535,11 +544,21 @@ public partial class PlayerOverlayWindow : Window
                 RemainingTimeText.Text = "-" + remTime.ToString(remTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
             }
             
-            if (_nextEpisodeToPlay != null && !_upNextPromptShown)
+            if (_nextEpisodeToPlay != null && !_autoAdvanceTriggered)
             {
                 if (duration > 0 && (duration - position <= 120 || position / duration >= 0.95))
                 {
-                    ShowUpNextPrompt();
+                    if (!_upNextPromptShown) ShowUpNextPrompt();
+                }
+                
+                // NEW: Auto-advance automatically if the video hits the end (within 2 seconds)
+                if (duration > 0 && (duration - position <= 2))
+                {
+                    _autoAdvanceTriggered = true;
+                    if (OnPlayNextInQueue != null)
+                        OnPlayNextInQueue.Invoke(this, _nextEpisodeToPlay);
+                    else
+                        UpNextButton_Click(this, new RoutedEventArgs());
                 }
             }
         }
@@ -579,9 +598,17 @@ public partial class PlayerOverlayWindow : Window
     {
         if (_nextEpisodeToPlay == null) return;
 
-        _mpvService.Stop();
-        _mpvService.PlayMedia(_nextEpisodeToPlay);
-        InitializeMedia(_nextEpisodeToPlay);
+        // If PlayerView is running a Binge Queue, let it handle the seamless transition
+        if (OnPlayNextInQueue != null)
+        {
+            OnPlayNextInQueue.Invoke(this, _nextEpisodeToPlay);
+        }
+        else
+        {
+            _mpvService.Stop();
+            _mpvService.PlayMedia(_nextEpisodeToPlay);
+            InitializeMedia(_nextEpisodeToPlay);
+        }
     }
     
     private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

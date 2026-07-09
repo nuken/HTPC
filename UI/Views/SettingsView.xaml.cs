@@ -21,6 +21,7 @@ public partial class SettingsView : UserControl
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
 	public event EventHandler? OnMultiviewRequested;
+	public event EventHandler? OnCollectionsRequested;
 
     private readonly ServerManagerService _serverManager;
     private bool _isInitialized = false;
@@ -590,4 +591,5 @@ public partial class SettingsView : UserControl
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
 	private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }

@@ -5,12 +5,12 @@
 
     <UserControl.Resources>
         
-        <Style x:Key="NavPillStyle" TargetType="Button">
+       <Style x:Key="NavPillStyle" TargetType="Button">
             <Setter Property="Background" Value="#2A2A2A"/>
             <Setter Property="Foreground" Value="#B3B3B3"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="16"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/> 
             <Setter Property="Margin" Value="0,0,15,0"/>
             <Setter Property="Padding" Value="20,10"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -18,17 +18,18 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="20" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="2" CornerRadius="20" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="Bg" Property="Background" Value="#333333"/>
                             </Trigger>
+                            
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="White"/>
-                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="White"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -176,6 +177,7 @@
                 <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+				<Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
 				<Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
@@ -239,7 +241,11 @@
                                                 <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
                                             </Border.Effect>
                                             <Grid>
-                                                <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" HorizontalAlignment="Center"/>
+                                                <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" HorizontalAlignment="Center">
+                                                    <Image.Clip>
+                                                        <RectangleGeometry Rect="0,0,320,180" RadiusX="12" RadiusY="12"/>
+                                                    </Image.Clip>
+                                                </Image>
                                                 
                                                 <Border VerticalAlignment="Bottom" Height="60">
                                                     <Border.Background>

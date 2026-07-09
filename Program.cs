@@ -78,6 +78,8 @@ public class Program
 				services.AddTransient<HTPC.UI.Views.MultiviewSetupView>();
 				services.AddTransient<HTPC.UI.ViewModels.RecordingsViewModel>();
                 services.AddTransient<HTPC.UI.Views.RecordingsView>();
+				services.AddTransient<HTPC.UI.ViewModels.CollectionsViewModel>();
+				services.AddTransient<HTPC.UI.Views.CollectionsView>();
             });
 
         using var host = hostBuilder.Build();

@@ -10,7 +10,7 @@
             <Setter Property="Foreground" Value="#B3B3B3"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="16"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/> 
             <Setter Property="Margin" Value="0,0,15,0"/>
             <Setter Property="Padding" Value="20,10"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -18,17 +18,18 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="20" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="2" CornerRadius="20" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="Bg" Property="Background" Value="#333333"/>
                             </Trigger>
+                            
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="White"/>
-                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter TargetName="Bg" Property="Background" Value="#444444"/>
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="White"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -152,6 +153,7 @@
             <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
 			<Button Content="Movies" Style="{StaticResource NavPillActiveStyle}"/>
+			<Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
 			<Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
@@ -343,6 +345,65 @@
                 <Button Grid.Row="3" Content="Close" Width="120" Height="40" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseMediaInfo_Click" HorizontalAlignment="Right" FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
             </Grid>
         </Border>
+		
+		<Border x:Name="MovieDetailsOverlay" Grid.RowSpan="2" Background="#F20A0A0A" Visibility="Collapsed" Panel.ZIndex="250" KeyboardNavigation.DirectionalNavigation="Continue">
+            <Grid Margin="60" KeyboardNavigation.DirectionalNavigation="Continue">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
+                <StackPanel Grid.Column="0" Margin="0,0,40,0" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Button x:Name="DetailBackBtn" Content="🔙 Back to Movies" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,20" Click="CloseMovieDetails_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="MovieDetailsButtons_PreviewKeyDown"/>
+
+                    <Border CornerRadius="12" ClipToBounds="True" Margin="0,0,0,20">
+                        <Image x:Name="DetailPoster" Width="260" Height="390" Stretch="UniformToFill">
+                            <Image.Clip><RectangleGeometry Rect="0,0,260,390" RadiusX="12" RadiusY="12"/></Image.Clip>
+                        </Image>
+                    </Border>
+
+                    <Button x:Name="DetailPlayBtn" Content="▶ Play Movie" Background="#00A4EF" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Stretch" Padding="15,12" Click="DetailPlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="MovieDetailsButtons_PreviewKeyDown">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="DetailTitle" Text="Movie Title" FontSize="42" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,25">
+                        <Border Background="#333333" CornerRadius="6" Padding="8,4" Margin="0,0,10,0">
+                            <TextBlock x:Name="DetailYear" Text="----" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                        </Border>
+                        <Border Background="#333333" CornerRadius="6" Padding="8,4" Margin="0,0,10,0">
+                            <TextBlock x:Name="DetailRating" Text="NR" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                        </Border>
+                        <Border Background="#333333" CornerRadius="6" Padding="8,4" Margin="0,0,10,0">
+                            <TextBlock x:Name="DetailDuration" Text="--m" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                        </Border>
+                        <TextBlock x:Name="DetailGenres" Text="Loading Genres..." Foreground="#00A4EF" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="DetailSummary" Text="Loading summary..." FontSize="18" Foreground="#CCCCCC" TextWrapping="Wrap" LineHeight="26" MaxHeight="250" TextTrimming="CharacterEllipsis" Margin="0,0,0,30"/>
+
+                    <Grid Margin="0,0,0,15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Director:" Foreground="#888888" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock x:Name="DetailDirectors" Grid.Column="1" Text="Loading..." Foreground="White" FontSize="16" TextWrapping="Wrap"/>
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Cast:" Foreground="#888888" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock x:Name="DetailCast" Grid.Column="1" Text="Loading..." Foreground="White" FontSize="16" TextWrapping="Wrap" LineHeight="22" MaxHeight="66" TextTrimming="CharacterEllipsis"/>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

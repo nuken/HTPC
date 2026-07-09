@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly ShowsView _showsView;
     private readonly VideosView _videosView;
 	private readonly RecordingsView _recordingsView;
+	private readonly CollectionsView _collectionsView;
     
     // --- THE MULTIVIEW VARIABLES ---
     private readonly MultiviewSetupView _multiviewSetupView;
@@ -27,9 +28,9 @@ public partial class MainWindow : Window
     private bool _isFullscreen = true;
 	private Point _lastMousePosition;
 
-    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, RecordingsView recordingsView, MultiviewSetupView multiviewSetupView, ServerManagerService serverManager)
-    {
-        InitializeComponent();
+    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, RecordingsView recordingsView, MultiviewSetupView multiviewSetupView, CollectionsView collectionsView, ServerManagerService serverManager)
+{
+    InitializeComponent();
         
         _dashboardView = dashboardView;
         _playerView = playerView;
@@ -41,6 +42,7 @@ public partial class MainWindow : Window
         _recordingsView = recordingsView; // Assign the injected view
         _multiviewSetupView = multiviewSetupView;
         _serverManager = serverManager;
+		_collectionsView = collectionsView;
 
         // --- MULTIVIEW WIRING ---
         _multiviewSetupView.OnLaunchMultiviewRequested += LaunchMultiviewPlayer;
@@ -57,7 +59,8 @@ public partial class MainWindow : Window
         _settingsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _settingsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _settingsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
-        _settingsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _settingsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_settingsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _dashboardView.OnPlayRequested += PlayMedia;
         _dashboardView.OnExitRequested += Dashboard_ExitRequested;
@@ -67,6 +70,7 @@ public partial class MainWindow : Window
         _dashboardView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _dashboardView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _dashboardView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+		_dashboardView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         
         _guideView.OnHomeRequested += NavigateToDashboard;
         _guideView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
@@ -74,7 +78,8 @@ public partial class MainWindow : Window
         _guideView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _guideView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _guideView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
-        _guideView.OnPlayRequested += PlayMedia;
+        _guideView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_guideView.OnPlayRequested += PlayMedia;
         
         _moviesView.OnHomeRequested += NavigateToDashboard;
         _moviesView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -82,15 +87,18 @@ public partial class MainWindow : Window
         _moviesView.OnPlayRequested += PlayMedia;
         _moviesView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _moviesView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
-        _moviesView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _moviesView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_moviesView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _showsView.OnHomeRequested += NavigateToDashboard;
         _showsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _showsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _showsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _showsView.OnPlayRequested += PlayMedia;
+		_showsView.OnPlayQueueRequested += (s, e) => PlayMediaQueue(e.Queue, e.StartIndex);
         _showsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
-        _showsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _showsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_showsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _videosView.OnHomeRequested += NavigateToDashboard;
         _videosView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -98,7 +106,8 @@ public partial class MainWindow : Window
         _videosView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _videosView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _videosView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
-        _videosView.OnPlayRequested += PlayMedia;
+         _videosView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_videosView.OnPlayRequested += PlayMedia;
         
         // --- NEW: RECORDINGS VIEW OUTBOUND NAVIGATION ---
         _recordingsView.OnHomeRequested += NavigateToDashboard;
@@ -108,7 +117,8 @@ public partial class MainWindow : Window
         _recordingsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _recordingsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _recordingsView.OnPlayRequested += PlayMedia;
-        _recordingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _recordingsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_recordingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
 		
 		_dashboardView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _settingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
@@ -123,7 +133,19 @@ public partial class MainWindow : Window
         _multiviewSetupView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _multiviewSetupView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _multiviewSetupView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
-        _multiviewSetupView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _multiviewSetupView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_multiviewSetupView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+		
+		_collectionsView.OnHomeRequested += NavigateToDashboard;
+        _collectionsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _collectionsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _collectionsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _collectionsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _collectionsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _collectionsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _collectionsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _collectionsView.OnPlayRequested += PlayMedia;
+		_collectionsView.OnPlayQueueRequested += (s, e) => PlayMediaQueue(e.Queue, e.StartIndex);
         
         _playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
 
@@ -350,6 +372,18 @@ public partial class MainWindow : Window
         _previousView = MainShellContainer.Content;
         MainShellContainer.Content = _playerView;
         _playerView.StartPlayback(media); 
+    }
+	
+	// NEW: Handles full play queues for automated binge-watching
+    public void PlayMediaQueue(System.Collections.Generic.List<MediaItem> queue, int startIndex)
+    {
+        if (queue == null || queue.Count == 0) return;
+        
+        _previousView = MainShellContainer.Content;
+        MainShellContainer.Content = _playerView;
+        
+        // We will add this method to PlayerView in the next step
+        _playerView.StartPlaybackQueue(queue, startIndex);
     }
 
     private void Dashboard_ExitRequested(object? sender, EventArgs e)

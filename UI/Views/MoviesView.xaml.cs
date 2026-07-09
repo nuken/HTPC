@@ -21,6 +21,7 @@ public partial class MoviesView : UserControl
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
 	public event EventHandler? OnMultiviewRequested;
+	public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -52,6 +53,8 @@ public partial class MoviesView : UserControl
         _typingTimer.Tick += TypingTimer_Tick;
 
         Loaded += OnLoaded;
+		
+		this.PreviewKeyDown += MoviesView_PreviewKeyDown;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -191,15 +194,212 @@ public partial class MoviesView : UserControl
         
         if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
-            OnPlayRequested?.Invoke(this, movie);
-            e.Handled = true; 
+            OpenMovieDetails(movie); // FIXED: 'movie' instead of 'media'
+            e.Handled = true;
+        }
+    }
+	
+	// --- MASTER REMOTE BACK HANDLER ---
+    private void MoviesView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        // Catch the hardware Back button, Escape, or Backspace
+        if (command == HtpcCommand.Back || e.Key == Key.Escape || e.Key == Key.BrowserBack || e.Key == Key.Back)
+        {
+            // 1. If the new Movie Details overlay is open, close it
+            if (MovieDetailsOverlay != null && MovieDetailsOverlay.Visibility == Visibility.Visible)
+            {
+                CloseMovieDetails_Click(null!, null!);
+                
+                // Safely return focus to the list so your D-Pad keeps working
+                MoviesGrid.Focus(); 
+                e.Handled = true;
+                return;
+            }
+
+            // 2. If the old Context Menu Media Info modal is open, close it
+            if (MediaInfoModal != null && MediaInfoModal.Visibility == Visibility.Visible)
+            {
+                CloseMediaInfo_Click(null!, null!);
+                e.Handled = true;
+                return;
+            }
         }
     }
 
     private void MovieCard_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is ListBoxItem item && item.DataContext is MediaItem movie)
-            OnPlayRequested?.Invoke(this, movie);
+        {
+            OpenMovieDetails(movie); // FIXED: 'movie' instead of 'media'
+        }
+    }
+	
+	// --- MOVIE DETAILS ENGINE ---
+    private MediaItem? _activeMovieForDetails;
+
+    private async void OpenMovieDetails(MediaItem movie)
+    {
+        _activeMovieForDetails = movie;
+
+        // 1. Instantly load what we already know from the local library state
+        DetailTitle.Text = movie.Title;
+        DetailSummary.Text = !string.IsNullOrEmpty(movie.Summary) ? movie.Summary : "No summary available.";
+        
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+            {
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = new Uri(movie.PosterUrl, UriKind.RelativeOrAbsolute);
+                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+                DetailPoster.Source = bmp;
+            }
+            else DetailPoster.Source = null;
+        }
+        catch { DetailPoster.Source = null; }
+
+        // Clear out secondary data while the API fetches
+        DetailYear.Text = "----";
+        DetailRating.Text = "NR";
+        DetailDuration.Text = "--m";
+        DetailGenres.Text = "";
+        DetailDirectors.Text = "Loading...";
+        DetailCast.Text = "Loading...";
+
+        MovieDetailsOverlay.Visibility = Visibility.Visible;
+
+        // Force 10-foot UI focus onto the Play button
+        _ = Dispatcher.BeginInvoke(new Action(() =>
+        {
+            DetailPlayBtn.Focus();
+            Keyboard.Focus(DetailPlayBtn);
+        }), DispatcherPriority.ContextIdle);
+
+        // 2. Fetch the deep metadata from Channels DVR API safely
+        try
+        {
+            var activeServer = _serverManager.GetActiveServer();
+            if (activeServer != null)
+            {
+                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+                using var client = new System.Net.Http.HttpClient();
+                
+                // Hit the exact, single-movie endpoint!
+                var response = await client.GetStringAsync($"{baseUrl}/api/v1/movies/{movie.Id}");
+
+                using var doc = System.Text.Json.JsonDocument.Parse(response);
+                var root = doc.RootElement;
+                
+                // Read properties directly off the returned movie object
+                if (root.TryGetProperty("release_year", out var yr) && yr.ValueKind != System.Text.Json.JsonValueKind.Null) 
+                    DetailYear.Text = yr.ToString();
+                
+                if (root.TryGetProperty("content_rating", out var cr) && cr.ValueKind != System.Text.Json.JsonValueKind.Null) 
+                    DetailRating.Text = cr.ToString();
+
+                if (root.TryGetProperty("duration", out var dur) && dur.ValueKind != System.Text.Json.JsonValueKind.Null)
+                {
+                    if (double.TryParse(dur.ToString(), out double seconds))
+                    {
+                        var t = TimeSpan.FromSeconds(seconds);
+                        DetailDuration.Text = t.Hours > 0 ? $"{t.Hours}h {t.Minutes}m" : $"{t.Minutes}m";
+                    }
+                }
+
+                if (root.TryGetProperty("genres", out var gen) && gen.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var genresList = new System.Collections.Generic.List<string>();
+                    foreach (var g in gen.EnumerateArray()) genresList.Add(g.ToString());
+                    DetailGenres.Text = string.Join(" • ", genresList);
+                }
+
+                if (root.TryGetProperty("directors", out var dirs) && dirs.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var dirList = new System.Collections.Generic.List<string>();
+                    foreach (var d in dirs.EnumerateArray()) dirList.Add(d.ToString());
+                    DetailDirectors.Text = dirList.Count > 0 ? string.Join(", ", dirList) : "Unknown";
+                }
+                else DetailDirectors.Text = "Unknown";
+
+                if (root.TryGetProperty("cast", out var cast) && cast.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var castList = new System.Collections.Generic.List<string>();
+                    foreach (var c in cast.EnumerateArray()) castList.Add(c.ToString());
+                    DetailCast.Text = castList.Count > 0 ? string.Join(", ", castList) : "Unknown";
+                }
+                else DetailCast.Text = "Unknown";
+
+                // Prioritize full_summary if it exists, otherwise fall back to regular summary
+                if (root.TryGetProperty("full_summary", out var fSum) && fSum.ValueKind != System.Text.Json.JsonValueKind.Null && !string.IsNullOrWhiteSpace(fSum.ToString()))
+                {
+                     DetailSummary.Text = fSum.ToString();
+                }
+                else if (root.TryGetProperty("summary", out var sum) && sum.ValueKind != System.Text.Json.JsonValueKind.Null && !string.IsNullOrWhiteSpace(sum.ToString()))
+                {
+                     DetailSummary.Text = sum.ToString();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            DetailDirectors.Text = "Unavailable";
+            DetailCast.Text = "Unavailable";
+            DetailSummary.Text += $"\n\n(API Error: {ex.Message})"; 
+        }
+    }
+
+    private void DetailPlay_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeMovieForDetails != null)
+        {
+            // Now we actually play the movie!
+            OnPlayRequested?.Invoke(this, _activeMovieForDetails);
+        }
+    }
+
+    private void CloseMovieDetails_Click(object sender, RoutedEventArgs e)
+    {
+        MovieDetailsOverlay.Visibility = Visibility.Collapsed;
+        // The Master Back Handler will handle returning focus to the grid
+    }
+
+    // --- 10-FOOT UI ROUTING TRAPS ---
+    private void MovieDetailsButtons_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        if (command == HtpcCommand.Right)
+        {
+            e.Handled = true; // Prevent remote from escaping right into the text boxes
+        }
+        else if (command == HtpcCommand.Left || command == HtpcCommand.Back)
+        {
+            CloseMovieDetails_Click(null!, null!);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Up && sender == DetailBackBtn)
+        {
+            e.Handled = true; // Trap at top
+        }
+        else if (command == HtpcCommand.Down && sender == DetailPlayBtn)
+        {
+            e.Handled = true; // Trap at bottom
+        }
+        // Explicit spatial routing to prevent WPF confusion
+        else if (command == HtpcCommand.Up && sender == DetailPlayBtn)
+        {
+            DetailBackBtn.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Down && sender == DetailBackBtn)
+        {
+            DetailPlayBtn.Focus();
+            e.Handled = true;
+        }
     }
     
     // --- 10-FOOT UI FOCUS TRAP FIXES ---
@@ -506,4 +706,5 @@ public partial class MoviesView : UserControl
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
 	private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }

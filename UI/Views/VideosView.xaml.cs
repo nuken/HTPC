@@ -21,6 +21,7 @@ public partial class VideosView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
 	public event EventHandler? OnMultiviewRequested;
+	public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
 	private readonly ServerManagerService _serverManager;
@@ -77,13 +78,73 @@ public partial class VideosView : UserControl
 
     // --- OVERLAY DRILL-DOWN LOGIC ---
 
+    private void TopNavPanel_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        // Push focus DOWN into the grid
+        if (command == HtpcCommand.Down || e.Key == Key.Down)
+        {
+            if (GroupsGrid.Items.Count > 0)
+            {
+                var element = GroupsGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                element?.Focus();
+                e.Handled = true;
+            }
+        }
+    }
+
     private void GroupItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
-        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem group)
+        bool isSelect = command == HtpcCommand.Select || e.Key == Key.Enter;
+        bool isUp = command == HtpcCommand.Up || e.Key == Key.Up;
+
+        if (isSelect && sender is ListBoxItem item && item.DataContext is MediaItem group)
         {
             OpenGroupOverlay(group);
             e.Handled = true;
+            return;
+        }
+
+        // FIX: Escape to Top Nav if pressing UP on the top row
+        if (isUp && sender is ListBoxItem currentItem)
+        {
+            // Calculate the item's physical Y position inside the Grid
+            Point position = currentItem.TranslatePoint(new Point(0, 0), GroupsGrid);
+            
+            // If Y is close to 0, we are on the top row of the WrapPanel
+            if (position.Y < 50)
+            {
+                FocusTopNav();
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void FocusTopNav()
+    {
+        foreach (UIElement child in TopNavPanel.Children)
+        {
+            if (child is Button btn && btn.Focusable)
+            {
+                btn.Focus();
+                return;
+            }
+        }
+    }
+
+    private void BackToFoldersBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        // Push focus DOWN into the Videos list
+        if (command == HtpcCommand.Down || e.Key == Key.Down)
+        {
+            if (VideosList.Items.Count > 0)
+            {
+                var element = VideosList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                element?.Focus();
+                e.Handled = true;
+            }
         }
     }
 
@@ -131,10 +192,26 @@ public partial class VideosView : UserControl
     private void VideoItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
-        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem video)
+        bool isSelect = command == HtpcCommand.Select || e.Key == Key.Enter;
+        bool isUp = command == HtpcCommand.Up || e.Key == Key.Up;
+
+        if (isSelect && sender is ListBoxItem item && item.DataContext is MediaItem video)
         {
             OnPlayRequested?.Invoke(this, video);
             e.Handled = true;
+            return;
+        }
+
+        // FIX: Escape to "Back" button if pressing UP on the top row of the overlay
+        if (isUp && sender is ListBoxItem currentItem)
+        {
+            Point position = currentItem.TranslatePoint(new Point(0, 0), VideosList);
+            
+            if (position.Y < 50)
+            {
+                BackToFoldersBtn.Focus();
+                e.Handled = true;
+            }
         }
     }
 
@@ -363,4 +440,5 @@ public partial class VideosView : UserControl
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
 	private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }

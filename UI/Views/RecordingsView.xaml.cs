@@ -19,6 +19,7 @@ public partial class RecordingsView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnMultiviewRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
+	public event EventHandler? OnCollectionsRequested;
 
     private readonly RecordingsViewModel _viewModel;
     private MediaItem? _selectedMedia;
@@ -391,4 +392,5 @@ public partial class RecordingsView : UserControl
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }

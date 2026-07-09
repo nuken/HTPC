@@ -21,6 +21,7 @@ public partial class MultiviewSetupView : UserControl
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
+	public event EventHandler? OnCollectionsRequested;
    
     // Events to communicate with MainWindow
     public event EventHandler<List<Channel>>? OnLaunchMultiviewRequested;
@@ -292,4 +293,5 @@ public partial class MultiviewSetupView : UserControl
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }
