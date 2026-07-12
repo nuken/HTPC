@@ -17,8 +17,8 @@ public partial class MainWindow : Window
     private readonly MoviesView _moviesView;
     private readonly ShowsView _showsView;
     private readonly VideosView _videosView;
-	private readonly RecordingsView _recordingsView;
-	private readonly CollectionsView _collectionsView;
+    private readonly RecordingsView _recordingsView;
+    private readonly CollectionsView _collectionsView;
     
     // --- THE MULTIVIEW VARIABLES ---
     private readonly MultiviewSetupView _multiviewSetupView;
@@ -26,7 +26,7 @@ public partial class MainWindow : Window
     
     private object? _previousView;
     private bool _isFullscreen = true;
-	private Point _lastMousePosition;
+    private Point _lastMousePosition;
 
     public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, RecordingsView recordingsView, MultiviewSetupView multiviewSetupView, CollectionsView collectionsView, ServerManagerService serverManager)
 {
@@ -39,10 +39,10 @@ public partial class MainWindow : Window
         _moviesView = moviesView; 
         _showsView = showsView;
         _videosView = videosView;
-        _recordingsView = recordingsView; // Assign the injected view
+        _recordingsView = recordingsView; 
         _multiviewSetupView = multiviewSetupView;
         _serverManager = serverManager;
-		_collectionsView = collectionsView;
+        _collectionsView = collectionsView;
 
         // --- MULTIVIEW WIRING ---
         _multiviewSetupView.OnLaunchMultiviewRequested += LaunchMultiviewPlayer;
@@ -60,7 +60,7 @@ public partial class MainWindow : Window
         _settingsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _settingsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _settingsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
-		_settingsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _settingsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _dashboardView.OnPlayRequested += PlayMedia;
         _dashboardView.OnExitRequested += Dashboard_ExitRequested;
@@ -70,7 +70,7 @@ public partial class MainWindow : Window
         _dashboardView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _dashboardView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _dashboardView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
-		_dashboardView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+        _dashboardView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         
         _guideView.OnHomeRequested += NavigateToDashboard;
         _guideView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
@@ -79,7 +79,7 @@ public partial class MainWindow : Window
         _guideView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _guideView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         _guideView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
-		_guideView.OnPlayRequested += PlayMedia;
+        _guideView.OnPlayRequested += PlayMedia;
         
         _moviesView.OnHomeRequested += NavigateToDashboard;
         _moviesView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -88,17 +88,17 @@ public partial class MainWindow : Window
         _moviesView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _moviesView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _moviesView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
-		_moviesView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _moviesView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _showsView.OnHomeRequested += NavigateToDashboard;
         _showsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _showsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _showsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _showsView.OnPlayRequested += PlayMedia;
-		_showsView.OnPlayQueueRequested += (s, e) => PlayMediaQueue(e.Queue, e.StartIndex);
+        _showsView.OnPlayQueueRequested += (s, e) => PlayMediaQueue(e.Queue, e.StartIndex);
         _showsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _showsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
-		_showsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _showsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         
         _videosView.OnHomeRequested += NavigateToDashboard;
         _videosView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -107,7 +107,7 @@ public partial class MainWindow : Window
         _videosView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _videosView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
          _videosView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
-		_videosView.OnPlayRequested += PlayMedia;
+        _videosView.OnPlayRequested += PlayMedia;
         
         // --- NEW: RECORDINGS VIEW OUTBOUND NAVIGATION ---
         _recordingsView.OnHomeRequested += NavigateToDashboard;
@@ -118,25 +118,25 @@ public partial class MainWindow : Window
         _recordingsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _recordingsView.OnPlayRequested += PlayMedia;
         _recordingsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
-		_recordingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
-		
-		_dashboardView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        _recordingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+        
+        _dashboardView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _settingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _guideView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _moviesView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _showsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _videosView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         
-		_multiviewSetupView.OnHomeRequested += NavigateToDashboard;
+        _multiviewSetupView.OnHomeRequested += NavigateToDashboard;
         _multiviewSetupView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _multiviewSetupView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _multiviewSetupView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _multiviewSetupView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _multiviewSetupView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _multiviewSetupView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
-		_multiviewSetupView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
-		
-		_collectionsView.OnHomeRequested += NavigateToDashboard;
+        _multiviewSetupView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        
+        _collectionsView.OnHomeRequested += NavigateToDashboard;
         _collectionsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
         _collectionsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
         _collectionsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
@@ -145,17 +145,16 @@ public partial class MainWindow : Window
         _collectionsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _collectionsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _collectionsView.OnPlayRequested += PlayMedia;
-		_collectionsView.OnPlayQueueRequested += (s, e) => PlayMediaQueue(e.Queue, e.StartIndex);
+        _collectionsView.OnPlayQueueRequested += (s, e) => PlayMediaQueue(e.Queue, e.StartIndex);
         
         _playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
-
 
         MainShellContainer.Content = _dashboardView;
         
         // --- Restore window layout preferences on boot ---
         InitializeWindowState();
-		ApplyGlobalUiScale();
-		this.PreviewMouseMove += Window_PreviewMouseMove;
+        ApplyGlobalUiScale();
+        this.PreviewMouseMove += Window_PreviewMouseMove;
     }
     
     // ==========================================
@@ -205,43 +204,48 @@ public partial class MainWindow : Window
     private void MaximizeRestore_Click(object sender, RoutedEventArgs e) => ToggleFullscreen();
 
     public void ToggleFullscreen()
+{
+    var prefs = PreferencesManager.Load();
+
+    if (_isFullscreen)
     {
-        var prefs = PreferencesManager.Load();
+        _isFullscreen = false;
+        WindowState = WindowState.Normal;
+        TitleBarRow.Height = new GridLength(32);
+        MaximizeRestoreBtn.Content = "🗖";
 
-        if (_isFullscreen)
-        {
-            _isFullscreen = false;
-            WindowState = WindowState.Normal;
-            TitleBarRow.Height = new GridLength(32);
-            MaximizeRestoreBtn.Content = "🗖";
+        // Enforce the default preset size (adjust 1280 and 720 as needed)
+        this.Width = 1280;
+        this.Height = 720;
 
-            if (prefs.WindowWidth > 0)
-            {
-                this.Width = prefs.WindowWidth;
-                this.Height = prefs.WindowHeight;
-                this.Top = prefs.WindowTop;
-                this.Left = prefs.WindowLeft;
-            }
-        }
-        else
-        {
-            // Save the exact floating coordinates before blowing it up to Fullscreen
-            prefs.WindowWidth = this.ActualWidth;
-            prefs.WindowHeight = this.ActualHeight;
-            prefs.WindowTop = this.Top;
-            prefs.WindowLeft = this.Left;
+        // Calculate the exact center of the screen
+        var workArea = SystemParameters.WorkArea;
+        this.Left = (workArea.Width - this.Width) / 2 + workArea.Left;
+        this.Top = (workArea.Height - this.Height) / 2 + workArea.Top;
 
-            _isFullscreen = true;
-            WindowState = WindowState.Maximized;
-            TitleBarRow.Height = new GridLength(0);
-            MaximizeRestoreBtn.Content = "🗗";
-        }
-
-        prefs.IsFullscreen = _isFullscreen;
-        PreferencesManager.Save(prefs);
+        // Overwrite the preferences with the clean, centered dimensions
+        prefs.WindowWidth = this.Width;
+        prefs.WindowHeight = this.Height;
+        prefs.WindowTop = this.Top;
+        prefs.WindowLeft = this.Left;
     }
-	
-	private void Window_PreviewMouseMove(object sender, MouseEventArgs e)
+    else
+    {
+        // We no longer need to save the window coordinates here, because we are 
+        // deliberately choosing to snap back to the default 1280x720 size 
+        // whenever the user exits fullscreen mode.
+
+        _isFullscreen = true;
+        WindowState = WindowState.Maximized;
+        TitleBarRow.Height = new GridLength(0);
+        MaximizeRestoreBtn.Content = "🗗";
+    }
+
+    prefs.IsFullscreen = _isFullscreen;
+    PreferencesManager.Save(prefs);
+}
+    
+    private void Window_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         Point currentPosition = e.GetPosition(this);
 
@@ -282,7 +286,20 @@ public partial class MainWindow : Window
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         Mouse.OverrideCursor = Cursors.None;
-		// 1. THE 'F' KEY HANDLER
+        
+        var command = Core.Input.InputMapper.GetCommand(e.Key);
+
+        // --- GLOBAL TEXT BOX TRAP ---
+        // If the user is typing, we must not steal the Backspace key for navigation
+        if (Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is PasswordBox)
+        {
+            if (e.Key == Key.Back || command == Core.Input.HtpcCommand.Back)
+            {
+                return; // Let the TextBox handle the backspace natively
+            }
+        }
+
+        // 1. THE 'F' KEY HANDLER
         if (e.Key == Key.F)
         {
             // CRITICAL: Ignore if the user is typing into a search box or IP address field
@@ -326,8 +343,6 @@ public partial class MainWindow : Window
         }
 
         // 5. STANDARD NAVIGATION (REMOTE BACK/HOME)
-        var command = Core.Input.InputMapper.GetCommand(e.Key);
-
         if (command == Core.Input.HtpcCommand.Home)
         {
             NavigateToDashboard(this, EventArgs.Empty);
@@ -342,7 +357,7 @@ public partial class MainWindow : Window
             }
         }
     }
-	
+    
     // ==========================================
     // GLOBAL UI SCALING
     // ==========================================
@@ -373,8 +388,8 @@ public partial class MainWindow : Window
         MainShellContainer.Content = _playerView;
         _playerView.StartPlayback(media); 
     }
-	
-	// NEW: Handles full play queues for automated binge-watching
+    
+    // NEW: Handles full play queues for automated binge-watching
     public void PlayMediaQueue(System.Collections.Generic.List<MediaItem> queue, int startIndex)
     {
         if (queue == null || queue.Count == 0) return;
@@ -408,8 +423,8 @@ public partial class MainWindow : Window
         this.Show(); 
         MainShellContainer.Focus(); 
     }
-	
-	// --- LOW LEVEL HARDWARE REMOTE CONTROL HOOKS ---
+    
+    // --- LOW LEVEL HARDWARE REMOTE CONTROL HOOKS ---
     private const int WM_APPCOMMAND = 0x0319;
 
     protected override void OnSourceInitialized(EventArgs e)

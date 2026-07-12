@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.Collections.ObjectModel;
 using HTPC.Core.Input;
 using HTPC.Core.Models;
 using HTPC.UI.ViewModels;
@@ -21,35 +23,46 @@ public partial class CollectionsView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnExitRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
-	public event EventHandler<(System.Collections.Generic.List<MediaItem> Queue, int StartIndex)>? OnPlayQueueRequested;
-	private System.Collections.Generic.List<MediaItem> _allEpisodesForSelectedShow = new();
-	
+    public event EventHandler<(System.Collections.Generic.List<MediaItem> Queue, int StartIndex)>? OnPlayQueueRequested;
+    
+    private System.Collections.Generic.List<MediaItem> _allEpisodesForSelectedShow = new();
+    
     private readonly CollectionsViewModel _viewModel;
     private IInputElement? _lastFocusedElement;
+
+    // --- LAZY LOADING VARIABLES ---
+    private System.Collections.Generic.List<MediaItem> _activeCollectionContents = new();
+    public ObservableCollection<MediaItem> ModalMediaItems { get; set; } = new();
+    private int _modalOffset = 0;
+    private const int _chunkSize = 50;
 
     public CollectionsView(CollectionsViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = _viewModel;
+        
+        // Bind the modal ListBox to the lazy-loading collection
+        CollectionContentList.ItemsSource = ModalMediaItems;
+        
         Loaded += OnLoaded;
-		this.PreviewKeyDown += CollectionsView_PreviewKeyDown;
+        this.PreviewKeyDown += CollectionsView_PreviewKeyDown;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         ContentModal.Visibility = Visibility.Collapsed;
         EpisodesOverlay.Visibility = Visibility.Collapsed;
-		await _viewModel.LoadCollectionsAsync();
+        await _viewModel.LoadCollectionsAsync();
 
         _ = Dispatcher.InvokeAsync(() => 
         {
-            var element = MovieCollectionsList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-            element?.Focus();
+            var rowElement = MovieCollectionsList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+            rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
         }, DispatcherPriority.Loaded);
     }
 
-// --- TOP NAVIGATION HANDLERS ---
+    // --- TOP NAVIGATION HANDLERS ---
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
@@ -59,8 +72,8 @@ public partial class CollectionsView : UserControl
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
     private void ExitApp_Click(object sender, RoutedEventArgs e) => OnExitRequested?.Invoke(this, EventArgs.Empty);
-    // --- COLLECTION SELECTION (Opens Modal) ---
     
+    // --- COLLECTION SELECTION ---
     private void CollectionCard_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (sender is FrameworkElement element)
@@ -69,10 +82,6 @@ public partial class CollectionsView : UserControl
 
             try
             {
-                if (ItemsControl.ItemsControlFromItemContainer(element) is ListBox listBox)
-                    listBox.ScrollIntoView(element.DataContext);
-
-                // Auto scroll main window
                 var transform = element.TransformToAncestor(MainScroll.Content as UIElement);
                 Point position = transform.Transform(new Point(0, 0));
                 double targetY = position.Y - 100;
@@ -90,50 +99,84 @@ public partial class CollectionsView : UserControl
             e.Handled = true;
         }
     }
-	
-	// --- BINGE WATCH QUEUE BUILDERS ---
+
+    private async System.Threading.Tasks.Task OpenCollectionModal(CollectionItem collection)
+    {
+        _lastFocusedElement = Keyboard.FocusedElement;
+        ModalTitle.Text = collection.Name;
+        
+        // Fetch all items internally, but clear the UI observable collection
+        _activeCollectionContents = await _viewModel.GetCollectionContentsAsync(collection.Id);
+        ModalMediaItems.Clear();
+        _modalOffset = 0;
+        
+        LoadNextModalChunk();
+        
+        ContentModal.Visibility = Visibility.Visible;
+
+        _ = Dispatcher.InvokeAsync(() => 
+        {
+            if (CollectionContentList.Items.Count > 0)
+            {
+                var rowElement = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            }
+            else
+            {
+                CloseModalBtn.Focus();
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void LoadNextModalChunk()
+    {
+        if (_modalOffset >= _activeCollectionContents.Count) return;
+
+        var chunk = _activeCollectionContents.Skip(_modalOffset).Take(_chunkSize).ToList();
+        foreach (var item in chunk)
+        {
+            ModalMediaItems.Add(item);
+        }
+        
+        _modalOffset += chunk.Count;
+    }
+
+    private void ModalScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (sender is ScrollViewer scrollViewer)
+        {
+            if (scrollViewer.VerticalOffset >= scrollViewer.ScrollableHeight - 100)
+            {
+                LoadNextModalChunk();
+            }
+        }
+    }
+
+    // --- BINGE WATCH QUEUE BUILDERS ---
 
     private async void BingeMovies_Click(object sender, RoutedEventArgs e)
     {
-        var queue = new System.Collections.Generic.List<MediaItem>();
-        foreach (var item in CollectionContentList.Items)
-        {
-            if (item is MediaItem media) 
-            {
-                queue.Add(media);
-            }
-        }
+        // Use the flat list we already retrieved instead of digging through the UI rows
+        var queue = new System.Collections.Generic.List<MediaItem>(_activeCollectionContents);
         
         if (queue.Count == 0) return;
 
-        // 1. Detect if this collection contains TV Shows instead of Movies
-        bool isSeriesCollection = false;
-        foreach (var item in queue)
-        {
-            if (item.Categories != null && (item.Categories.Contains("Show", StringComparer.OrdinalIgnoreCase) || item.Categories.Contains("Series", StringComparer.OrdinalIgnoreCase)))
-            {
-                isSeriesCollection = true;
-                break;
-            }
-        }
+        bool isSeriesCollection = queue.Any(item => item.Categories != null && 
+            (item.Categories.Contains("Show", StringComparer.OrdinalIgnoreCase) || 
+             item.Categories.Contains("Series", StringComparer.OrdinalIgnoreCase)));
 
         if (isSeriesCollection)
         {
-            // We need to fetch the actual episodes for every show in this collection!
             string originalTitle = ModalTitle.Text;
-            
-            // Give the user visual feedback since fetching multiple shows takes a second
             ModalTitle.Text = "Building Binge Queue..."; 
             
             var masterEpisodesQueue = new System.Collections.Generic.List<MediaItem>();
             
             foreach (var show in queue)
             {
-                // Fetch episodes using the ViewModel method we created earlier
                 var episodes = await _viewModel.GetShowEpisodesAsync(show.Id);
                 if (episodes != null)
                 {
-                    // Extract only the unwatched episodes and add them to the master queue
                     foreach (var ep in episodes)
                     {
                         if (!ep.IsWatched) masterEpisodesQueue.Add(ep);
@@ -150,20 +193,16 @@ public partial class CollectionsView : UserControl
             }
             
             ContentModal.Visibility = Visibility.Collapsed;
-            ModalTitle.Text = originalTitle; // Reset the title for next time
+            ModalTitle.Text = originalTitle; 
             
-            // Send the massive cross-show queue to the player
             OnPlayQueueRequested?.Invoke(this, (masterEpisodesQueue, 0));
         }
         else
         {
-            // 2. Standard Movie Collection Logic
             int startIndex = queue.FindIndex(m => !m.IsWatched);
             if (startIndex == -1) startIndex = 0;
 
             ContentModal.Visibility = Visibility.Collapsed;
-            
-            // Send the movie queue to the player
             OnPlayQueueRequested?.Invoke(this, (queue, startIndex));
         }
     }
@@ -176,22 +215,18 @@ public partial class CollectionsView : UserControl
 
         int firstUnwatchedIndex = _allEpisodesForSelectedShow.FindIndex(ep => !ep.IsWatched);
         
-        // SMART PROMPT LOGIC: 
-        // If index is > 0, they are in the middle of a show. Ask what they want to do.
         if (firstUnwatchedIndex > 0)
         {
             BingeChoiceOverlay.Visibility = Visibility.Visible;
             
-            // Wait for WPF to completely finish drawing the popup before snatching focus
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 BingeResumeBtn.Focus();
-                Keyboard.Focus(BingeResumeBtn); // Forcefully snatch hardware focus
+                Keyboard.Focus(BingeResumeBtn); 
             }), System.Windows.Threading.DispatcherPriority.ContextIdle);
         }
         else
         {
-            // If index is 0 (never watched) or -1 (completely finished), skip prompt and start at episode 1
             LaunchBingeQueue(0);
         }
     }
@@ -209,12 +244,10 @@ public partial class CollectionsView : UserControl
 
     private void LaunchBingeQueue(int startIndex)
     {
-        // Hide all layers of overlays
         BingeChoiceOverlay.Visibility = Visibility.Collapsed;
         EpisodesOverlay.Visibility = Visibility.Collapsed;
         ContentModal.Visibility = Visibility.Collapsed;
         
-        // Send the queue to the player
         OnPlayQueueRequested?.Invoke(this, (_allEpisodesForSelectedShow, startIndex));
     }
 
@@ -222,7 +255,6 @@ public partial class CollectionsView : UserControl
     {
         BingeChoiceOverlay.Visibility = Visibility.Collapsed;
         
-        // Return focus back to the original Binge button if it exists
         var bingeBtn = EpisodesOverlay.FindName("BingeShowBtn") as UIElement;
         bingeBtn?.Focus(); 
     }
@@ -245,33 +277,8 @@ public partial class CollectionsView : UserControl
         }
         else if (command == HTPC.Core.Input.HtpcCommand.Right)
         {
-            e.Handled = true; // Prevent focus from flying off to the right side of the screen
+            e.Handled = true; 
         }
-    }
-
-    private async System.Threading.Tasks.Task OpenCollectionModal(CollectionItem collection)
-    {
-        _lastFocusedElement = Keyboard.FocusedElement;
-        ModalTitle.Text = collection.Name;
-        
-        // Fetch contents
-        var mediaItems = await _viewModel.GetCollectionContentsAsync(collection.Id);
-        CollectionContentList.ItemsSource = mediaItems;
-        
-        ContentModal.Visibility = Visibility.Visible;
-
-        _ = Dispatcher.InvokeAsync(() => 
-        {
-            if (CollectionContentList.Items.Count > 0)
-            {
-                var element = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-                element?.Focus();
-            }
-            else
-            {
-                CloseModalBtn.Focus();
-            }
-        }, DispatcherPriority.Loaded);
     }
 
     // --- MEDIA ITEM SELECTION (Inside Modal) ---
@@ -281,8 +288,6 @@ public partial class CollectionsView : UserControl
         if (sender is FrameworkElement element)
         {
             if (element.IsMouseOver || Mouse.LeftButton == MouseButtonState.Pressed) return;
-            if (ItemsControl.ItemsControlFromItemContainer(element) is ListBox listBox)
-                listBox.ScrollIntoView(element.DataContext);
         }
     }
 
@@ -302,7 +307,6 @@ public partial class CollectionsView : UserControl
         var command = HTPC.Core.Input.InputMapper.GetCommand(e.Key);
         bool isDown = command == HTPC.Core.Input.HtpcCommand.Down || e.Key == Key.Down;
 
-        // If the user is on the Top Nav and presses DOWN, force focus into the grid
         if (isDown)
         {
             if (MovieCollectionsList.Items.Count > 0)
@@ -317,33 +321,26 @@ public partial class CollectionsView : UserControl
             }
         }
     }
-	
-	// --- MASTER REMOTE BACK HANDLER ---
+    
+    // --- MASTER REMOTE BACK HANDLER ---
     private void UserControl_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
-		
+        
         if (BingeChoiceOverlay.Visibility == Visibility.Visible) return;
         
         if (command == HtpcCommand.Back || e.Key == Key.Escape || e.Key == Key.BrowserBack || e.Key == Key.Back)
         {
-            // Layer 1: We are inside a Show's Season/Episode list
             if (EpisodesOverlay.Visibility == Visibility.Visible)
             {
                 CloseEpisodesOverlay_Click(null!, null!);
-                
-                // CRITICAL: Stop MainWindow from sending you to the Dashboard
                 e.Handled = true; 
             }
-            // Layer 2: We are inside the Collection Content list
             else if (ContentModal.Visibility == Visibility.Visible)
             {
                 CloseModal_Click(null!, null!);
-                
-                // CRITICAL: Stop MainWindow from sending you to the Dashboard
                 e.Handled = true; 
             }
-            
         }
     }
 
@@ -352,11 +349,9 @@ public partial class CollectionsView : UserControl
         var command = HTPC.Core.Input.InputMapper.GetCommand(e.Key);
         bool isSelect = command == HTPC.Core.Input.HtpcCommand.Select || e.Key == Key.Enter;
         bool isUp = command == HTPC.Core.Input.HtpcCommand.Up || e.Key == Key.Up;
-        bool isDown = command == HTPC.Core.Input.HtpcCommand.Down || e.Key == Key.Down;
 
         if (!(sender is ListBoxItem item) || !(item.DataContext is CollectionItem collection)) return;
 
-        // 1. Handle "Select" / Enter to open the Collection Modal
         if (isSelect)
         {
             _ = OpenCollectionModal(collection);
@@ -364,41 +359,17 @@ public partial class CollectionsView : UserControl
             return;
         }
 
-        // Determine exactly which row we are on by checking the ViewModel data directly
-        bool isMovie = _viewModel.MovieCollections.Contains(collection);
-        bool isShow = _viewModel.ShowCollections.Contains(collection);
-
-        // 2. Handle UP
         if (isUp)
         {
-            if (isMovie) 
+            // Simply bounce focus up. Since WPF is handling the grid naturally now, 
+            // checking coordinates will natively bump to the top menu if it's the top row.
+            var index = MovieCollectionsList.ItemContainerGenerator.IndexFromContainer(item);
+            if (index < 0) index = ShowCollectionsList.ItemContainerGenerator.IndexFromContainer(item);
+            
+            // If it's one of the first few items in the first wrapped row, bump to nav
+            if (index >= 0 && index < 6) 
             {
-                // We are on the top row, escape to Top Nav
                 FocusTopNav();
-                e.Handled = true;
-            }
-            else if (isShow)
-            {
-                // We are on the bottom row, jump to Movie row if it has items, otherwise Top Nav
-                if (MovieCollectionsList.Items.Count > 0)
-                {
-                    FocusItemInList(MovieCollectionsList);
-                    e.Handled = true;
-                }
-                else
-                {
-                    FocusTopNav();
-                    e.Handled = true;
-                }
-            }
-        }
-        // 3. Handle DOWN
-        else if (isDown)
-        {
-            if (isMovie && ShowCollectionsList.Items.Count > 0)
-            {
-                // Jump from Movie row to Show row
-                FocusItemInList(ShowCollectionsList);
                 e.Handled = true;
             }
         }
@@ -409,16 +380,21 @@ public partial class CollectionsView : UserControl
         var command = InputMapper.GetCommand(e.Key);
         bool isUp = command == HtpcCommand.Up || e.Key == Key.Up;
 
-        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem media)
+        if (!(sender is ListBoxItem item) || !(item.DataContext is MediaItem media)) return;
+
+        if (command == HtpcCommand.Select)
         {
             PlaySelectedMedia(media);
             e.Handled = true;
         }
-        // FIX: Force focus to the Back button if pressing Up
         else if (isUp)
         {
-            CloseModalBtn.Focus();
-            e.Handled = true;
+            var index = CollectionContentList.ItemContainerGenerator.IndexFromContainer(item);
+            if (index >= 0 && index < 6)
+            {
+                CloseModalBtn.Focus();
+                e.Handled = true;
+            }
         }
         else if (command == HtpcCommand.Back || e.Key == Key.Escape)
         {
@@ -430,13 +406,12 @@ public partial class CollectionsView : UserControl
     private void CloseModalBtn_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
-        // Push focus DOWN from the back button into the list
         if (command == HtpcCommand.Down || e.Key == Key.Down)
         {
             if (CollectionContentList.Items.Count > 0)
             {
-                var element = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-                element?.Focus();
+                var rowElement = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
                 e.Handled = true;
             }
         }
@@ -456,26 +431,23 @@ public partial class CollectionsView : UserControl
         }
     }
 
-    private void FocusItemInList(ListBox list)
+    private void FocusItemInList(ItemsControl list)
     {
-        // Try to keep horizontal position, otherwise default to first item
-        int index = Math.Max(0, list.SelectedIndex);
-        
-        if (list.ItemContainerGenerator.ContainerFromIndex(index) as UIElement is UIElement target)
+        if (list.Items.Count > 0)
         {
-            target.Focus();
-        }
-        else
-        {
-            // Failsafe if virtualized item isn't ready
-            list.UpdateLayout();
-            if (list.ItemContainerGenerator.ContainerFromIndex(index) as UIElement is UIElement fallbackTarget)
+            var rowElement = list.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+            if (rowElement != null)
             {
-                fallbackTarget.Focus();
+                rowElement.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            }
+            else
+            {
+                list.UpdateLayout();
+                rowElement = list.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
             }
         }
     }
-    
     
     private void CloseModal_Click(object sender, RoutedEventArgs e)
     {
@@ -483,9 +455,7 @@ public partial class CollectionsView : UserControl
         if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
             Keyboard.Focus(_lastFocusedElement);
     }
-	
-	// --- UPDATED MEDIA CLICK HANDLER ---
-
+    
     private void PlaySelectedMedia(MediaItem media)
     {
         bool isSeries = media.Categories != null && 
@@ -494,12 +464,10 @@ public partial class CollectionsView : UserControl
 
         if (isSeries)
         {
-            // Open the new Seasons/Episodes view
             OpenShowOverlay(media);
         }
         else
         {
-            // It's a Movie, play it directly
             ContentModal.Visibility = Visibility.Collapsed;
             EpisodesOverlay.Visibility = Visibility.Collapsed;
             OnPlayRequested?.Invoke(this, media);
@@ -537,7 +505,6 @@ public partial class CollectionsView : UserControl
             _viewModel.CurrentEpisodes.Clear();
             _viewModel.Seasons.Clear();
 
-            // Fetch episodes using the newly created API method
             _allEpisodesForSelectedShow = await _viewModel.GetShowEpisodesAsync(show.Id) ?? new System.Collections.Generic.List<MediaItem>();
 
             if (_allEpisodesForSelectedShow.Count > 0)
@@ -549,7 +516,6 @@ public partial class CollectionsView : UserControl
             EpisodesOverlay.Visibility = Visibility.Visible;
             if (_viewModel.Seasons.Count > 0) SeasonsList.SelectedIndex = 0;
 
-            // Push focus to the Seasons List
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 if (SeasonsList.Items.Count > 0)
@@ -579,19 +545,16 @@ public partial class CollectionsView : UserControl
     {
         EpisodesOverlay.Visibility = Visibility.Collapsed;
         
-        // Return focus back to the first item in the collection content list
         if (CollectionContentList.Items.Count > 0)
         {
-            var firstItem = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-            firstItem?.Focus();
+            var rowElement = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+            rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
         }
         else
         {
             CloseModalBtn.Focus();
         }
     }
-
-    // --- HARDWARE ROUTING FOR EPISODES OVERLAY ---
 
    private void SeasonItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -615,7 +578,6 @@ public partial class CollectionsView : UserControl
         }
         else if (command == HtpcCommand.Left) 
         {
-            // FOCUS BRIDGE: Jump Left to the Action Buttons
             BingeShowBtn.Focus();
             e.Handled = true;
         }
@@ -638,14 +600,12 @@ public partial class CollectionsView : UserControl
         }
     }
 
-    // --- 10-FOOT UI ROUTING FOR EPISODE OVERLAY BUTTONS ---
     private void EpisodesOverlayButtons_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
         
         if (command == HtpcCommand.Right)
         {
-            // FOCUS BRIDGE: Jump Right into the Seasons List
             if (SeasonsList.Items.Count > 0)
             {
                 SeasonsList.UpdateLayout();
@@ -657,31 +617,25 @@ public partial class CollectionsView : UserControl
         }
         else if (command == HtpcCommand.Back || command == HtpcCommand.Left)
         {
-            // Escape the overlay and go back to the collection content list
             CloseEpisodesOverlay_Click(null!, null!);
             e.Handled = true;
         }
         else if (command == HtpcCommand.Up && sender == BingeShowBtn)
         {
-            // Explicitly force focus up to the Back button
             CloseEpisodesBtn.Focus();
             e.Handled = true;
         }
         else if (command == HtpcCommand.Down && sender == CloseEpisodesBtn)
         {
-            // Explicitly force focus down to the Binge button
             BingeShowBtn.Focus();
             e.Handled = true;
         }
-        // --- NEW: FOCUS TRAPS ---
         else if (command == HtpcCommand.Down && sender == BingeShowBtn)
         {
-            // Block WPF from throwing focus into the empty space below the poster
             e.Handled = true; 
         }
         else if (command == HtpcCommand.Up && sender == CloseEpisodesBtn)
         {
-            // Block WPF from throwing focus into the empty space above the buttons
             e.Handled = true; 
         }
     }
@@ -723,26 +677,48 @@ public partial class CollectionsView : UserControl
         }
     }
 	
-	// --- MASTER REMOTE BACK HANDLER ---
+	// --- MOUSE WHEEL SCROLLING HANDLERS ---
+
+    private void MainListBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        {
+            RoutedEvent = UIElement.MouseWheelEvent,
+            Source = sender
+        };
+        MainScroll.RaiseEvent(eventArg);
+    }
+
+    private void ModalListBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        {
+            RoutedEvent = UIElement.MouseWheelEvent,
+            Source = sender
+        };
+        
+        // Ensure ModalScroll isn't null before raising the event
+        ModalScroll?.RaiseEvent(eventArg);
+    }
+    
     private void CollectionsView_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
 
         if (command == HtpcCommand.Back || e.Key == Key.Escape)
         {
-            // 1. If we are deep inside a Show's Season/Episode list
             if (EpisodesOverlay.Visibility == Visibility.Visible)
             {
                 CloseEpisodesOverlay_Click(null!, null!);
                 e.Handled = true;
             }
-            // 2. If we are inside the Collection Content list
             else if (ContentModal.Visibility == Visibility.Visible)
             {
                 CloseModal_Click(null!, null!);
                 e.Handled = true;
             }
-            // 3. Otherwise, let it pass through to go back to the Dashboard
         }
     }
 }

@@ -1,13 +1,14 @@
 using System;
 using System.Linq;
 using System.Windows;
+using System.Reflection;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using HTPC.Services;
 using System.Net.Http;
 using System.Threading.Tasks;
-using HTPC.Core.Input; // Required for remote control commands
+using HTPC.Core.Input;
 using HTPC.Core.Models;
 
 namespace HTPC.UI.Views;
@@ -31,9 +32,19 @@ public partial class SettingsView : UserControl
     public SettingsView(ServerManagerService serverManager)
     {
         InitializeComponent();
+		LoadVersionNumber();
         _serverManager = serverManager;
         Loaded += OnLoaded;
     }
+	
+	private void LoadVersionNumber()
+{
+    var version = Assembly.GetExecutingAssembly().GetName().Version;
+    
+    string versionString = version?.ToString(3) ?? "Unknown";
+
+    VersionText.Text = $"Nucleus HTPC v{versionString}";
+}
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {

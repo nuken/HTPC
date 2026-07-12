@@ -138,38 +138,43 @@
             <RowDefinition Height="*"/>    
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Margin="0,0,0,30">
-            <StackPanel Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Continue">
-                <Button x:Name="HomeNavBtn" Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
-                <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
-                <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
-                <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
-				<Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
-				<Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
-                <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
-                <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
+        <!-- Wrapped the top section in a StackPanel to stack the version number underneath -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,30">
+            <Grid>
+                <StackPanel Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Button x:Name="HomeNavBtn" Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
+                    <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
+                    <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
+                    <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+                    <Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
+                    <Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
+                    <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+                    <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
+                    
+                    <Button x:Name="SettingsNavBtn" Content="Settings" Style="{StaticResource NavPillActiveStyle}"/>
+                    
+                    <TextBlock Text="Server Actions" FontSize="26" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="#555555"/>
+                    <Button Content="⚡" FontSize="24" Background="Transparent" Foreground="#FFD700" BorderThickness="0" Cursor="Hand" Margin="20,0,0,0" Click="AdminMenu_Click" ToolTip="Server Admin Actions">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Scan Personal Media" Click="AdminAction_Click" Tag="/dvr/scanner/scan"/>
+                                <MenuItem Header="Prune Removed Media" Click="AdminAction_Click" Tag="/dvr/scanner/imports/prune"/>
+                                <MenuItem Header="Refresh Virtual Channels" Click="AdminAction_Click" Tag="/dvr/lineups/X-VIRTUAL"/>
+                                <MenuItem Header="Clear Streaming Cache" Click="AdminAction_Click" Tag="/dvr/cache"/>
+                                <MenuItem Header="Fetch Guide Updates" Click="AdminAction_Click" Tag="/dvr/guide?force="/>
+                                <MenuItem Header="Re-Download Entire Guide" Click="AdminAction_Click" Tag="/dvr/guide?force=true"/>
+                                <MenuItem Header="Empty Trash" Click="AdminAction_Click" Tag="/dvr/trash/empty"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
                 
-                <Button x:Name="SettingsNavBtn" Content="Settings" Style="{StaticResource NavPillActiveStyle}"/>
-                
-                <TextBlock Text="Server Actions" FontSize="26" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="#555555"/>
-                <Button Content="⚡" FontSize="24" Background="Transparent" Foreground="#FFD700" BorderThickness="0" Cursor="Hand" Margin="20,0,0,0" Click="AdminMenu_Click" ToolTip="Server Admin Actions">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Scan Personal Media" Click="AdminAction_Click" Tag="/dvr/scanner/scan"/>
-                            <MenuItem Header="Prune Removed Media" Click="AdminAction_Click" Tag="/dvr/scanner/imports/prune"/>
-                            <MenuItem Header="Refresh Virtual Channels" Click="AdminAction_Click" Tag="/dvr/lineups/X-VIRTUAL"/>
-                            <MenuItem Header="Clear Streaming Cache" Click="AdminAction_Click" Tag="/dvr/cache"/>
-                            <MenuItem Header="Fetch Guide Updates" Click="AdminAction_Click" Tag="/dvr/guide?force="/>
-                            <MenuItem Header="Re-Download Entire Guide" Click="AdminAction_Click" Tag="/dvr/guide?force=true"/>
-                            <MenuItem Header="Empty Trash" Click="AdminAction_Click" Tag="/dvr/trash/empty"/>
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
-            </StackPanel>
-            
-            <Button Content="⏻ Exit HTPC" HorizontalAlignment="Right" Style="{StaticResource NavPillStyle}" Foreground="#FF4444" Margin="0" Click="ExitApp_Click"/>
-        </Grid>
+                <Button Content="⏻ Exit HTPC" HorizontalAlignment="Right" Style="{StaticResource NavPillStyle}" Foreground="#FF4444" Margin="0" Click="ExitApp_Click"/>
+            </Grid>
 
+            <!-- DYNAMIC VERSION NUMBER -->
+            <TextBlock x:Name="VersionText" Foreground="#555555" FontSize="14" FontWeight="SemiBold" Margin="5,10,0,0"/>
+        </StackPanel>
         <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,20,0" Focusable="False" IsTabStop="False" GotKeyboardFocus="MainScroll_GotKeyboardFocus">
             <Grid>
                 <Grid.ColumnDefinitions>
