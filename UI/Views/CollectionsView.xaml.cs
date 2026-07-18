@@ -29,6 +29,9 @@ public partial class CollectionsView : UserControl
     
     private readonly CollectionsViewModel _viewModel;
     private IInputElement? _lastFocusedElement;
+	
+	private System.Collections.Generic.List<MediaItem> _masterCollectionContents = new();
+    private readonly DispatcherTimer _searchTimer;
 
     // --- LAZY LOADING VARIABLES ---
     private System.Collections.Generic.List<MediaItem> _activeCollectionContents = new();
@@ -44,6 +47,10 @@ public partial class CollectionsView : UserControl
         
         // Bind the modal ListBox to the lazy-loading collection
         CollectionContentList.ItemsSource = ModalMediaItems;
+		
+		// Initialize Search Timer
+        _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _searchTimer.Tick += SearchTimer_Tick;
         
         Loaded += OnLoaded;
         this.PreviewKeyDown += CollectionsView_PreviewKeyDown;
@@ -105,8 +112,11 @@ public partial class CollectionsView : UserControl
         _lastFocusedElement = Keyboard.FocusedElement;
         ModalTitle.Text = collection.Name;
         
-        // Fetch all items internally, but clear the UI observable collection
-        _activeCollectionContents = await _viewModel.GetCollectionContentsAsync(collection.Id);
+        // --- NEW: Reset search box and cache the master list ---
+        CollectionSearchBox.Text = string.Empty;
+        _masterCollectionContents = await _viewModel.GetCollectionContentsAsync(collection.Id);
+        _activeCollectionContents = _masterCollectionContents.ToList();
+
         ModalMediaItems.Clear();
         _modalOffset = 0;
         
@@ -126,6 +136,64 @@ public partial class CollectionsView : UserControl
                 CloseModalBtn.Focus();
             }
         }, DispatcherPriority.Loaded);
+    }
+	
+	private void CollectionSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        _searchTimer.Stop();
+        _searchTimer.Start();
+    }
+
+    private void SearchTimer_Tick(object? sender, EventArgs e)
+    {
+        _searchTimer.Stop();
+        string query = CollectionSearchBox.Text.ToLower().Trim();
+        
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            // Restore the full list if the search box is empty
+            _activeCollectionContents = _masterCollectionContents.ToList();
+        }
+        else
+        {
+            // Deep search against Title, Episode, Summary, Cast, Directors, and Genres
+            _activeCollectionContents = _masterCollectionContents.Where(m => 
+                (m.Title != null && m.Title.ToLower().Contains(query)) ||
+                (m.CurrentShowTitle != null && m.CurrentShowTitle.ToLower().Contains(query)) ||
+                (m.Summary != null && m.Summary.ToLower().Contains(query)) ||
+                (m.Cast != null && m.Cast.Any(c => c.ToLower().Contains(query))) ||
+                (m.Directors != null && m.Directors.Any(d => d.ToLower().Contains(query))) ||
+                (m.Genres != null && m.Genres.Any(g => g.ToLower().Contains(query)))
+            ).ToList();
+        }
+
+        ModalMediaItems.Clear();
+        _modalOffset = 0;
+        LoadNextModalChunk();
+    }
+	
+	private void CollectionSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        // Let Left/Right natively control the text caret inside the box. 
+        // We only intercept Up/Down for UI escaping.
+        
+        if (command == HtpcCommand.Down)
+        {
+            // Bridge straight down into the media grid
+            if (CollectionContentList.Items.Count > 0)
+            {
+                var rowElement = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+                e.Handled = true;
+            }
+        }
+        else if (command == HtpcCommand.Up)
+        {
+            // Prevent focus from falling off the top edge of the screen
+            e.Handled = true; 
+        }
     }
 
     private void LoadNextModalChunk()
@@ -390,9 +458,15 @@ public partial class CollectionsView : UserControl
         else if (isUp)
         {
             var index = CollectionContentList.ItemContainerGenerator.IndexFromContainer(item);
+            
+            // If they push UP from the top row (first 6 items)
             if (index >= 0 && index < 6)
             {
-                CloseModalBtn.Focus();
+                // If they are on the right half of the screen, bridge to the Search Box
+                if (index >= 3) CollectionSearchBox.Focus();
+                // Otherwise, bridge to the Back button
+                else CloseModalBtn.Focus();
+                
                 e.Handled = true;
             }
         }

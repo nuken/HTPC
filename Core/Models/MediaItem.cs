@@ -58,6 +58,11 @@ public class MediaItem : INotifyPropertyChanged
     public int EpisodeNumber { get; set; }
     public string Summary { get; set; } = string.Empty;
 
+    // --- NEW: DVR DISCOVERY PROPERTIES ---
+    public string ChannelName { get; set; } = string.Empty;
+    public string SeriesId { get; set; } = string.Empty;
+    public string ChannelNumber { get; set; } = string.Empty;
+
     // --- NEW: IN-PROGRESS RECORDING FLAG ---
     private bool _isCompleted = true;
     public bool IsCompleted 

@@ -32,6 +32,31 @@ public class MpvPlaybackService : IDisposable
 	private double _lastSyncedPosition = 0;
     private bool _hasMarkedWatched = false;
     private string _tempChapterFile = string.Empty;
+	
+	private CancellationTokenSource? _loadingWatchdogCts;
+    private int _retryCount = 0;
+    private const int MaxRetries = 2;
+    private const int LoadingTimeoutSeconds = 5;
+	
+	// --- NEW: TUNER DIAGNOSTICS SWITCH ---
+    private bool EnableTunerDiagnostics = false;
+
+    private void LogTuner(string message)
+    {
+        if (EnableTunerDiagnostics)
+        {
+            // This will print directly to the command prompt terminal
+            Console.WriteLine($"[TUNER] {DateTime.Now:HH:mm:ss.fff} [Thread: {System.Threading.Thread.CurrentThread.ManagedThreadId}] {message}");
+        }
+    }
+	private DateTime _lastPositionChangeTime = DateTime.UtcNow;
+    private double _lastWatchdogPosition = -1;
+
+    public double CurrentPosition { get; private set; }
+    public double CurrentDuration { get; private set; }
+    public event Action? OnMediaLoaded;
+    private const int MPV_EVENT_END_FILE = 7;
+    private const int MPV_EVENT_FILE_LOADED = 8;
 
     public event Action<double>? OnCommercialPrompt;
 
@@ -89,11 +114,21 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000"); 
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
         
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "no");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-initial", "no");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-initial", "yes");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-secs", "1.5");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-wait", "1.5");
 
         // The lavf fastseek command ensures HLS playlists probe instantly without stalling
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+fastseek");
+
+        // --- NEW: Aggressive Network Timeout Settings for HLS ---
+        // Force the network connection to drop if the server takes longer than 5 seconds to reply
+        Libmpv.mpv_set_option_string(_mpvContext, "network-timeout", "5"); 
+        // Force HLS playlist parsing to timeout if the playlist stalls
+        Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=5000000"); 
+        // Stop MPV from hanging infinitely if the demuxer gets confused by broken timestamps
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "50M");
 
         Libmpv.mpv_set_option_string(_mpvContext, "video-sync", "display-resample");
         Libmpv.mpv_set_option_string(_mpvContext, "autosync", "30");
@@ -113,6 +148,7 @@ public class MpvPlaybackService : IDisposable
 
         _positionTimer = new Timer(SaveCurrentPosition, null, Timeout.Infinite, Timeout.Infinite);
         Libmpv.mpv_observe_property(_mpvContext, 1, "time-pos", 5);
+		Libmpv.mpv_observe_property(_mpvContext, 2, "duration", 5);
 
         _eventLoopThread = new Thread(EventLoop);
         _eventLoopThread.IsBackground = true;
@@ -138,13 +174,32 @@ public class MpvPlaybackService : IDisposable
         return "N/A";
     }
 
-    public void PlayMedia(MediaItem media)
+    public void PlayMedia(MediaItem media, bool isRetry = false)
     {
+        LogTuner($"PlayMedia requested for: {media.Title}. IsRetry: {isRetry}");
+
+        if (!isRetry)
+        {
+            _retryCount = 0; 
+        }
+
+        if (_currentMedia != null && _currentMedia.Id != media.Id)
+        {
+            LogTuner($"Different media detected. Tearing down previous session: {_currentMedia.Id}");
+            SaveCurrentPosition(null);
+            _ = SyncProgressToServerAsync(_currentMedia.Id, CurrentDuration, CurrentPosition);
+            _ = StopServerSessionAsync(_currentMedia); 
+            
+            CurrentPosition = 0;
+            CurrentDuration = 0;
+        }
+
         _currentMedia = media;
-        _logger.LogInformation($"Loading media: {media.Title}");
+        _logger.LogInformation($"Loading media: {media.Title} (Attempt {_retryCount + 1})");
 
         _lastSyncedPosition = 0;
         _hasMarkedWatched = false;
+        
         if (!string.IsNullOrEmpty(_tempChapterFile) && System.IO.File.Exists(_tempChapterFile))
         {
             try { System.IO.File.Delete(_tempChapterFile); } catch { }
@@ -164,13 +219,11 @@ public class MpvPlaybackService : IDisposable
             if (media.StartOffset > 0)
             {
                 Libmpv.mpv_set_option_string(_mpvContext, "start", media.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                _logger.LogInformation($"Up Next: Resuming at {media.StartOffset} seconds.");
             }
             else if (state != null && state.PositionTicks > 0)
             {
                 double startSeconds = TimeSpan.FromTicks(state.PositionTicks).TotalSeconds;
                 Libmpv.mpv_set_option_string(_mpvContext, "start", startSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                _logger.LogInformation($"Resuming at {startSeconds} seconds.");
             }
             else
             {
@@ -180,7 +233,6 @@ public class MpvPlaybackService : IDisposable
 
         string streamUrl = media.StreamUrl ?? media.Path;
         
-        // --- ARCHITECTURE FIX: HARD LOCK ABR FOR HLS ---
         if (streamUrl.Contains(".m3u8"))
         {
             var server = _serverManager.GetActiveServer();
@@ -188,29 +240,44 @@ public class MpvPlaybackService : IDisposable
             
             if (isLocal) 
             {
-                // Local network: Lock ABR OFF and force strict audio/video copy. 
-                // This permanently stops MPV from requesting lower resolutions and causing transcoder restarts.
                 streamUrl += streamUrl.Contains("?") ? "&abr=false&vcodec=copy&acodec=copy" : "?abr=false&vcodec=copy&acodec=copy";
             }
             else
             {
-                // Remote network: Lock ABR to a stable 4Mbps 720p stream
                 streamUrl += streamUrl.Contains("?") ? "&abr=false&vcodec=h264&acodec=aac&vbitrate=4000&resolution=720" : "?abr=false&vcodec=h264&acodec=aac&vbitrate=4000&resolution=720";
             }
         }
 
-        Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{streamUrl}\"");
-
-        if (!string.IsNullOrWhiteSpace(media.SubtitleUrl))
+        if (_loadingWatchdogCts != null)
         {
-            Libmpv.mpv_command_string(_mpvContext, $"sub-add \"{media.SubtitleUrl}\"");
+            LogTuner("Cancelling previous loading watchdog.");
+            _loadingWatchdogCts.Cancel();
+            _loadingWatchdogCts.Dispose();
         }
+        _loadingWatchdogCts = new CancellationTokenSource();
 
+        LogTuner($"Offloading native MPV loadfile command to background task...");
+        
+        Task.Run(() =>
+        {
+            LogTuner($"Executing loadfile: {streamUrl}");
+            Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{streamUrl}\"");
+
+            if (!string.IsNullOrWhiteSpace(media.SubtitleUrl))
+            {
+                Libmpv.mpv_command_string(_mpvContext, $"sub-add \"{media.SubtitleUrl}\"");
+            }
+            LogTuner($"Native loadfile commands dispatched to engine.");
+        });
+
+        _ = StartLoadingWatchdogAsync(_loadingWatchdogCts.Token, media);
         _positionTimer?.Change(5000, 5000);
     }
     
     private void EventLoop()
     {
+        LogTuner("Native MPV Event Loop thread started.");
+        
         while (!_isDisposed)
         {
             IntPtr eventPtr = Libmpv.mpv_wait_event(_mpvContext, 0.5);
@@ -218,40 +285,78 @@ public class MpvPlaybackService : IDisposable
 
             var ev = Marshal.PtrToStructure<Libmpv.mpv_event>(eventPtr);
             
-            if (ev.event_id == 7)
+            // 1. Stream loaded successfully
+            if (ev.event_id == MPV_EVENT_FILE_LOADED)
             {
+                LogTuner("MPV_EVENT_FILE_LOADED triggered! Video is successfully buffering/playing.");
+                _logger.LogInformation("Stream loaded successfully in MPV. Cancelling watchdog.");
+                _loadingWatchdogCts?.Cancel();
+                OnMediaLoaded?.Invoke(); 
+            }
+
+            // 2. Stream ended or failed to open
+            if (ev.event_id == MPV_EVENT_END_FILE)
+            {
+                LogTuner("MPV_EVENT_END_FILE triggered. Stream closed natively by MPV.");
+                _loadingWatchdogCts?.Cancel();
+                
                 var media = _currentMedia;
                 if (media != null)
                 {
-                    double duration = GetDuration();
+                    if (_retryCount < MaxRetries && CurrentPosition <= 0) // Use CurrentPosition here
+                    {
+                        _logger.LogWarning("File ended immediately with 0 duration. Triggering failure recovery.");
+                        _ = Task.Run(() => HandlePlaybackFailure(media));
+                        continue;
+                    }
+
+                    double duration = CurrentDuration; // Use CurrentDuration here
                     _ = SyncProgressToServerAsync(media.Id, duration, duration);
                 }
             }
             
+            // 3. Property changes (Position & Duration tracking)
             if (ev.event_id == 22) 
             {
                 var prop = Marshal.PtrToStructure<Libmpv.mpv_event_property>(ev.data);
-                if (prop.name == "time-pos" && prop.data != IntPtr.Zero)
+                if (prop.data != IntPtr.Zero)
                 {
-                    double timePos = Marshal.PtrToStructure<double>(prop.data);
-                    EvaluateCommercialBoundaries(timePos);
-
-                    double duration = GetDuration();
-                    bool isWatchedThreshold = duration > 0 && (timePos >= duration - 180 || (timePos / duration) >= 0.9);
-                    
-                    if (Math.Abs(timePos - _lastSyncedPosition) >= 20 || (isWatchedThreshold && !_hasMarkedWatched))
+                    if (prop.name == "time-pos")
                     {
-                        _lastSyncedPosition = timePos;
-                        var media = _currentMedia;
-                        if (media != null)
+                        double timePos = Marshal.PtrToStructure<double>(prop.data);
+                        
+                        // NEW: If the position moves forward, reset the stagnation clock!
+                        if (timePos != _lastWatchdogPosition)
                         {
-                            _ = SyncProgressToServerAsync(media.Id, duration, timePos);
+                            _lastWatchdogPosition = timePos;
+                            _lastPositionChangeTime = DateTime.UtcNow;
                         }
+
+                        CurrentPosition = timePos;
+                        
+                        EvaluateCommercialBoundaries(timePos);
+
+                        double duration = CurrentDuration;
+                        bool isWatchedThreshold = duration > 0 && (timePos >= duration - 180 || (timePos / duration) >= 0.9);
+                        
+                        if (Math.Abs(timePos - _lastSyncedPosition) >= 20 || (isWatchedThreshold && !_hasMarkedWatched))
+                        {
+                            _lastSyncedPosition = timePos;
+                            var media = _currentMedia;
+                            if (media != null)
+                            {
+                                _ = SyncProgressToServerAsync(media.Id, duration, timePos);
+                            }
+                        }
+                    }
+                    else if (prop.name == "duration")
+                    {
+                        CurrentDuration = Marshal.PtrToStructure<double>(prop.data); // Cache it instantly
                     }
                 }
             }
         }
-	}	
+    }
 		
     private void EvaluateCommercialBoundaries(double currentSeconds)
     {
@@ -291,6 +396,78 @@ public class MpvPlaybackService : IDisposable
             }
         }
     }
+	
+	private async Task StartLoadingWatchdogAsync(CancellationToken token, MediaItem media)
+    {
+        try
+        {
+            // Initial Load Check (5 seconds)
+            await Task.Delay(TimeSpan.FromSeconds(LoadingTimeoutSeconds), token);
+            
+            // If we get here, the initial load failed.
+            _logger.LogWarning($"Initial stream load timeout for {media.Title}. Attempting reconnect...");
+            HandlePlaybackFailure(media);
+            return; // Exit out, the retry will start a new watchdog
+        }
+        catch (TaskCanceledException)
+        {
+            // Initial load succeeded! Fall through to start the continuous mid-stream watchdog.
+        }
+
+        // --- NEW: Mid-Stream Stagnation Watchdog ---
+        // This loop runs continuously in the background while the video plays
+        try
+        {
+            _lastPositionChangeTime = DateTime.UtcNow; // Reset clock before starting
+            
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(2000, token); // Check every 2 seconds
+
+                string isPaused = GetMpvProperty("pause");
+                if (isPaused == "yes")
+                {
+                    // If the user intentionally paused it, don't kill the stream!
+                    _lastPositionChangeTime = DateTime.UtcNow; 
+                    continue;
+                }
+
+                // If the video is supposed to be playing, but the position hasn't changed in 5 seconds
+                if ((DateTime.UtcNow - _lastPositionChangeTime).TotalSeconds > 5)
+                {
+                    _logger.LogWarning($"Stream decoder freeze detected on {media.Title}. Forcing reconnect...");
+                    
+                    // We must fire this on a background thread so we don't lock up the watchdog itself
+                    _ = Task.Run(() => HandlePlaybackFailure(media));
+                    break; // Exit this watchdog loop
+                }
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // The video finished normally or the user hit stop. Watchdog shutting down cleanly.
+        }
+    }
+
+private void HandlePlaybackFailure(MediaItem media)
+{
+    if (_retryCount < MaxRetries)
+    {
+        _retryCount++;
+        _logger.LogInformation($"Executing retry {_retryCount} for channel: {media.Title}");
+        
+        // Stop current internal playback state and kill hanging transcode sessions
+        Stop(); 
+        
+        // Re-route back to PlayMedia as a retry
+        PlayMedia(media, isRetry: true);
+    }
+    else
+    {
+        _logger.LogError($"Failed to tune channel {media.Title} after {MaxRetries} retries.");
+        Stop();
+    }
+}
     
     private async Task SyncProgressToServerAsync(string fileId, double duration, double position)
     {
@@ -386,27 +563,36 @@ public class MpvPlaybackService : IDisposable
 
     public void Stop()
     {
+        LogTuner("Stop() called. Cleaning up timers and saving position.");
         _positionTimer?.Change(Timeout.Infinite, Timeout.Infinite); 
         SaveCurrentPosition(null); 
 
         if (_currentMedia != null)
         {
-            double duration = GetDuration();
-            double position = GetPosition();
+            double duration = CurrentDuration;
+            double position = CurrentPosition;
             
             _ = SyncProgressToServerAsync(_currentMedia.Id, duration, position);
             _ = StopServerSessionAsync(_currentMedia); 
         }
 
-        Libmpv.mpv_command_string(_mpvContext, "stop"); 
+        LogTuner("Dispatching native MPV stop command to background task...");
+        Task.Run(() => 
+        {
+            Libmpv.mpv_command_string(_mpvContext, "stop");
+            LogTuner("Native MPV stop command executed.");
+        }); 
+
         _currentMedia = null;
+        CurrentPosition = 0; 
+        CurrentDuration = 0; 
     }
     
     private async Task StopServerSessionAsync(MediaItem media)
     {
         var activeServer = _serverManager.GetActiveServer();
         if (activeServer == null || string.IsNullOrEmpty(media.Id)) return;
-        
+
         string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
 
         try
@@ -421,7 +607,9 @@ public class MpvPlaybackService : IDisposable
                     if (session.TryGetProperty("ID", out var idProp))
                     {
                         string sessionId = idProp.GetString() ?? "";
-                        if (sessionId.Contains($"file{media.Id}"))
+                        
+                        // Match VOD (file1234) OR Live TV (ch1234-)
+                        if (sessionId.Contains($"file{media.Id}") || sessionId.StartsWith($"ch{media.Id}-"))
                         {
                             await _httpClient.DeleteAsync($"{baseUrl}/api/v1/sessions/{sessionId}");
                             _logger.LogInformation($"Killed hanging transcoder session: {sessionId}");
@@ -441,19 +629,9 @@ public class MpvPlaybackService : IDisposable
         }
     }
     
-    public double GetDuration()
-    {
-        if (_mpvContext == IntPtr.Zero) return 0;
-        Libmpv.mpv_get_property(_mpvContext, "duration", 5, out double duration);
-        return duration;
-    }
+    public double GetDuration() => CurrentDuration;
 
-    public double GetPosition()
-    {
-        if (_mpvContext == IntPtr.Zero) return 0;
-        Libmpv.mpv_get_property(_mpvContext, "time-pos", 5, out double pos);
-        return pos;
-    }
+    public double GetPosition() => CurrentPosition;
 
     public void SeekAbsolute(double seconds)
     {
@@ -482,10 +660,10 @@ public class MpvPlaybackService : IDisposable
     private void SaveCurrentPosition(object? state)
     {
         var media = _currentMedia;
-        if (media == null || _mpvContext == IntPtr.Zero) return;
+        if (media == null) return;
 
-        int result = Libmpv.mpv_get_property(_mpvContext, "time-pos", 5, out double timeInSeconds);
-        if (result < 0) return; 
+        double timeInSeconds = CurrentPosition;
+        if (timeInSeconds <= 0) return; 
 
         using (var scope = _scopeFactory.CreateScope())
         {

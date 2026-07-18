@@ -22,7 +22,7 @@ public partial class PlayerView : UserControl
     private PlayerOverlayWindow? _overlayWindow;
     private bool _isMpvAttached = false;
 	private Point _lastMousePosition;
-	
+	private DateTime _playbackStartTime = DateTime.MinValue;
 	// --- BINGE WATCH QUEUE STATE ---
     private System.Collections.Generic.List<MediaItem> _playbackQueue = new();
     private int _currentQueueIndex = 0;
@@ -73,8 +73,13 @@ public partial class PlayerView : UserControl
 
         MediaItem currentItem = _playbackQueue[_currentQueueIndex];
 
-        _mpvService.Stop();
+        // --- NEW: TUNER LOGGING ---
+        System.Diagnostics.Debug.WriteLine($"\n[TUNER] {DateTime.Now:HH:mm:ss.fff} ======================================");
+        System.Diagnostics.Debug.WriteLine($"[TUNER] {DateTime.Now:HH:mm:ss.fff} UI requested tune for: {currentItem.Title}");
+
         _mpvService.PlayMedia(currentItem);
+        
+        System.Diagnostics.Debug.WriteLine($"[TUNER] {DateTime.Now:HH:mm:ss.fff} Handoff to MPV Service complete.");
 
         if (_overlayWindow != null)
         {
@@ -105,6 +110,11 @@ public partial class PlayerView : UserControl
         _overlayWindow.InitializeMedia(currentItem, nextItem);
         _overlayWindow.Show();
         
+        // --- NEW: Instantly hide cursor and prime the anti-jitter tracker ---
+        Mouse.OverrideCursor = Cursors.None;
+        _lastMousePosition = Mouse.GetPosition(this);
+        _playbackStartTime = DateTime.UtcNow;
+        
         Application.Current.Dispatcher.BeginInvoke(new Action(SyncOverlayBounds), DispatcherPriority.ContextIdle);
 
         _overlayWindow.Activate();
@@ -130,6 +140,9 @@ public partial class PlayerView : UserControl
 
     private void PlayerView_PreviewMouseMove(object sender, MouseEventArgs e)
     {
+        // Grace Period: Ignore all phantom WPF layout mouse moves for 1 second after opening
+        if ((DateTime.UtcNow - _playbackStartTime).TotalMilliseconds < 1000) return;
+
         Point currentPosition = e.GetPosition(this);
 
         // Only restore the cursor if the mouse physically moved more than 2 pixels

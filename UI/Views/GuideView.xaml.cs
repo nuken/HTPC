@@ -376,6 +376,28 @@ public partial class GuideView : UserControl
     {
         this.Focus(); 
 
+        // --- NEW: Custom TV "Camera Bounds" Scrolling ---
+        var sv = GetScrollViewer(GuideItemsControl);
+        if (sv != null)
+        {
+            int index = DisplayedChannels.IndexOf(channel);
+            double rowHeight = 80.0; // 70 height + 5 top margin + 5 bottom margin
+            
+            // Calculate our desired viewport boundaries
+            double desiredTopOffset = (index - 3) * rowHeight; // Pushes scroll down if we go below the 4th row
+            double desiredBottomOffset = index * rowHeight;    // Pushes scroll up if we go above the 1st row
+            
+            if (desiredTopOffset > sv.VerticalOffset)
+            {
+                sv.ScrollToVerticalOffset(desiredTopOffset);
+            }
+            else if (desiredBottomOffset < sv.VerticalOffset)
+            {
+                sv.ScrollToVerticalOffset(desiredBottomOffset);
+            }
+        }
+
+        // We still call the native method as a fallback to ensure WPF Virtualization wakes up properly
         GuideItemsControl.ScrollIntoView(channel);
         
         Dispatcher.BeginInvoke(new Action(() => 

@@ -19,94 +19,370 @@ public partial class RecordingsView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnMultiviewRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
-	public event EventHandler? OnCollectionsRequested;
+    public event EventHandler? OnCollectionsRequested;
 
     private readonly RecordingsViewModel _viewModel;
     private MediaItem? _selectedMedia;
     private IInputElement? _lastFocusedElement;
+
+    // --- DISCOVER STATE ---
+    private readonly DispatcherTimer _typingTimer;
+    private int _discoverOffset = 0;
+    private bool _isDiscoverLoading = false;
+    private bool _discoverReachedEnd = false;
+    private bool _isDiscoverMode = false;
+	private enum FilterMode { None, Collection, Channel }
+    private FilterMode _currentFilterMode = FilterMode.None;
+    private ChannelCollection? _activeCollection;
+    private Channel? _activeChannel;
 
     public RecordingsView(RecordingsViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = _viewModel;
+        
+        _typingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _typingTimer.Tick += TypingTimer_Tick;
+
         Loaded += OnLoaded;
         PreviewKeyDown += RecordingsView_PreviewKeyDown;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        // 1. Focus the UI instantly so the user isn't stuck waiting
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            RecordingsNavBtn.Focus();
+            Keyboard.Focus(RecordingsNavBtn);
+        }), DispatcherPriority.ApplicationIdle);
+
+        // 2. Fire and forget the heavy network loads in the background
+        _ = LoadDataAsync();
+    }
+	
+	private async System.Threading.Tasks.Task LoadDataAsync()
     {
         await _viewModel.LoadRecordingsAsync();
-
-        // 10-foot UI Best Practice: Force focus directly into the first available content row.
-        // This prevents the user from starting trapped on the Window root or Top Nav.
-        _ = Dispatcher.InvokeAsync(() => 
+        
+        await _viewModel.LoadDiscoverCollectionsAsync();
+        
+        // Populate initial text and trigger load
+        if (_viewModel.DiscoverCollections.Count > 0)
         {
-            FocusFirstAvailableContentRow();
-        }, DispatcherPriority.Loaded);
+            _activeCollection = _viewModel.DiscoverCollections[0];
+            CollectionFilterBtn.Content = $"{_activeCollection.Name} ▼";
+            await _viewModel.LoadDiscoverChannelsAsync(_activeCollection);
+        }
+        else
+        {
+            await _viewModel.LoadDiscoverChannelsAsync(null);
+        }
+    }
+
+    // --- TAB SWITCHING LOGIC ---
+    private void TabMyRecordings_Click(object sender, RoutedEventArgs e)
+    {
+        _isDiscoverMode = false;
+        
+        TabMyRecordings.Style = (Style)FindResource("TabButtonActiveStyle");
+        TabDiscover.Style = (Style)FindResource("TabButtonStyle");
+        
+        MyRecordingsContainer.Visibility = Visibility.Visible;
+        DiscoverContainer.Visibility = Visibility.Collapsed;
+        
+        FocusFirstAvailableContentRow();
+    }
+
+    private async void TabDiscover_Click(object sender, RoutedEventArgs e)
+    {
+        _isDiscoverMode = true;
+        
+        TabDiscover.Style = (Style)FindResource("TabButtonActiveStyle");
+        TabMyRecordings.Style = (Style)FindResource("TabButtonStyle");
+        
+        MyRecordingsContainer.Visibility = Visibility.Collapsed;
+        DiscoverContainer.Visibility = Visibility.Visible;
+        
+        if (_viewModel.DiscoverResults.Count == 0)
+        {
+            await ResetAndLoadDiscoverAsync();
+        }
+        
+        _ = Dispatcher.BeginInvoke(new Action(() => 
+        {
+            DiscoverSearchBox.Focus();
+        }), DispatcherPriority.Input);
+    }
+
+    // --- DISCOVERY SEARCH & FILTER ---
+    private void DiscoverSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        _typingTimer.Stop();
+        _typingTimer.Start();
+    }
+
+    private async void TypingTimer_Tick(object? sender, EventArgs e)
+    {
+        _typingTimer.Stop();
+        await ResetAndLoadDiscoverAsync();
+    }
+
+    private async Task ResetAndLoadDiscoverAsync()
+    {
+        _discoverOffset = 0;
+        _discoverReachedEnd = false;
+        _viewModel.DiscoverResults.Clear();
+        DiscoverScroll.ScrollToTop();
+        
+        await LoadNextDiscoverChunkAsync();
+    }
+
+    private async System.Threading.Tasks.Task LoadNextDiscoverChunkAsync()
+    {
+        if (_isDiscoverLoading || _discoverReachedEnd) return;
+        
+        _isDiscoverLoading = true;
+        DiscoverLoadingText.Visibility = Visibility.Visible;
+
+        string query = DiscoverSearchBox.Text;
+        string channelFilter = _activeChannel?.Number ?? "ALL";
+        var activeCollection = _activeCollection;
+
+        var newAirings = await _viewModel.GetDiscoverAiringsAsync(_discoverOffset, RecordingsViewModel.DiscoverChunkSize, query, channelFilter, activeCollection);
+        
+        if (newAirings == null || newAirings.Count == 0)
+        {
+            _discoverReachedEnd = true;
+        }
+        else
+        {
+            foreach (var airing in newAirings)
+            {
+                _viewModel.DiscoverResults.Add(airing);
+            }
+            _discoverOffset += newAirings.Count;
+        }
+
+        DiscoverLoadingText.Visibility = Visibility.Collapsed;
+        _isDiscoverLoading = false;
+    }
+
+    private async void DiscoverScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (DiscoverScroll.VerticalOffset >= DiscoverScroll.ScrollableHeight - 100)
+            await LoadNextDiscoverChunkAsync();
+    }
+
+    private void DiscoverList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta) { RoutedEvent = UIElement.MouseWheelEvent, Source = sender };
+        DiscoverScroll.RaiseEvent(eventArg);
     }
 
     // --- NAVIGATION BRIDGING FIXES ---
-    
     private void TopNavPanel_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
         
         if (command == HtpcCommand.Down)
         {
-            // Explicitly route focus down into the lists, bypassing the spatial layout gap
             e.Handled = true;
-            FocusFirstAvailableContentRow();
+            
+            // --- FIX: Bridge down to the currently active SubNav pill ---
+            if (_isDiscoverMode)
+            {
+                TabDiscover.Focus();
+            }
+            else
+            {
+                TabMyRecordings.Focus(); 
+            }
         }
-        else if (command == HtpcCommand.Up)
+    }
+
+    private void SubNavPanel_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        if (command == HtpcCommand.Up)
         {
-            // Block the focus engine from wrapping around to the bottom of the page
-            e.Handled = true; 
+            e.Handled = true;
+            // Bridge up to TopNav
+            foreach (UIElement child in TopNavPanel.Children)
+            {
+                if (child is Button btn && btn.Focusable) { btn.Focus(); return; }
+            }
+        }
+        else if (command == HtpcCommand.Down)
+        {
+            e.Handled = true;
+            if (_isDiscoverMode) DiscoverSearchBox.Focus();
+            else FocusFirstAvailableContentRow();
+        }
+    }
+
+    private void DiscoverSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
+        }
+        // --- FIX: Allow remote to jump RIGHT into the new filter buttons ---
+        else if (command == HtpcCommand.Right)
+        {
+            CollectionFilterBtn.Focus();
+            e.Handled = true;
         }
     }
 
     private void FocusFirstAvailableContentRow()
     {
-        // Waterfall through the lists. The first one with visible content gets focus.
         if (TryFocusFirstListBoxItem(ActiveList)) return;
         if (TryFocusFirstListBoxItem(ScheduledList)) return;
         if (TryFocusFirstListBoxItem(RecentShowsList)) return;
         if (TryFocusFirstListBoxItem(RecentMoviesList)) return;
         TryFocusFirstListBoxItem(ImportedMediaList);
     }
+	
+	// --- NEW TV-OVERLAY FILTER LOGIC ---
+    private void CollectionFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Collection;
+        FilterOverlayTitle.Text = "Select Collection";
+        FilterSelectionList.ItemsSource = _viewModel.DiscoverCollections;
+        FilterSelectionList.SelectedItem = _activeCollection ?? (_viewModel.DiscoverCollections.Count > 0 ? _viewModel.DiscoverCollections[0] : null);
+        OpenFilterOverlay();
+    }
+
+    private void ChannelFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Channel;
+        FilterOverlayTitle.Text = "Select Channel";
+        FilterSelectionList.ItemsSource = _viewModel.DiscoverChannels;
+        FilterSelectionList.SelectedItem = _activeChannel ?? (_viewModel.DiscoverChannels.Count > 0 ? _viewModel.DiscoverChannels[0] : null);
+        OpenFilterOverlay();
+    }
+
+    private void OpenFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Visible;
+        _lastFocusedElement = Keyboard.FocusedElement;
+
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (FilterSelectionList.SelectedItem != null)
+            {
+                FilterSelectionList.ScrollIntoView(FilterSelectionList.SelectedItem);
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromItem(FilterSelectionList.SelectedItem) as UIElement;
+                item?.Focus();
+            }
+            else if (FilterSelectionList.Items.Count > 0)
+            {
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void CloseFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Collapsed;
+        _currentFilterMode = FilterMode.None;
+        
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+        {
+            Keyboard.Focus(uiElement);
+        }
+    }
+
+    private async void ProcessFilterSelection(object selectedItem)
+    {
+        if (_currentFilterMode == FilterMode.Collection && selectedItem is ChannelCollection collection)
+        {
+            _activeCollection = collection;
+            CollectionFilterBtn.Content = $"{collection.Name} ▼";
+            CloseFilterOverlay();
+            
+            await _viewModel.LoadDiscoverChannelsAsync(collection);
+            _activeChannel = null; 
+            ChannelFilterBtn.Content = "All Channels ▼";
+
+            if (_isDiscoverMode) await ResetAndLoadDiscoverAsync();
+        }
+        else if (_currentFilterMode == FilterMode.Channel && selectedItem is Channel channel)
+        {
+            _activeChannel = channel;
+            ChannelFilterBtn.Content = $"{channel.Name} ▼";
+            CloseFilterOverlay();
+
+            if (_isDiscoverMode) await ResetAndLoadDiscoverAsync();
+        }
+    }
+
+    private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FilterSelectionList.SelectedItem != null) ProcessFilterSelection(FilterSelectionList.SelectedItem);
+    }
+
+    private void FilterSelectionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && FilterSelectionList.SelectedItem != null)
+        {
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    private void FilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                            command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                            command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+            (sender as FrameworkElement)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true; 
+        }
+    }
 
     private bool TryFocusFirstListBoxItem(ListBox listBox)
     {
-        // If the row is hidden (due to our empty state triggers) or empty, skip it
         if (listBox.Visibility != Visibility.Visible || listBox.Items.Count == 0) return false;
         
-        // Attempt to get the container if it's already generated
         var element = listBox.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-        if (element != null)
-        {
-            return element.Focus();
-        }
+        if (element != null) return element.Focus();
         
-        // If virtualized and not realized in the visual tree yet, force a layout pass
         listBox.UpdateLayout();
         element = listBox.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-        
         return element?.Focus() ?? false;
     }
 
-    // --- MODAL LOGIC ---
-    
+    // --- UNIFIED MODAL LOGIC ---
     private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
         
-        // Explicitly escape the horizontal ListBox on Up/Down commands so focus can jump rows
         if (command == HtpcCommand.Down || command == HtpcCommand.Up)
         {
             var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
             if (sender is UIElement uiElement)
             {
-                // Here we CAN use MoveFocus because we are moving spatially between stacked vertical rows
                 uiElement.MoveFocus(new TraversalRequest(direction));
                 e.Handled = true;
             }
@@ -115,8 +391,30 @@ public partial class RecordingsView : UserControl
 
         if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem media)
         {
-            ShowModal(media);
+            ShowModal(media, isDiscoverEvent: false);
             e.Handled = true; 
+        }
+    }
+
+    private void DiscoverItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem media)
+        {
+            ShowModal(media, isDiscoverEvent: true);
+            e.Handled = true; 
+        }
+        else if (command == HtpcCommand.Up && sender is UIElement ui)
+        {
+            // Bridge out of wrap panel back to the search bar or filter buttons
+            var index = DiscoverGridList.ItemContainerGenerator.IndexFromContainer(ui);
+            if (index >= 0 && index < 6) 
+            {
+                // --- FIX: Let WPF intelligently jump to the Search Box OR the Filter Buttons ---
+                ui.MoveFocus(new TraversalRequest(FocusNavigationDirection.Up));
+                e.Handled = true;
+            }
         }
     }
 
@@ -124,12 +422,21 @@ public partial class RecordingsView : UserControl
     {
         if (sender is ListBoxItem item && item.DataContext is MediaItem media)
         {
-            ShowModal(media);
+            ShowModal(media, isDiscoverEvent: false);
             e.Handled = true;
         }
     }
 
-    private void ShowModal(MediaItem media)
+    private void DiscoverCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBoxItem item && item.DataContext is MediaItem media)
+        {
+            ShowModal(media, isDiscoverEvent: true);
+            e.Handled = true;
+        }
+    }
+
+    private void ShowModal(MediaItem media, bool isDiscoverEvent)
     {
         _lastFocusedElement = Keyboard.FocusedElement;
         _selectedMedia = media;
@@ -138,26 +445,43 @@ public partial class RecordingsView : UserControl
         ModalSubTitle.Text = string.IsNullOrWhiteSpace(media.CurrentShowTitle) ? "" : media.Title;
         ModalSummary.Text = string.IsNullOrWhiteSpace(media.Summary) ? "No description available." : media.Summary;
 
-        if (media.IsScheduled)
+        // Context-aware Modal Buttons
+        if (isDiscoverEvent)
         {
-            ModalTime.Text = $"Scheduled: {media.DisplayTime}";
+            ModalPlayBtn.Visibility = Visibility.Collapsed;
+            DeleteModalBtn.Visibility = Visibility.Collapsed;
+            ModalRecordBtn.Visibility = Visibility.Visible;
+            
+            ModalTime.Text = $"Airs: {media.DisplayTime}";
             ModalTime.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 164, 239)); 
             ModalTime.Visibility = Visibility.Visible;
-            ModalPlayBtn.Visibility = Visibility.Collapsed; 
         }
         else
         {
-            ModalPlayBtn.Visibility = Visibility.Visible;
-            
-            if (media.IsRecording)
+            ModalRecordBtn.Visibility = Visibility.Collapsed;
+            DeleteModalBtn.Visibility = Visibility.Visible;
+
+            if (media.IsScheduled)
             {
-                ModalTime.Text = "● Currently Recording";
-                ModalTime.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(211, 47, 47)); 
+                ModalTime.Text = $"Scheduled: {media.DisplayTime}";
+                ModalTime.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 164, 239)); 
                 ModalTime.Visibility = Visibility.Visible;
+                ModalPlayBtn.Visibility = Visibility.Collapsed; 
             }
             else
             {
-                ModalTime.Visibility = Visibility.Collapsed;
+                ModalPlayBtn.Visibility = Visibility.Visible;
+                
+                if (media.IsRecording)
+                {
+                    ModalTime.Text = "● Currently Recording";
+                    ModalTime.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(211, 47, 47)); 
+                    ModalTime.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    ModalTime.Visibility = Visibility.Collapsed;
+                }
             }
         }
 
@@ -180,7 +504,8 @@ public partial class RecordingsView : UserControl
         
         _ = Dispatcher.InvokeAsync(() => 
         {
-            if (media.IsScheduled) CloseModalBtn.Focus();
+            if (isDiscoverEvent) ModalRecordBtn.Focus();
+            else if (media.IsScheduled) CloseModalBtn.Focus();
             else ModalPlayBtn.Focus();
         }, DispatcherPriority.Loaded);
     }
@@ -194,8 +519,29 @@ public partial class RecordingsView : UserControl
             RestoreFocus();
         }
     }
-	
-	private async void DeleteModal_Click(object sender, RoutedEventArgs e)
+
+    private async void ModalRecord_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedMedia != null)
+        {
+            ModalRecordBtn.IsEnabled = false;
+            
+            bool success = await _viewModel.RecordEventAsync(_selectedMedia);
+            
+            if (success)
+            {
+                MessageBox.Show($"Successfully scheduled recording for '{_selectedMedia.Title}'.", "Recording Set", MessageBoxButton.OK, MessageBoxImage.Information);
+                CloseModal_Click(null!, null!);
+            }
+            else
+            {
+                MessageBox.Show("Failed to set recording. Please check your connection to the DVR server.", "Recording Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModalRecordBtn.IsEnabled = true;
+            }
+        }
+    }
+
+    private async void DeleteModal_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedMedia != null)
         {
@@ -219,7 +565,6 @@ public partial class RecordingsView : UserControl
                 else
                 {
                     ModalOverlay.Visibility = Visibility.Collapsed;
-                    // Fallback to auto-focus logic since the previous element is now deleted
                     FocusFirstAvailableContentRow();
                 }
                 
@@ -244,6 +589,11 @@ public partial class RecordingsView : UserControl
             CloseModal_Click(sender, e);
             e.Handled = true;
         }
+        else if (FilterOverlay.Visibility == Visibility.Visible && command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
     }
 
     private void RestoreFocus()
@@ -254,22 +604,16 @@ public partial class RecordingsView : UserControl
         }
         else
         {
-            FocusFirstAvailableContentRow();
+            if (_isDiscoverMode) DiscoverSearchBox.Focus();
+            else FocusFirstAvailableContentRow();
         }
     }
 
     // --- HORIZONTAL SCROLLING HELPERS ---
-    
     private void HorizontalList_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
         if (e.ExtentWidth == 0) return;
 
-        // In Logical Scrolling:
-        // e.ExtentWidth = Total number of loaded items in the list (e.g., 25)
-        // e.ViewportWidth = Number of items visible on screen (e.g., 5)
-        // e.HorizontalOffset = The index of the first visible item
-
-        // Trigger the next chunk load when the user is within 5 items of the right edge.
         if (e.HorizontalOffset + e.ViewportWidth >= e.ExtentWidth - 5)
         {
             if (sender == ActiveList) _viewModel.LoadMoreActive();
@@ -289,7 +633,6 @@ public partial class RecordingsView : UserControl
                 var viewer = GetScrollViewer(listBox);
                 if (viewer != null)
                 {
-                    // Scroll by 1 item per mouse wheel tick for smooth logical navigation
                     double step = e.Delta > 0 ? -1 : 1;
                     viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset + step);
                     e.Handled = true;
@@ -300,7 +643,7 @@ public partial class RecordingsView : UserControl
         {
             e.Handled = true;
             var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta) { RoutedEvent = UIElement.MouseWheelEvent, Source = sender };
-            MainScroll.RaiseEvent(eventArg);
+            MyRecordingsContainer.RaiseEvent(eventArg);
         }
     }
 
@@ -309,7 +652,6 @@ public partial class RecordingsView : UserControl
         if (sender is Button btn && btn.Tag is ListBox listBox)
         {
             var viewer = GetScrollViewer(listBox);
-            // Move left by 4 items (Logical Scrolling)
             if (viewer != null) viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - 4);
         }
     }
@@ -319,37 +661,29 @@ public partial class RecordingsView : UserControl
         if (sender is Button btn && btn.Tag is ListBox listBox)
         {
             var viewer = GetScrollViewer(listBox);
-            // Move right by 4 items (Logical Scrolling)
             if (viewer != null) viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset + 4);
         }
     }
-	
-	// --- REMOTE CONTROL SCROLLING MAPPING ---
     
-   private void RecordingCard_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-{
-    if (sender is FrameworkElement element)
+    // --- REMOTE CONTROL SCROLLING MAPPING ---
+    private void RecordingCard_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        // PREVENT MOUSE CLICK RACE CONDITION:
-        // If the mouse is hovering over the element or actively clicking it, 
-        // do NOT auto-scroll. Leave the physical layout alone so the click can complete.
-        if (element.IsMouseOver || Mouse.LeftButton == MouseButtonState.Pressed) 
+        if (sender is FrameworkElement element)
         {
-            return;
-        }
+            if (element.IsMouseOver || Mouse.LeftButton == MouseButtonState.Pressed) return;
 
-        try
-        {
-            if (ItemsControl.ItemsControlFromItemContainer(element) is ListBox listBox)
+            try
             {
-                listBox.ScrollIntoView(element.DataContext);
-            }
+                if (ItemsControl.ItemsControlFromItemContainer(element) is ListBox listBox)
+                {
+                    listBox.ScrollIntoView(element.DataContext);
+                }
 
-            ScrollToElement(MainScroll, element);
+                ScrollToElement(MyRecordingsContainer, element);
+            }
+            catch { }
         }
-        catch { }
     }
-}
 
     private void ScrollToElement(ScrollViewer scrollViewer, FrameworkElement element)
     {
@@ -384,7 +718,6 @@ public partial class RecordingsView : UserControl
     }
 
     // --- TOP NAVIGATION HANDLERS ---
-    
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
@@ -392,5 +725,5 @@ public partial class RecordingsView : UserControl
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
-	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
+    private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }

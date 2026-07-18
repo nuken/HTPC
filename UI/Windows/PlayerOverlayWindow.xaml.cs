@@ -32,7 +32,7 @@ public partial class PlayerOverlayWindow : Window
     private MediaItem? _currentMedia;
     private bool _isControlsVisible = true;
     private Point _lastMousePosition;
-    
+    private DateTime _initTime = DateTime.MinValue;
     private DispatcherTimer _skipAdTimer;
     private double _skipTargetTime = 0;
     private bool _markersDrawn = false;
@@ -68,6 +68,7 @@ public partial class PlayerOverlayWindow : Window
         _skipAdTimer.Tick += (s, e) => { SkipAdButton.Visibility = Visibility.Collapsed; _skipAdTimer.Stop(); };
         
         _mpvService.OnCommercialPrompt += ShowSkipAdPrompt;
+		_mpvService.OnMediaLoaded += MpvService_OnMediaLoaded;
 
         _statsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _statsTimer.Tick += StatsTimer_Tick;
@@ -107,11 +108,26 @@ public partial class PlayerOverlayWindow : Window
         }
         
         _mpvService.OnCommercialPrompt -= ShowSkipAdPrompt; 
+        _mpvService.OnMediaLoaded -= MpvService_OnMediaLoaded; // Unhook to prevent leaks
+        
         _idleTimer?.Stop();
         _syncTimer?.Stop();
         _skipAdTimer?.Stop();
         _statsTimer?.Stop();
         Mouse.OverrideCursor = null; 
+    }
+	
+	private void MpvService_OnMediaLoaded()
+    {
+        Dispatcher.Invoke(() => 
+        {
+            BufferingOverlay.Visibility = Visibility.Collapsed;
+
+            // --- NEW: Reset the grace period when the video actually appears! ---
+            Mouse.OverrideCursor = Cursors.None;
+            _lastMousePosition = Mouse.GetPosition(this);
+            _initTime = DateTime.UtcNow;
+        });
     }
 
     public void InitializeMedia(MediaItem media, MediaItem? nextInQueue = null)
@@ -161,6 +177,11 @@ public partial class PlayerOverlayWindow : Window
         
         _syncTimer.Start(); 
         WakeUpUi();
+
+        // --- NEW: Instantly hide cursor and prime the overlay's anti-jitter tracker ---
+        Mouse.OverrideCursor = Cursors.None;
+        _lastMousePosition = Mouse.GetPosition(this);
+        _initTime = DateTime.UtcNow;
 
         if (media.StartOffsetSeconds > 0)
         {
@@ -225,16 +246,15 @@ public partial class PlayerOverlayWindow : Window
             _mpvService.ToggleMute();
             e.Handled = true; return;
         }
-
-        // Handle Volume Up (+ or =)
-        if (e.Key == Key.OemPlus || e.Key == Key.Add)
+		
+       if (e.Key == Key.OemPlus || e.Key == Key.Add || e.Key == Key.VolumeUp)
         {
             if (VolumeSlider.Value < 100) VolumeSlider.Value += 5;
             e.Handled = true; return;
         }
 
-        // Handle Volume Down (- or _)
-        if (e.Key == Key.OemMinus || e.Key == Key.Subtract)
+        // Handle Volume Down (-, _, or Hardware Remote Volume Down)
+        if (e.Key == Key.OemMinus || e.Key == Key.Subtract || e.Key == Key.VolumeDown)
         {
             if (VolumeSlider.Value > 0) VolumeSlider.Value -= 5;
             e.Handled = true; return;
@@ -399,77 +419,89 @@ public partial class PlayerOverlayWindow : Window
     }
 
    private async Task OpenMiniGuideAsync()
-{
-    BottomBar.Visibility = Visibility.Collapsed; 
-    MiniGuideContainer.Visibility = Visibility.Visible;
-
-    if (MiniGuideList.Items.Count == 0)
     {
-        var activeServer = _serverManager.GetActiveServer();
-        var collections = await _libraryService.GetCollectionsAsync();
-        var savedCollection = collections.FirstOrDefault(c => c.Id == activeServer?.DefaultCollectionId) ?? collections.FirstOrDefault();
+        BottomBar.Visibility = Visibility.Collapsed; 
+        MiniGuideContainer.Visibility = Visibility.Visible;
 
-        var channels = await _libraryService.GetGuideChannelsAsync(savedCollection, 1);
-        MiniGuideList.ItemsSource = channels;
-    }
-
-    if (MiniGuideList.Items.Count > 0)
-    {
-        // STEP 1: Process the logical match and physical scroll immediately
-        _ = Dispatcher.BeginInvoke(new Action(() => 
+        if (MiniGuideList.Items.Count == 0)
         {
-            MiniGuideList.UpdateLayout(); 
-            int targetIndex = 0; 
+            // --- FIX: Read the user's actual current selection from Preferences ---
+            var prefs = PreferencesManager.Load();
+            string savedSelection = string.IsNullOrEmpty(prefs.LastGuideCollection) ? "All Channels" : prefs.LastGuideCollection;
 
-            if (_isLiveTv && _currentMedia != null)
+            var activeServer = _serverManager.GetActiveServer();
+            var collections = await _libraryService.GetCollectionsAsync();
+            
+            // Find the collection that matches their saved dropdown selection
+            var targetCollection = collections.FirstOrDefault(c => c.Name == savedSelection);
+
+            // Fetch the channels based on that exact collection
+            var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 1);
+            
+            // Apply Secondary Static Filters exactly like the GuideView does
+            if (savedSelection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
+            else if (savedSelection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
+            else if (savedSelection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
+
+            MiniGuideList.ItemsSource = channels;
+        }
+
+        if (MiniGuideList.Items.Count > 0)
+        {
+            // STEP 1: Process the logical match and physical scroll immediately
+            _ = Dispatcher.BeginInvoke(new Action(() => 
             {
-                var channels = MiniGuideList.ItemsSource as System.Collections.Generic.IEnumerable<Channel>;
-                if (channels != null)
+                MiniGuideList.UpdateLayout(); 
+                int targetIndex = 0; 
+
+                if (_isLiveTv && _currentMedia != null)
                 {
-                    // AGGRESSIVE MATCHING: Check ID, then Number, then Title
-                    var currentChannel = channels.FirstOrDefault(c => 
-                        c.Id == _currentMedia.Id || 
-                        c.Number == _currentMedia.Id || 
-                        c.Name == _currentMedia.Title);
-                    
-                    if (currentChannel != null)
+                    var channels = MiniGuideList.ItemsSource as System.Collections.Generic.IEnumerable<Channel>;
+                    if (channels != null)
                     {
-                        targetIndex = MiniGuideList.Items.IndexOf(currentChannel);
-                        MiniGuideList.SelectedItem = currentChannel;
+                        // AGGRESSIVE MATCHING: Check ID, then Number, then Title
+                        var currentChannel = channels.FirstOrDefault(c => 
+                            c.Id == _currentMedia.Id || 
+                            c.Number == _currentMedia.Id || 
+                            c.Name == _currentMedia.Title);
                         
-                        // Force the scroll
-                        MiniGuideList.ScrollIntoView(currentChannel);
+                        if (currentChannel != null)
+                        {
+                            targetIndex = MiniGuideList.Items.IndexOf(currentChannel);
+                            MiniGuideList.SelectedItem = currentChannel;
+                            
+                            // Force the scroll
+                            MiniGuideList.ScrollIntoView(currentChannel);
+                        }
                     }
-                }
-            }
-            else
-            {
-                MiniGuideList.SelectedIndex = -1; 
-            }
-
-            // STEP 2: Wait for WPF to finish drawing the scroll, THEN grab the focus.
-            // Using ContextIdle ensures the VirtualizingStackPanel has completely finished creating the UI element.
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
-                
-                if (item != null)
-                {
-                    item.Focus();
-                    Keyboard.Focus(item);
                 }
                 else
                 {
-                    MiniGuideList.Focus();
-                    Keyboard.Focus(MiniGuideList);
+                    MiniGuideList.SelectedIndex = -1; 
                 }
-            }), DispatcherPriority.ContextIdle);
 
-        }), DispatcherPriority.Input); 
+                // STEP 2: Wait for WPF to finish drawing the scroll, THEN grab the focus.
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
+                    
+                    if (item != null)
+                    {
+                        item.Focus();
+                        Keyboard.Focus(item);
+                    }
+                    else
+                    {
+                        MiniGuideList.Focus();
+                        Keyboard.Focus(MiniGuideList);
+                    }
+                }), DispatcherPriority.ContextIdle);
+
+            }), DispatcherPriority.Input); 
+        }
     }
-}
-
-    private void CloseMiniGuide()
+	
+	private void CloseMiniGuide()
     {
         MiniGuideContainer.Visibility = Visibility.Collapsed;
         BottomBar.Visibility = Visibility.Visible; 
@@ -498,7 +530,7 @@ public partial class PlayerOverlayWindow : Window
         
         var media = _libraryService.CreateLiveMediaItem(baseUrl, channel, currentAiring);
 
-        _mpvService.Stop();
+        //_mpvService.Stop();
         _mpvService.PlayMedia(media);
         InitializeMedia(media); 
         
@@ -508,18 +540,6 @@ public partial class PlayerOverlayWindow : Window
     private void SyncTimer_Tick(object? sender, EventArgs e)
     {
         if (!_isPlaying || _isDragging) return;
-
-        if (BufferingOverlay.Visibility == Visibility.Visible)
-        {
-            if (_mpvService.GetPosition() > 0)
-            {
-                BufferingOverlay.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                return; 
-            }
-        }
 
         if (!_isLiveTv)
         {
@@ -605,7 +625,7 @@ public partial class PlayerOverlayWindow : Window
         }
         else
         {
-            _mpvService.Stop();
+            //_mpvService.Stop();
             _mpvService.PlayMedia(_nextEpisodeToPlay);
             InitializeMedia(_nextEpisodeToPlay);
         }
@@ -830,20 +850,20 @@ public partial class PlayerOverlayWindow : Window
 }
 
     private void Window_MouseMove(object sender, MouseEventArgs e)
-{
-    Point currentPosition = e.GetPosition(this);
-
-    if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
-        Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
     {
-        _lastMousePosition = currentPosition;
-        
-       
-        Mouse.OverrideCursor = null; 
-        
-        WakeUpUi();
+        // Grace Period: Ignore all phantom WPF layout mouse moves for 1 second after opening
+        if ((DateTime.UtcNow - _initTime).TotalMilliseconds < 1000) return;
+
+        Point currentPosition = e.GetPosition(this);
+
+        if (Math.Abs(currentPosition.X - _lastMousePosition.X) > 2 || 
+            Math.Abs(currentPosition.Y - _lastMousePosition.Y) > 2)
+        {
+            _lastMousePosition = currentPosition;
+            Mouse.OverrideCursor = null; 
+            WakeUpUi();
+        }
     }
-}
 
    private void WakeUpUi()
     {

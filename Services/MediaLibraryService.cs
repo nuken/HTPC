@@ -16,6 +16,9 @@ public class MediaLibraryService
     private readonly HttpClient _httpClient;
     private readonly ILogger<MediaLibraryService> _logger;
     private List<MediaItem>? _masterMoviesCache = null;
+	private List<MediaItem>? _masterDiscoveryCache = null;
+    private DateTime _discoveryCacheTime = DateTime.MinValue;
+    private string? _lastDiscoveryCollectionId = null;
 
     public MediaLibraryService(ServerManagerService serverManager, HttpClient httpClient, ILogger<MediaLibraryService> logger)
     {
@@ -131,44 +134,50 @@ public class MediaLibraryService
             if (doc.RootElement.ValueKind == JsonValueKind.Array)
             {
                 foreach (var element in doc.RootElement.EnumerateArray())
-{
-    string id = GetStringOrNumber(element, "id");
-    if (string.IsNullOrEmpty(id)) continue;
+                {
+                    string id = GetStringOrNumber(element, "id");
+                    if (string.IsNullOrEmpty(id)) continue;
 
-    string title = GetStringOrNumber(element, "title", "name"); // Added "name" as fallback
-    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
-    
-    // NEW: Extract the Categories array so the UI knows if it's a Show or Movie
-    var categories = new List<string>();
-    if (element.TryGetProperty("categories", out var catElement) && catElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-    {
-        foreach (var cat in catElement.EnumerateArray())
-        {
-            if (cat.ValueKind == System.Text.Json.JsonValueKind.String)
-                categories.Add(cat.GetString() ?? "");
-        }
-    }
+                    string title = GetStringOrNumber(element, "title", "name"); 
+                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+                    
+                    var categories = new List<string>();
+                    if (element.TryGetProperty("categories", out var catElement) && catElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var cat in catElement.EnumerateArray())
+                        {
+                            if (cat.ValueKind == System.Text.Json.JsonValueKind.String)
+                                categories.Add(cat.GetString() ?? "");
+                        }
+                    }
 
-    if (element.TryGetProperty("episode_count", out _))
-    {
-        if (!categories.Contains("Series")) 
-        {
-            categories.Add("Series");
-        }
-    }
+                    if (element.TryGetProperty("episode_count", out _))
+                    {
+                        if (!categories.Contains("Series")) 
+                        {
+                            categories.Add("Series");
+                        }
+                    }
 
-    items.Add(new MediaItem
-    {
-        Id = id,
-        Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
-        Categories = categories, // <--- Now guaranteed to include "Series" for all shows
-        PosterUrl = GetBestImageUrl(baseUrl, element, id),
-        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-        Path = GetStringOrNumber(element, "Path", "path"),
-        Summary = GetStringOrNumber(element, "summary", "full_summary"),
-        Commercials = ParseDoubleArray(element, "commercials")
-    });
-}
+                    // --- FIX: Dynamically swap the image priority rule based on Collection Type ---
+                    bool isMovie = categories.Any(c => c.Equals("Movie", StringComparison.OrdinalIgnoreCase));
+                    string[]? customPriorities = isMovie 
+                        ? new[] { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" } 
+                        : null;
+
+                    items.Add(new MediaItem
+                    {
+                        Id = id,
+                        Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
+                        Categories = categories, 
+                        // Pass the custom priorities into the image fetcher!
+                        PosterUrl = GetBestImageUrl(baseUrl, element, id, customPriorities),
+                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                        Path = GetStringOrNumber(element, "Path", "path"),
+                        Summary = GetStringOrNumber(element, "summary", "full_summary"),
+                        Commercials = ParseDoubleArray(element, "commercials")
+                    });
+                }
             }
             return items;
         }
@@ -176,6 +185,156 @@ public class MediaLibraryService
         {
             _logger.LogError($"Failed to fetch content for collection {collectionId}: {ex.Message}");
             return new List<MediaItem>();
+        }
+    }
+	
+	public async Task<List<MediaItem>> SearchUpcomingAiringsAsync(int offset, int limit, string query, string channelNumberFilter, ChannelCollection? activeCollection)
+    {
+        string? currentCollectionId = activeCollection?.Id;
+
+        // Rebuild the cache if it's empty, expired (1 hr), OR the user changed their Collection
+        if (_masterDiscoveryCache == null || (DateTime.Now - _discoveryCacheTime).TotalHours > 1 || _lastDiscoveryCollectionId != currentCollectionId)
+        {
+            _masterDiscoveryCache = await Task.Run(async () => 
+            {
+                var tempCache = new List<MediaItem>();
+                
+                // This now ONLY requests data for channels inside the selected collection!
+                var channels = await GetGuideChannelsAsync(activeCollection, 12);
+                long currentUnixTime = ((DateTimeOffset)DateTime.UtcNow).ToUnixTimeSeconds();
+
+                foreach (var channel in channels)
+                {
+                    if (channel.Hidden) continue; 
+
+                    if (channel.CurrentAirings != null)
+                    {
+                        foreach (var airing in channel.CurrentAirings)
+                        {
+                            if (airing.Title == "To Be Announced") continue;
+
+                            long time = new DateTimeOffset(airing.StartTime).ToUnixTimeSeconds();
+                            double duration = airing.Duration ?? 0;
+                            
+                            if (time < currentUnixTime) continue;
+
+                            tempCache.Add(new MediaItem
+                            {
+                                Id = airing.ProgramId ?? "",
+                                Title = string.IsNullOrEmpty(airing.Title) ? "Unknown Program" : airing.Title,
+                                CurrentShowTitle = airing.EpisodeTitle ?? "",
+                                Summary = airing.DisplaySummary ?? "",
+                                PosterUrl = airing.ImageUrl ?? "",
+                                ChannelName = channel.Name,
+                                ChannelNumber = channel.Number,
+                                CreatedAt = time,
+                                DisplayTime = airing.StartTime.ToString("MMM d 'at' h:mm tt"),
+                                SeriesId = airing.SeriesId ?? "",
+                                StartTime = airing.StartTime,
+                                EndTime = airing.StartTime.AddSeconds(duration)
+                            });
+                        }
+                    }
+                }
+                return tempCache;
+            });
+            
+            _discoveryCacheTime = DateTime.Now;
+            _lastDiscoveryCollectionId = currentCollectionId;
+        }
+
+        var filtered = _masterDiscoveryCache.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(channelNumberFilter) && channelNumberFilter != "ALL")
+        {
+            filtered = filtered.Where(m => m.ChannelNumber == channelNumberFilter);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            string lowerQuery = query.ToLower();
+            filtered = filtered.Where(m => 
+                (m.Title != null && m.Title.ToLower().Contains(lowerQuery)) ||
+                (m.CurrentShowTitle != null && m.CurrentShowTitle.ToLower().Contains(lowerQuery)) ||
+                (m.Summary != null && m.Summary.ToLower().Contains(lowerQuery))
+            );
+        }
+
+        return filtered.OrderBy(m => m.CreatedAt).Skip(offset).Take(limit).ToList();
+    }
+	
+	private MediaItem MapAiringToMediaItem(string baseUrl, JsonElement airing, string channelNumber)
+    {
+        long time = airing.TryGetProperty("Time", out var tProp) && tProp.ValueKind == JsonValueKind.Number ? tProp.GetInt64() : 0;
+        double duration = airing.TryGetProperty("Duration", out var dProp) && dProp.ValueKind == JsonValueKind.Number ? dProp.GetDouble() : 3600;
+        DateTime airDate = DateTimeOffset.FromUnixTimeSeconds(time).LocalDateTime;
+        
+        string title = GetStringOrNumber(airing, "Title");
+        string episodeTitle = GetStringOrNumber(airing, "EpisodeTitle");
+        string summary = GetStringOrNumber(airing, "Summary");
+        string seriesId = GetStringOrNumber(airing, "SeriesID");
+        string programId = GetStringOrNumber(airing, "ProgramID");
+
+        return new MediaItem
+        {
+            Id = programId,
+            Title = string.IsNullOrEmpty(title) ? "Unknown Program" : title,
+            CurrentShowTitle = episodeTitle,
+            Summary = summary,
+            PosterUrl = GetBestImageUrl(baseUrl, airing),
+            ChannelName = $"CH {channelNumber}",
+            CreatedAt = time,
+            DisplayTime = airDate.ToString("MMM d 'at' h:mm tt"),
+            SeriesId = seriesId, 
+            ChannelNumber = channelNumber, 
+            StartTime = airDate,
+            EndTime = airDate.AddSeconds(duration)
+        };
+    }
+	
+	public async Task<bool> RecordEventAsync(MediaItem item)
+    {
+        var activeServer = _serverManager.GetActiveServer();
+        if (activeServer == null) return false;
+
+        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+        string url = $"{baseUrl}/dvr/jobs/new";
+
+        int durationSeconds = (int)(item.EndTime - item.StartTime).TotalSeconds;
+        if (durationSeconds <= 0) durationSeconds = 3600; // Fallback to 1 hour if mapping fails
+
+        try
+        {
+            var payload = new
+            {
+                Name = item.Title,
+                Time = item.CreatedAt,
+                Duration = durationSeconds,
+                Channels = new[] { item.ChannelNumber ?? "" },
+                Airing = new
+                {
+                    Source = "tms", 
+                    Channel = item.ChannelNumber ?? "",
+                    Time = item.CreatedAt,
+                    Duration = durationSeconds,
+                    Title = item.Title,
+                    EpisodeTitle = item.CurrentShowTitle ?? "",
+                    Summary = item.Summary ?? "",
+                    SeriesID = item.SeriesId ?? "",
+                    ProgramID = item.Id ?? "",
+                    Image = item.PosterUrl ?? ""
+                }
+            };
+
+            var content = new StringContent(JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync(url, content);
+            
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to record event {item.Title}: {ex.Message}");
+            return false;
         }
     }
 	
@@ -317,10 +476,11 @@ public class MediaLibraryService
 
                     string title = GetStringOrNumber(element, "title");
                     
-                    // --- ARCHITECTURE FIX: Centralized Image Selection ---
-                    string posterUrl = GetBestImageUrl(baseUrl, element, id);
+                    // --- FIX: Force Movies to grab their official vertical posters ---
+                    string[] posterPriorities = { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" };
+                    string posterUrl = GetBestImageUrl(baseUrl, element, id, posterPriorities);
 
-                    long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
+                    long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == System.Text.Json.JsonValueKind.Number ? cProp.GetInt64() : 0;
                     int year = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == JsonValueKind.Number ? yProp.GetInt32() : 0;
 
                     bool isWatched = false;
@@ -667,13 +827,19 @@ public class MediaLibraryService
 
                                         if (startTime.AddSeconds(duration) > gridStart)
                                         {
+                                            // --- FIX: Format the airing image, and fallback to the channel logo if it's missing ---
+                                            string rawAiringImage = GetStringOrNumber(a, "Image", "image", "art");
+                                            string finalAiringImage = !string.IsNullOrWhiteSpace(rawAiringImage) 
+                                                                        ? FormatImageUrl(baseUrl, rawAiringImage) 
+                                                                        : logoUrl;
+
                                             airings.Add(new Airing
                                             {
                                                 ChannelNumber = channelNumber,
                                                 Title = GetStringOrNumber(a, "Title"),
                                                 EpisodeTitle = GetStringOrNumber(a, "EpisodeTitle"),
                                                 DisplaySummary = GetStringOrNumber(a, "Summary"),
-                                                ImageUrl = GetStringOrNumber(a, "Image"),
+                                                ImageUrl = finalAiringImage,
                                                 StartTime = startTime,
                                                 Duration = duration,
                                                 Source = GetStringOrNumber(a, "Source", "source"), 
@@ -946,7 +1112,9 @@ public class MediaLibraryService
                     string title = GetStringOrNumber(element, "title", "name");
                     string summary = GetStringOrNumber(element, "summary", "full_summary");
                     
-                    string posterUrl = GetBestImageUrl(baseUrl, element);
+                    // --- FIX: Force Shows to grab their official vertical posters ---
+                    string[] posterPriorities = { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" };
+                    string posterUrl = GetBestImageUrl(baseUrl, element, "", posterPriorities);
 
                     long createdAt = 0;
                     if (element.TryGetProperty("last_recorded_at", out var lProp) && lProp.ValueKind == JsonValueKind.Number) 
@@ -1152,9 +1320,12 @@ public class MediaLibraryService
                     if (string.IsNullOrEmpty(id)) continue;
 
                     string title = GetStringOrNumber(element, "title");
-                    string posterUrl = GetBestImageUrl(baseUrl, element, id);
+                    
+                    // --- FIX: Force Featured Movies to grab their official vertical posters ---
+                    string[] posterPriorities = { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" };
+                    string posterUrl = GetBestImageUrl(baseUrl, element, id, posterPriorities);
 
-                    long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
+                    long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == System.Text.Json.JsonValueKind.Number ? cProp.GetInt64() : 0;
                     string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
 
                     movies.Add(new MediaItem
@@ -1256,9 +1427,37 @@ public class MediaLibraryService
                     string showTitle = GetStringOrNumber(element, "title");
                     string episodeTitle = GetStringOrNumber(element, "episode_title");
                     
-                    string posterUrl = GetBestImageUrl(baseUrl, element, id);
+                    // --- 1. NEW: Extract Categories FIRST so we know if it's a Movie ---
+                    var categories = new List<string>(); 
+                    if (element.TryGetProperty("categories", out var catProp) && catProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var cat in catProp.EnumerateArray())
+                        {
+                            if (cat.ValueKind == JsonValueKind.String)
+                                categories.Add(cat.GetString() ?? "");
+                        }
+                    }
 
-					string summary = GetStringOrNumber(element, "summary");
+                    // --- 2. NEW: Dynamically swap the image priority rule ---
+                    bool isMovie = categories.Any(c => c.Equals("Movie", StringComparison.OrdinalIgnoreCase));
+                    string[]? customPriorities = isMovie 
+                        ? new[] { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" } 
+                        : null;
+
+                    // --- 3. Apply the rule to fetch the correct image! ---
+                    string posterUrl = GetBestImageUrl(baseUrl, element, "", customPriorities);
+
+                    if (string.IsNullOrEmpty(posterUrl) && element.TryGetProperty("Airing", out var airingNode))
+                    {
+                        posterUrl = GetBestImageUrl(baseUrl, airingNode, "", customPriorities);
+                    }
+
+                    if (string.IsNullOrEmpty(posterUrl))
+                    {
+                        posterUrl = $"{baseUrl}/dvr/files/{id}/preview.jpg";
+                    }
+
+                    string summary = GetStringOrNumber(element, "summary");
                     if (string.IsNullOrEmpty(summary)) summary = GetStringOrNumber(element, "full_summary");
                     long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == System.Text.Json.JsonValueKind.Number ? cProp.GetInt64() : 0;
                     
@@ -1272,20 +1471,10 @@ public class MediaLibraryService
                         ? $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts" 
                         : $"{baseUrl}/dvr/files/{id}/hls/master.m3u8";
 
-                   double playbackTime = 0;
+                    double playbackTime = 0;
                     if (element.TryGetProperty("playback_time", out var pbProp) && pbProp.ValueKind == JsonValueKind.Number)
                     {
                         playbackTime = pbProp.GetDouble();
-                    }
-
-                    var categories = new List<string>(); 
-                    if (element.TryGetProperty("categories", out var catProp) && catProp.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var cat in catProp.EnumerateArray())
-                        {
-                            if (cat.ValueKind == JsonValueKind.String)
-                                categories.Add(cat.GetString() ?? "");
-                        }
                     }
 
                     string channelId = GetStringOrNumber(element, "channel");
@@ -1305,7 +1494,7 @@ public class MediaLibraryService
                         IsCompleted = isCompleted,
                         StartOffset = playbackTime,
                         Commercials = ParseDoubleArray(element, "commercials"),
-                        Categories = categories,
+                        Categories = categories, // Passing the extracted categories here
                         IsImported = isImported
                     });
                 }
@@ -1353,6 +1542,12 @@ public class MediaLibraryService
                         if (string.IsNullOrEmpty(showTitle)) showTitle = GetStringOrNumber(airingProp, "Title");
                         
                         posterUrl = GetBestImageUrl(baseUrl, airingProp);
+                    }
+
+                    // --- FIX: Scheduled Virtual Channels often store the image at the root of the Job ---
+                    if (string.IsNullOrEmpty(posterUrl))
+                    {
+                        posterUrl = GetBestImageUrl(baseUrl, element);
                     }
 
                     long scheduledTime = element.TryGetProperty("Time", out var tProp) && tProp.ValueKind == JsonValueKind.Number ? tProp.GetInt64() : 0;
@@ -1434,8 +1629,16 @@ public class MediaLibraryService
                         string id = GetStringOrNumber(element, "ID");
                         if (string.IsNullOrEmpty(id)) continue;
                         
-                        // Fallback to root element if Airing node lacked a valid image
-                        if (string.IsNullOrEmpty(posterUrl)) posterUrl = GetBestImageUrl(baseUrl, element, id);
+                        // --- FIX: Safely check root before applying the ultimate fallback ---
+                        if (string.IsNullOrEmpty(posterUrl)) 
+                        {
+                            posterUrl = GetBestImageUrl(baseUrl, element);
+                        }
+                        
+                        if (string.IsNullOrEmpty(posterUrl))
+                        {
+                            posterUrl = $"{baseUrl}/dvr/files/{id}/preview.jpg";
+                        }
                         
                         if (string.IsNullOrEmpty(title)) title = GetStringOrNumber(element, "Title");
                         if (string.IsNullOrEmpty(summary)) summary = GetStringOrNumber(element, "summary");
@@ -1693,30 +1896,31 @@ public class MediaLibraryService
         }
     }
     
-    // --- ARCHITECTURE FIX: CENTRALIZED IMAGE PARSING WITH PRIORITY AND FALLBACK ---
-    private string GetBestImageUrl(string baseUrl, JsonElement element, string fallbackId = "")
+   // --- ARCHITECTURE FIX: FLEXIBLE IMAGE PARSING ---
+    private string GetBestImageUrl(string baseUrl, System.Text.Json.JsonElement element, string fallbackId = "", string[]? customPriorities = null)
     {
-        // Prioritize full-quality original artwork over compressed square thumbnails
-        string[] priorities = { "image_url", "image", "art", "cover_url", "thumbnail_url", "thumbnail", "Image" };
+        // Default to the thumbnail-first logic that fixed the dead TV channel links
+        string[] priorities = customPriorities ?? new[] { "thumbnail_url", "thumbnail", "cover_url", "art", "image_url", "image", "Image" };
         
         foreach (var key in priorities)
         {
             string raw = GetStringOrNumber(element, key);
             if (!string.IsNullOrWhiteSpace(raw))
             {
-                // FormatImageUrl will mathematically return "" if the URL is just an empty root IP
                 string formatted = FormatImageUrl(baseUrl, raw);
                 if (!string.IsNullOrWhiteSpace(formatted)) return formatted;
             }
         }
         
-        // Ultimate Safe Fallback: If all endpoints fail or return empty IPs, build the preview.jpg
+        // Ultimate Safe Fallback
         if (!string.IsNullOrWhiteSpace(fallbackId))
+        {
             return $"{baseUrl.TrimEnd('/')}/dvr/files/{fallbackId}/preview.jpg";
+        }
             
         return "";
     }
-    
+            
     private string GetStringOrNumber(JsonElement element, params string[] propertyNames)
     {
         if (element.ValueKind != JsonValueKind.Object) return "";
@@ -1803,6 +2007,12 @@ public class MediaLibraryService
 
         string cleanPath = imagePath.Trim();
 
+        // --- FIX: Globally intercept and format Gracenote TMS images ---
+        if (cleanPath.StartsWith("tmsimg://", StringComparison.OrdinalIgnoreCase))
+        {
+            return cleanPath.Replace("tmsimg://", $"{baseUrl.TrimEnd('/')}/tmsimg/", StringComparison.OrdinalIgnoreCase);
+        }
+
         if (Uri.TryCreate(cleanPath, UriKind.Absolute, out Uri? uriResult))
         {
             if (uriResult.AbsolutePath == "/") return ""; // Traps empty root IPs like http://127.0.0.1:8089
@@ -1815,6 +2025,7 @@ public class MediaLibraryService
             return cleanPath;
         }
 
+        // --- FIX: Prepends the server IP to relative paths (like /dvr/uploads/...) ---
         return cleanPath.StartsWith("/") ? baseUrl.TrimEnd('/') + cleanPath : $"{baseUrl.TrimEnd('/')}/{cleanPath}";
     }
     

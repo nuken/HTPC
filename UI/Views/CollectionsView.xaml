@@ -206,17 +206,43 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <Button x:Name="CloseModalBtn" Content="🔙 Back to Collections" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" Margin="0,0,30,0" Click="CloseModal_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="CloseModalBtn_PreviewKeyDown"/>
+                <Grid Grid.Row="0" Margin="0,0,0,20" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="350"/>
+                    </Grid.ColumnDefinitions>
                     
-                    <Button x:Name="BingeMoviesBtn" Content="🍿 Binge Watch" Background="#00A4EF" Foreground="White" BorderThickness="0" FontSize="18" FontWeight="Bold" Cursor="Hand" Margin="0,0,30,0" Padding="15,8" Click="BingeMovies_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                    <Button Grid.Column="0" x:Name="CloseModalBtn" Content="🔙 Back to Collections" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" Margin="0,0,30,0" Click="CloseModal_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="CloseModalBtn_PreviewKeyDown"/>
+                    
+                    <Button Grid.Column="1" x:Name="BingeMoviesBtn" Content="🍿 Binge Watch" Background="#00A4EF" Foreground="White" BorderThickness="0" FontSize="18" FontWeight="Bold" Cursor="Hand" Margin="0,0,30,0" Padding="15,8" Click="BingeMovies_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}">
                         <Button.Resources>
                             <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
                         </Button.Resources>
                     </Button>
                     
-                    <TextBlock x:Name="ModalTitle" Text="Collection Name" FontSize="36" FontWeight="Bold" VerticalAlignment="Center"/>
-                </StackPanel>
+                    <TextBlock Grid.Column="2" x:Name="ModalTitle" Text="Collection Name" FontSize="36" FontWeight="Bold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,20,0"/>
+
+                    <!-- NEW: Collection Search Box -->
+                    <Border Grid.Column="3" Background="#1A1A1A" CornerRadius="8" Padding="15,10" BorderThickness="1" BorderBrush="#333333" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <Grid>
+                            <TextBlock Text="Search collection..." Foreground="#555555" FontSize="16" IsHitTestVisible="False" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=CollectionSearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBox x:Name="CollectionSearchBox" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="16" CaretBrush="White" TextChanged="CollectionSearchBox_TextChanged" PreviewKeyDown="CollectionSearchBox_PreviewKeyDown"/>
+                        </Grid>
+                    </Border>
+                </Grid>
 
                 <!-- Lazy Loaded WrapPanel ListBox -->
                 <ScrollViewer x:Name="ModalScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" ScrollViewer.PanningMode="VerticalOnly" ScrollChanged="ModalScroll_ScrollChanged">

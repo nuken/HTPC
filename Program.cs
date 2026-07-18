@@ -1,7 +1,5 @@
 using System;
 using System.Windows;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using HTPC.Services;
@@ -16,7 +14,9 @@ public class Program
         // 1. Build the Generic Host
         var hostBuilder = Host.CreateDefaultBuilder(args)
             
-            // Configure Kestrel Web Server for Remote API
+            /* --- DISABLED KESTREL WEB SERVER --- 
+             * Uncomment this block if you ever want to build the remote control app.
+             *
             .ConfigureWebHostDefaults(webBuilder =>
             {
                 webBuilder.Configure(app =>
@@ -24,34 +24,16 @@ public class Program
                     app.UseRouting();
                     app.UseEndpoints(endpoints =>
                     {
-                        // Existing status check
                         endpoints.MapGet("/api/status", () => "HTPC Core API is online.");
-
-                        // NEW: Remote Control Endpoints
-                        // The framework automatically grabs our Singleton MpvPlaybackService from Dependency Injection
-                        endpoints.MapGet("/api/pause", (MpvPlaybackService player) => 
-                        { 
-                            player.Pause(); 
-                            return "Video Paused"; 
-                        });
-
-                        endpoints.MapGet("/api/resume", (MpvPlaybackService player) => 
-                        { 
-                            player.Resume(); 
-                            return "Video Resumed"; 
-                        });
-
-                        endpoints.MapGet("/api/stop", (MpvPlaybackService player) => 
-                        { 
-                            player.Stop(); 
-                            return "Video Stopped"; 
-                        });
+                        endpoints.MapGet("/api/pause", (MpvPlaybackService player) => { player.Pause(); return "Video Paused"; });
+                        endpoints.MapGet("/api/resume", (MpvPlaybackService player) => { player.Resume(); return "Video Resumed"; });
+                        endpoints.MapGet("/api/stop", (MpvPlaybackService player) => { player.Stop(); return "Video Stopped"; });
                     });
                 });
                 
-                // Bind Kestrel to port 5001 (accessible locally and on your network)
                 webBuilder.UseUrls("http://localhost:55001");
             })
+            */
             
             // Configure Dependency Injection
            .ConfigureServices((context, services) =>
@@ -60,11 +42,8 @@ public class Program
                 services.AddSingleton<MpvPlaybackService>();
                 services.AddDbContext<HTPC.Core.Data.AppDbContext>();
                 services.AddSingleton<ServerManagerService>();
-				services.AddHttpClient();
-				services.AddSingleton<UpdateService>();
-                
-                // NEW: Register the native HTTP connection factory
                 services.AddHttpClient();
+                services.AddSingleton<UpdateService>();
                 
                 services.AddSingleton<MediaLibraryService>();
                 services.AddTransient<HTPC.UI.Views.MoviesView>();
@@ -72,14 +51,14 @@ public class Program
                 services.AddTransient<HTPC.UI.Views.PlayerView>();
                 services.AddTransient<HTPC.UI.Views.SettingsView>();
                 services.AddSingleton<HTPC.UI.Windows.MainWindow>();
-				services.AddTransient<HTPC.UI.Views.GuideView>();
-				services.AddTransient<HTPC.UI.Views.ShowsView>();
-				services.AddTransient<HTPC.UI.Views.VideosView>();
-				services.AddTransient<HTPC.UI.Views.MultiviewSetupView>();
-				services.AddTransient<HTPC.UI.ViewModels.RecordingsViewModel>();
+                services.AddTransient<HTPC.UI.Views.GuideView>();
+                services.AddTransient<HTPC.UI.Views.ShowsView>();
+                services.AddTransient<HTPC.UI.Views.VideosView>();
+                services.AddTransient<HTPC.UI.Views.MultiviewSetupView>();
+                services.AddTransient<HTPC.UI.ViewModels.RecordingsViewModel>();
                 services.AddTransient<HTPC.UI.Views.RecordingsView>();
-				services.AddTransient<HTPC.UI.ViewModels.CollectionsViewModel>();
-				services.AddTransient<HTPC.UI.Views.CollectionsView>();
+                services.AddTransient<HTPC.UI.ViewModels.CollectionsViewModel>();
+                services.AddTransient<HTPC.UI.Views.CollectionsView>();
             });
 
         using var host = hostBuilder.Build();
@@ -87,13 +66,12 @@ public class Program
         // 2. Start the Background Host
         host.Start();
 
-        // --- NEW: Force Database Initialization ---
+        // --- Force Database Initialization ---
         using (var scope = host.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<HTPC.Core.Data.AppDbContext>();
             db.Database.EnsureCreated();
         }
-        // ------------------------------------------
 
         // 3. Force initialization of our player service
         var playerService = host.Services.GetRequiredService<MpvPlaybackService>();
