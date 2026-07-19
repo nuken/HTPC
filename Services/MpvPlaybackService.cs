@@ -36,7 +36,7 @@ public class MpvPlaybackService : IDisposable
 	private CancellationTokenSource? _loadingWatchdogCts;
     private int _retryCount = 0;
     private const int MaxRetries = 2;
-    private const int LoadingTimeoutSeconds = 5;
+    private const int LoadingTimeoutSeconds = 8;
 	
 	// --- NEW: TUNER DIAGNOSTICS SWITCH ---
     private bool EnableTunerDiagnostics = false;
@@ -55,6 +55,7 @@ public class MpvPlaybackService : IDisposable
     public double CurrentPosition { get; private set; }
     public double CurrentDuration { get; private set; }
     public event Action? OnMediaLoaded;
+	public event Action<string>? OnPlaybackFailed;
     private const int MPV_EVENT_END_FILE = 7;
     private const int MPV_EVENT_FILE_LOADED = 8;
 
@@ -303,14 +304,15 @@ public class MpvPlaybackService : IDisposable
                 var media = _currentMedia;
                 if (media != null)
                 {
-                    if (_retryCount < MaxRetries && CurrentPosition <= 0) // Use CurrentPosition here
+                    // --- FIX: Removed the retry check here so the final failure routes to the UI! ---
+                    if (CurrentPosition <= 0) 
                     {
                         _logger.LogWarning("File ended immediately with 0 duration. Triggering failure recovery.");
                         _ = Task.Run(() => HandlePlaybackFailure(media));
                         continue;
                     }
 
-                    double duration = CurrentDuration; // Use CurrentDuration here
+                    double duration = CurrentDuration; 
                     _ = SyncProgressToServerAsync(media.Id, duration, duration);
                 }
             }
@@ -450,24 +452,27 @@ public class MpvPlaybackService : IDisposable
     }
 
 private void HandlePlaybackFailure(MediaItem media)
-{
-    if (_retryCount < MaxRetries)
     {
-        _retryCount++;
-        _logger.LogInformation($"Executing retry {_retryCount} for channel: {media.Title}");
-        
-        // Stop current internal playback state and kill hanging transcode sessions
-        Stop(); 
-        
-        // Re-route back to PlayMedia as a retry
-        PlayMedia(media, isRetry: true);
+        if (_retryCount < MaxRetries)
+        {
+            _retryCount++;
+            _logger.LogInformation($"Executing retry {_retryCount} for channel: {media.Title}");
+            
+            // Stop current internal playback state and kill hanging transcode sessions
+            Stop(); 
+            
+            // Re-route back to PlayMedia as a retry
+            PlayMedia(media, isRetry: true);
+        }
+        else
+        {
+            _logger.LogError($"Failed to tune channel {media.Title} after {MaxRetries} retries.");
+            Stop();
+            
+            // --- NEW: Broadcast the failure to the UI ---
+            OnPlaybackFailed?.Invoke("The stream timed out. The antenna signal may be degraded or the channel is currently offline.");
+        }
     }
-    else
-    {
-        _logger.LogError($"Failed to tune channel {media.Title} after {MaxRetries} retries.");
-        Stop();
-    }
-}
     
     private async Task SyncProgressToServerAsync(string fileId, double duration, double position)
     {

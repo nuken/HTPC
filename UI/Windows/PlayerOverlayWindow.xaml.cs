@@ -69,6 +69,7 @@ public partial class PlayerOverlayWindow : Window
         
         _mpvService.OnCommercialPrompt += ShowSkipAdPrompt;
 		_mpvService.OnMediaLoaded += MpvService_OnMediaLoaded;
+		_mpvService.OnPlaybackFailed += MpvService_OnPlaybackFailed;
 
         _statsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _statsTimer.Tick += StatsTimer_Tick;
@@ -108,7 +109,10 @@ public partial class PlayerOverlayWindow : Window
         }
         
         _mpvService.OnCommercialPrompt -= ShowSkipAdPrompt; 
-        _mpvService.OnMediaLoaded -= MpvService_OnMediaLoaded; // Unhook to prevent leaks
+        _mpvService.OnMediaLoaded -= MpvService_OnMediaLoaded; 
+        
+        // --- NEW: Unhook the failure event ---
+        _mpvService.OnPlaybackFailed -= MpvService_OnPlaybackFailed; 
         
         _idleTimer?.Stop();
         _syncTimer?.Stop();
@@ -973,5 +977,42 @@ public partial class PlayerOverlayWindow : Window
             StatHwDec.Text = _mpvService.GetMpvProperty("hwdec-current");
         }
         catch { }
+    }
+	
+	public void ShowPlaybackError(string reason)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            // 1. Hide the spinning buffering screen if it is still up
+            BufferingOverlay.Visibility = Visibility.Collapsed;
+            
+            // 2. Set the custom error message and show the overlay
+            ErrorReasonText.Text = reason;
+            ErrorOverlay.Visibility = Visibility.Visible;
+            
+            // 3. Un-hide the mouse cursor so PC users can click the button
+            Mouse.OverrideCursor = null;
+            
+            // 4. Force focus onto the button so 10-foot UI / Remote users can just hit "Select"
+            ErrorReturnBtn.Focus();
+            Keyboard.Focus(ErrorReturnBtn);
+        });
+    }
+	
+	private void ErrorReturnBtn_Click(object sender, RoutedEventArgs e)
+    {
+        // Hide the error screen so it doesn't flash the next time the player opens
+        ErrorOverlay.Visibility = Visibility.Collapsed;
+
+        // --- FIX: Tell PlayerView to run its teardown and switch back to the Guide screen! ---
+        OnBackRequested?.Invoke(this, EventArgs.Empty);
+
+        this.Close(); 
+    }
+	
+	private void MpvService_OnPlaybackFailed(string reason)
+    {
+        // Pass the error message string directly into the UI update method
+        ShowPlaybackError(reason);
     }
 }
