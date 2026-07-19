@@ -47,6 +47,27 @@ public partial class RecordingsView : UserControl
 
         Loaded += OnLoaded;
         PreviewKeyDown += RecordingsView_PreviewKeyDown;
+		IsVisibleChanged += RecordingsView_IsVisibleChanged;
+    }
+	
+	// --- NEW: ZOMBIE OVERLAY CLEANUP ---
+    private void RecordingsView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (!(bool)e.NewValue) 
+        {
+            // The view is hiding (user navigated away)
+            if (ModalOverlay.Visibility == Visibility.Visible)
+            {
+                ModalOverlay.Visibility = Visibility.Collapsed;
+            }
+            
+            // Also clean up the filter dropdown overlay just in case!
+            if (FilterOverlay.Visibility == Visibility.Visible)
+            {
+                FilterOverlay.Visibility = Visibility.Collapsed;
+                _currentFilterMode = FilterMode.None;
+            }
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

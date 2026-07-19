@@ -151,12 +151,20 @@ public class MediaLibraryService
                         }
                     }
 
-                    if (element.TryGetProperty("episode_count", out _))
+                    // Extract the episode count safely. If it's completely missing, this defaults to 0.
+                    int episodeCount = element.TryGetProperty("episode_count", out var ec) && ec.ValueKind == System.Text.Json.JsonValueKind.Number ? ec.GetInt32() : 0;
+
+                    if (episodeCount > 0 && !categories.Contains("Series")) 
                     {
-                        if (!categories.Contains("Series")) 
-                        {
-                            categories.Add("Series");
-                        }
+                        categories.Add("Series");
+                    }
+
+                    bool isSeries = categories.Any(c => c.Equals("Show", StringComparison.OrdinalIgnoreCase) || c.Equals("Series", StringComparison.OrdinalIgnoreCase));
+
+                    // --- NEW: Filter out ghost shows! ---
+                    if (isSeries && episodeCount <= 0)
+                    {
+                        continue; // Completely skip adding this show to the UI list
                     }
 
                     // --- FIX: Dynamically swap the image priority rule based on Collection Type ---

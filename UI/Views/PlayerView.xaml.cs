@@ -32,6 +32,9 @@ public partial class PlayerView : UserControl
     {
         InitializeComponent();
         _mpvService = mpvService;
+		
+		this.Loaded += PlayerView_Loaded;
+		
         _libraryService = libraryService;
         _serverManager = serverManager;
 
@@ -175,11 +178,6 @@ public partial class PlayerView : UserControl
         catch { }
     }
 
-    private void MainWindow_BoundsChanged(object? sender, EventArgs e)
-    {
-        SyncOverlayBounds();
-    }
-
     private void SyncOverlayBounds()
     {
         // Don't calculate if the window isn't fully ready yet
@@ -233,5 +231,30 @@ public partial class PlayerView : UserControl
         }
 
         Mouse.OverrideCursor = null; 
+    }
+	
+	// --- NEW: OVERLAY MOVEMENT TRACKING ---
+    private void PlayerView_Loaded(object sender, RoutedEventArgs e)
+    {
+        Window mainWindow = Window.GetWindow(this);
+        if (mainWindow != null)
+        {
+            // Unsubscribe first to prevent duplicate fires if the view is reloaded
+            mainWindow.LocationChanged -= MainWindow_BoundsChanged;
+            mainWindow.SizeChanged -= MainWindow_BoundsChanged;
+            
+            // Subscribe to dragging and resizing
+            mainWindow.LocationChanged += MainWindow_BoundsChanged;
+            mainWindow.SizeChanged += MainWindow_BoundsChanged;
+        }
+    }
+
+    private void MainWindow_BoundsChanged(object? sender, EventArgs e)
+    {
+        // If the video is playing and the overlay exists, instantly realign it!
+        if (_overlayWindow != null && _overlayWindow.IsVisible)
+        {
+            SyncOverlayBounds();
+        }
     }
 }

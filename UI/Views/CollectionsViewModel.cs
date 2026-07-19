@@ -36,17 +36,24 @@ public class CollectionsViewModel : INotifyPropertyChanged
         MovieCollections.Clear();
         ShowCollections.Clear();
 
-        // Feed the data sequentially; the WrapPanel in the UI will handle the layout
-        var movies = allCollections.Where(c => c.CollectionType == "movies").ToList();
-        foreach (var item in movies)
-        {
-            MovieCollections.Add(item);
-        }
+        foreach (var collection in allCollections)
+        {            
+            if (collection.ContentCount <= 0) continue;
 
-        var shows = allCollections.Where(c => c.CollectionType == "shows").ToList();
-        foreach (var item in shows)
-        {
-            ShowCollections.Add(item);
+            if (collection.CollectionType == "movies")
+            {
+                
+                MovieCollections.Add(collection);
+            }
+            else if (collection.CollectionType == "shows")
+            {
+                var validContents = await _mediaLibraryService.GetCollectionMediaAsync(collection.Id);
+                
+                if (validContents.Count > 0)
+                {
+                    ShowCollections.Add(collection);
+                }
+            }
         }
     }
 

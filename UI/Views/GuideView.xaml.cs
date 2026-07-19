@@ -635,7 +635,16 @@ public partial class GuideView : UserControl
     private void CloseModal_Click(object sender, RoutedEventArgs e)
     {
         ModalOverlay.Visibility = Visibility.Collapsed;
-        if (_selectedAiring != null) GuideItemsControl.Focus();
+        
+        // --- FIX: Restore focus directly to the specific cell we were tracking! ---
+        if (_lastFocusedAiringButton != null)
+        {
+            // Use Dispatcher to ensure the modal is fully hidden before trying to grab focus
+            _ = Dispatcher.BeginInvoke(new Action(() => 
+            {
+                _lastFocusedAiringButton.Focus();
+            }), DispatcherPriority.Input);
+        }
     }
 
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
