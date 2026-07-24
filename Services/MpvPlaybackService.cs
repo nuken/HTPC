@@ -36,7 +36,7 @@ public class MpvPlaybackService : IDisposable
 	private CancellationTokenSource? _loadingWatchdogCts;
     private int _retryCount = 0;
     private const int MaxRetries = 2;
-    private const int LoadingTimeoutSeconds = 15;
+    private const int LoadingTimeoutSeconds = 30;
 	
 	// --- NEW: TUNER DIAGNOSTICS SWITCH ---
     private bool EnableTunerDiagnostics = false;
@@ -125,9 +125,9 @@ public class MpvPlaybackService : IDisposable
 
         // --- NEW: Aggressive Network Timeout Settings for HLS ---
         // Force the network connection to drop if the server takes longer than 5 seconds to reply
-        Libmpv.mpv_set_option_string(_mpvContext, "network-timeout", "5"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "network-timeout", "10"); 
         // Force HLS playlist parsing to timeout if the playlist stalls
-        Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=5000000"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=10000000"); 
         // Stop MPV from hanging infinitely if the demuxer gets confused by broken timestamps
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "50M");
 
