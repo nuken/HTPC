@@ -117,106 +117,95 @@ public class MediaLibraryService
     }
 
     public async Task<List<MediaItem>> GetCollectionMediaAsync(string collectionId)
-    {
-        var activeServer = _serverManager.GetActiveServer();
-        if (activeServer == null || string.IsNullOrWhiteSpace(collectionId)) return new List<MediaItem>();
-
-        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        // The API sorts based on the user's custom preference by default
-        string apiUrl = $"{baseUrl}/api/v1/collections/{collectionId}/content"; 
-
-        try
-        {
-            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
-            using JsonDocument doc = JsonDocument.Parse(jsonResponse);
-            var items = new List<MediaItem>();
-            
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var element in doc.RootElement.EnumerateArray())
-                {
-                    string id = GetStringOrNumber(element, "id");
-                    if (string.IsNullOrEmpty(id)) continue;
-
-                    string title = GetStringOrNumber(element, "title", "name"); 
-                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
-                    
-                    var categories = new List<string>();
-                    if (element.TryGetProperty("categories", out var catElement) && catElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-                    {
-                        foreach (var cat in catElement.EnumerateArray())
-                        {
-                            if (cat.ValueKind == System.Text.Json.JsonValueKind.String)
-                                categories.Add(cat.GetString() ?? "");
-                        }
-                    }
-
-                    // Extract the episode count safely. If it's completely missing, this defaults to 0.
-                    int episodeCount = element.TryGetProperty("episode_count", out var ec) && ec.ValueKind == System.Text.Json.JsonValueKind.Number ? ec.GetInt32() : 0;
-
-                    if (episodeCount > 0 && !categories.Contains("Series")) 
-                    {
-                        categories.Add("Series");
-                    }
-
-                    bool isSeries = categories.Any(c => c.Equals("Show", StringComparison.OrdinalIgnoreCase) || c.Equals("Series", StringComparison.OrdinalIgnoreCase));
-
-                    // --- NEW: Filter out ghost shows! ---
-                    if (isSeries && episodeCount <= 0)
-                    {
-                        continue; // Completely skip adding this show to the UI list
-                    }
-
-                    // --- FIX: Dynamically swap the image priority rule based on Collection Type ---
-                    bool isMovie = categories.Any(c => c.Equals("Movie", StringComparison.OrdinalIgnoreCase));
-                    string[]? customPriorities = isMovie 
-                        ? new[] { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" } 
-                        : null;
-
-                    // Extract the new sorting properties
-long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
-long lastWatchedAt = element.TryGetProperty("last_watched_at", out var lwProp) && lwProp.ValueKind == JsonValueKind.Number ? lwProp.GetInt64() : 0;
-long updatedAt = element.TryGetProperty("updated_at", out var upProp) && upProp.ValueKind == JsonValueKind.Number ? upProp.GetInt64() : 0;
-long lastRecordedAt = element.TryGetProperty("last_recorded_at", out var lrProp) && lrProp.ValueKind == JsonValueKind.Number ? lrProp.GetInt64() : 0;
-double duration = element.TryGetProperty("duration", out var dProp) && dProp.ValueKind == JsonValueKind.Number ? dProp.GetDouble() : 0;
-int releaseYear = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == JsonValueKind.Number ? yProp.GetInt32() : 0;
-string contentRating = GetStringOrNumber(element, "content_rating");
-
-bool isFavorited = element.TryGetProperty("favorited", out var fProp) && (fProp.ValueKind == JsonValueKind.True || (fProp.ValueKind == JsonValueKind.Number && fProp.GetInt32() == 1));
-bool isWatched = element.TryGetProperty("watched", out var wProp) && (wProp.ValueKind == JsonValueKind.True || (wProp.ValueKind == JsonValueKind.Number && wProp.GetInt32() == 1));
-
-items.Add(new MediaItem
 {
-    Id = id,
-    Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
-    Categories = categories,
-    PosterUrl = GetBestImageUrl(baseUrl, element, id, customPriorities),
-    StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-    Path = GetStringOrNumber(element, "Path", "path"),
-    Summary = GetStringOrNumber(element, "summary", "full_summary"),
-    Commercials = ParseDoubleArray(element, "commercials"),
-    
-    // Assign the new properties for sorting
-    CreatedAt = createdAt,
-    LastWatchedAt = lastWatchedAt,
-    UpdatedAt = updatedAt,
-    LastRecordedAt = lastRecordedAt,
-    Duration = duration,
-    ReleaseYear = releaseYear,
-    ContentRating = contentRating,
-    IsFavorite = isFavorited,
-    IsWatched = isWatched
-});
-                }
-            }
-            return items;
-        }
-        catch (Exception ex)
+    var activeServer = _serverManager.GetActiveServer();
+    if (activeServer == null || string.IsNullOrWhiteSpace(collectionId)) return new List<MediaItem>();
+
+    string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+    string apiUrl = $"{baseUrl}/api/v1/collections/{collectionId}/content"; 
+
+    try
+    {
+        string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(jsonResponse);
+        var items = new List<MediaItem>();
+        
+        if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
         {
-            _logger.LogError($"Failed to fetch content for collection {collectionId}: {ex.Message}");
-            return new List<MediaItem>();
+            foreach (var element in doc.RootElement.EnumerateArray())
+            {
+                string id = GetStringOrNumber(element, "id");
+                if (string.IsNullOrEmpty(id)) continue;
+
+                var categories = new List<string>();
+                if (element.TryGetProperty("categories", out var catElement) && catElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var cat in catElement.EnumerateArray())
+                    {
+                        if (cat.ValueKind == System.Text.Json.JsonValueKind.String)
+                            categories.Add(cat.GetString() ?? "");
+                    }
+                }
+
+                // --- THE GHOST FOLDER FILTER ---
+                // Shows with 0 episodes do not have an 'episode_count' property in the JSON.
+                int episodeCount = element.TryGetProperty("episode_count", out var ec) && ec.ValueKind == System.Text.Json.JsonValueKind.Number ? ec.GetInt32() : 0;
+                bool isSeries = categories.Any(c => c.Equals("Show", StringComparison.OrdinalIgnoreCase) || c.Equals("Series", StringComparison.OrdinalIgnoreCase));
+
+                if (isSeries && episodeCount <= 0)
+                {
+                    continue; // Skip adding empty shows like 'NOVA' to the UI
+                }
+
+                string title = GetStringOrNumber(element, "title", "name"); 
+                string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+                
+                bool isMovie = categories.Any(c => c.Equals("Movie", StringComparison.OrdinalIgnoreCase));
+                string[]? customPriorities = isMovie 
+                    ? new[] { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" } 
+                    : null;
+
+                long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == System.Text.Json.JsonValueKind.Number ? cProp.GetInt64() : 0;
+                long lastWatchedAt = element.TryGetProperty("last_watched_at", out var lwProp) && lwProp.ValueKind == System.Text.Json.JsonValueKind.Number ? lwProp.GetInt64() : 0;
+                long updatedAt = element.TryGetProperty("updated_at", out var upProp) && upProp.ValueKind == System.Text.Json.JsonValueKind.Number ? upProp.GetInt64() : 0;
+                long lastRecordedAt = element.TryGetProperty("last_recorded_at", out var lrProp) && lrProp.ValueKind == System.Text.Json.JsonValueKind.Number ? lrProp.GetInt64() : 0;
+                double duration = element.TryGetProperty("duration", out var dProp) && dProp.ValueKind == System.Text.Json.JsonValueKind.Number ? dProp.GetDouble() : 0;
+                int releaseYear = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == System.Text.Json.JsonValueKind.Number ? yProp.GetInt32() : 0;
+                string contentRating = GetStringOrNumber(element, "content_rating");
+
+                bool isFavorited = element.TryGetProperty("favorited", out var fProp) && (fProp.ValueKind == System.Text.Json.JsonValueKind.True || (fProp.ValueKind == System.Text.Json.JsonValueKind.Number && fProp.GetInt32() == 1));
+                bool isWatched = element.TryGetProperty("watched", out var wProp) && (wProp.ValueKind == System.Text.Json.JsonValueKind.True || (wProp.ValueKind == System.Text.Json.JsonValueKind.Number && wProp.GetInt32() == 1));
+
+                items.Add(new MediaItem
+                {
+                    Id = id,
+                    Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
+                    Categories = categories,
+                    PosterUrl = GetBestImageUrl(baseUrl, element, id, customPriorities),
+                    StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                    Path = GetStringOrNumber(element, "Path", "path"),
+                    Summary = GetStringOrNumber(element, "summary", "full_summary"),
+                    Commercials = ParseDoubleArray(element, "commercials"),
+                    CreatedAt = createdAt,
+                    LastWatchedAt = lastWatchedAt,
+                    UpdatedAt = updatedAt,
+                    LastRecordedAt = lastRecordedAt,
+                    Duration = duration,
+                    ReleaseYear = releaseYear,
+                    ContentRating = contentRating,
+                    IsFavorite = isFavorited,
+                    IsWatched = isWatched
+                });
+            }
         }
+        return items;
     }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Failed to fetch content for collection {collectionId}: {ex.Message}");
+        return new List<MediaItem>();
+    }
+}
 	
 	public async Task<List<MediaItem>> SearchUpcomingAiringsAsync(int offset, int limit, string query, string channelNumberFilter, ChannelCollection? activeCollection)
     {
