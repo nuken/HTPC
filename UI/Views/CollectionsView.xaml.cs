@@ -29,8 +29,13 @@ public partial class CollectionsView : UserControl
     
     private readonly CollectionsViewModel _viewModel;
     private IInputElement? _lastFocusedElement;
-	
-	private System.Collections.Generic.List<MediaItem> _masterCollectionContents = new();
+    
+    private enum FilterMode { None, Sort, Order }
+    private FilterMode _currentFilterMode = FilterMode.None;
+    private string _currentSort = "Alphabetical";
+    private string _currentOrder = "Forward";
+    
+    private System.Collections.Generic.List<MediaItem> _masterCollectionContents = new();
     private readonly DispatcherTimer _searchTimer;
 
     // --- LAZY LOADING VARIABLES ---
@@ -47,8 +52,8 @@ public partial class CollectionsView : UserControl
         
         // Bind the modal ListBox to the lazy-loading collection
         CollectionContentList.ItemsSource = ModalMediaItems;
-		
-		// Initialize Search Timer
+        
+        // Initialize Search Timer
         _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _searchTimer.Tick += SearchTimer_Tick;
         
@@ -112,15 +117,18 @@ public partial class CollectionsView : UserControl
         _lastFocusedElement = Keyboard.FocusedElement;
         ModalTitle.Text = collection.Name;
         
-        // --- NEW: Reset search box and cache the master list ---
         CollectionSearchBox.Text = string.Empty;
-        _masterCollectionContents = await _viewModel.GetCollectionContentsAsync(collection.Id);
-        _activeCollectionContents = _masterCollectionContents.ToList();
-
-        ModalMediaItems.Clear();
-        _modalOffset = 0;
         
-        LoadNextModalChunk();
+        // Reset state variables and Button text instead of ComboBoxes
+        _currentSort = "Alphabetical";
+        _currentOrder = "Forward";
+        if (CollectionSortBtn != null) CollectionSortBtn.Content = "Alphabetical ▼";
+        if (CollectionOrderBtn != null) CollectionOrderBtn.Content = "Forward ▼";
+
+        _masterCollectionContents = await _viewModel.GetCollectionContentsAsync(collection.Id);
+        
+        // Force the initial sort using the default parameters
+        ApplyCollectionSorting();
         
         ContentModal.Visibility = Visibility.Visible;
 
@@ -137,8 +145,8 @@ public partial class CollectionsView : UserControl
             }
         }, DispatcherPriority.Loaded);
     }
-	
-	private void CollectionSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    
+    private void CollectionSearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         _searchTimer.Stop();
         _searchTimer.Start();
@@ -147,32 +155,91 @@ public partial class CollectionsView : UserControl
     private void SearchTimer_Tick(object? sender, EventArgs e)
     {
         _searchTimer.Stop();
+        ApplyCollectionSorting();
+    }
+
+    private void CollectionSort_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_masterCollectionContents == null || _masterCollectionContents.Count == 0) return;
+        ApplyCollectionSorting();
+    }
+
+    private void ApplyCollectionSorting()
+    {
+        if (_masterCollectionContents == null || _masterCollectionContents.Count == 0) return;
+
         string query = CollectionSearchBox.Text.ToLower().Trim();
-        
-        if (string.IsNullOrWhiteSpace(query))
+        var filtered = _masterCollectionContents.AsEnumerable();
+
+        // Apply Search Filter First
+        if (!string.IsNullOrWhiteSpace(query))
         {
-            // Restore the full list if the search box is empty
-            _activeCollectionContents = _masterCollectionContents.ToList();
-        }
-        else
-        {
-            // Deep search against Title, Episode, Summary, Cast, Directors, and Genres
-            _activeCollectionContents = _masterCollectionContents.Where(m => 
+            filtered = filtered.Where(m => 
                 (m.Title != null && m.Title.ToLower().Contains(query)) ||
                 (m.CurrentShowTitle != null && m.CurrentShowTitle.ToLower().Contains(query)) ||
                 (m.Summary != null && m.Summary.ToLower().Contains(query)) ||
                 (m.Cast != null && m.Cast.Any(c => c.ToLower().Contains(query))) ||
                 (m.Directors != null && m.Directors.Any(d => d.ToLower().Contains(query))) ||
                 (m.Genres != null && m.Genres.Any(g => g.ToLower().Contains(query)))
-            ).ToList();
+            );
         }
 
+        // Determine Sort Type and Order from state variables
+        string sortType = _currentSort;
+        bool isReverse = _currentOrder == "Reverse";
+
+        IOrderedEnumerable<MediaItem> sorted;
+
+        string StripArticles(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title)) return "";
+            string lower = title.ToLower();
+            if (lower.StartsWith("the ")) return title.Substring(4);
+            if (lower.StartsWith("a ")) return title.Substring(2);
+            if (lower.StartsWith("an ")) return title.Substring(3);
+            return title;
+        }
+
+        switch (sortType)
+        {
+            case "Date Added":
+                sorted = isReverse ? filtered.OrderBy(m => m.CreatedAt) : filtered.OrderByDescending(m => m.CreatedAt);
+                break;
+            case "Release Year":
+                sorted = isReverse ? filtered.OrderBy(m => m.ReleaseYear) : filtered.OrderByDescending(m => m.ReleaseYear);
+                break;
+            case "Date Watched":
+                sorted = isReverse ? filtered.OrderBy(m => m.LastWatchedAt) : filtered.OrderByDescending(m => m.LastWatchedAt);
+                break;
+            case "Date Updated":
+                // Fallbacks to LastRecordedAt for TV shows
+                sorted = isReverse ? filtered.OrderBy(m => Math.Max(m.UpdatedAt, m.LastRecordedAt)) : filtered.OrderByDescending(m => Math.Max(m.UpdatedAt, m.LastRecordedAt));
+                break;
+            case "Duration":
+                sorted = isReverse ? filtered.OrderByDescending(m => m.Duration) : filtered.OrderBy(m => m.Duration);
+                break;
+            case "Rating":
+                sorted = isReverse ? filtered.OrderByDescending(m => m.ContentRating) : filtered.OrderBy(m => m.ContentRating);
+                break;
+            case "Favorites":
+                // Brings favorites to the top, then sorts by title
+                sorted = isReverse ? filtered.OrderBy(m => m.IsFavorite).ThenByDescending(m => StripArticles(m.Title)) 
+                                   : filtered.OrderByDescending(m => m.IsFavorite).ThenBy(m => StripArticles(m.Title));
+                break;
+            case "Alphabetical":
+            default:
+                sorted = isReverse ? filtered.OrderByDescending(m => StripArticles(m.Title)) : filtered.OrderBy(m => StripArticles(m.Title));
+                break;
+        }
+
+        _activeCollectionContents = sorted.ToList();
+        
         ModalMediaItems.Clear();
         _modalOffset = 0;
         LoadNextModalChunk();
     }
-	
-	private void CollectionSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    
+    private void CollectionSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
         
@@ -750,8 +817,8 @@ public partial class CollectionsView : UserControl
             PlaySelectedMedia(episode);
         }
     }
-	
-	// --- MOUSE WHEEL SCROLLING HANDLERS ---
+    
+    // --- MOUSE WHEEL SCROLLING HANDLERS ---
 
     private void MainListBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
@@ -793,6 +860,211 @@ public partial class CollectionsView : UserControl
                 CloseModal_Click(null!, null!);
                 e.Handled = true;
             }
+        }
+    }
+    
+    private MediaItem? _rightClickedItem;
+
+    private void ContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        // Capture the exact item that was right-clicked regardless of which list it is in
+        if (sender is ContextMenu menu && menu.PlacementTarget is FrameworkElement target && target.DataContext is MediaItem item)
+        {
+            _rightClickedItem = item;
+            
+            if (CollectionContentList.Items.Contains(item))
+                CollectionContentList.SelectedItem = item;
+            else if (EpisodesList.Items.Contains(item))
+                EpisodesList.SelectedItem = item;
+        }
+    }
+
+    private async void AdminCommand_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.Tag is string command && _rightClickedItem != null)
+        {
+            if (command == "delete")
+            {
+                var result = MessageBox.Show($"Are you sure you want to permanently delete '{_rightClickedItem.Title}' from the server?", "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (result == MessageBoxResult.Yes)
+                {
+                    bool success = await _viewModel.DeleteMediaAsync(_rightClickedItem.Id);
+                    if (success)
+                    {
+                        // Clean up UI lists immediately without requiring a refresh
+                        ModalMediaItems.Remove(_rightClickedItem);
+                        _activeCollectionContents.Remove(_rightClickedItem);
+                        _masterCollectionContents.Remove(_rightClickedItem);
+                        _viewModel.CurrentEpisodes.Remove(_rightClickedItem);
+                        _allEpisodesForSelectedShow.Remove(_rightClickedItem);
+                        
+                        ShowToast("Item deleted successfully.");
+                    }
+                    else
+                    {
+                        ShowToast("Failed to delete item.");
+                    }
+                }
+            }
+            else
+            {
+                bool success = await _viewModel.SendAdminCommandAsync(_rightClickedItem.Id, command);
+                if (success) ShowToast("Command sent successfully.");
+                else ShowToast("Command failed.");
+            }
+        }
+    }
+
+    private void MediaInfo_Click(object sender, RoutedEventArgs e)
+    {
+        if (_rightClickedItem != null)
+        {
+            MediaInfoTitle.Text = _rightClickedItem.Title;
+            MediaInfoDetails.Children.Clear();
+            MediaInfoDetails.Children.Add(new TextBlock { Text = $"File ID: {_rightClickedItem.Id}", Foreground = System.Windows.Media.Brushes.White, FontSize = 16, Margin = new Thickness(0, 0, 0, 5) });
+            MediaInfoDetails.Children.Add(new TextBlock { Text = $"Path: {_rightClickedItem.Path}", Foreground = System.Windows.Media.Brushes.White, FontSize = 16, TextWrapping = TextWrapping.Wrap });
+
+            ContentModal.Visibility = Visibility.Collapsed;
+            EpisodesOverlay.Visibility = Visibility.Collapsed;
+            MediaInfoModal.Visibility = Visibility.Visible;
+            
+            _lastFocusedElement = Keyboard.FocusedElement;
+        }
+    }
+
+    private void CloseMediaInfo_Click(object sender, RoutedEventArgs e)
+    {
+        MediaInfoModal.Visibility = Visibility.Collapsed;
+        
+        // Restore whichever modal was previously open
+        if (_rightClickedItem != null && ModalMediaItems.Contains(_rightClickedItem))
+            ContentModal.Visibility = Visibility.Visible;
+        else
+            EpisodesOverlay.Visibility = Visibility.Visible;
+            
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+            Keyboard.Focus(_lastFocusedElement);
+    }
+
+    private void ShowToast(string message)
+    {
+        ToastText.Text = message;
+        ToastNotification.Visibility = Visibility.Visible;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        timer.Tick += (s, ev) =>
+        {
+            ToastNotification.Visibility = Visibility.Collapsed;
+            timer.Stop();
+        };
+        timer.Start();
+    }
+
+    private void CollectionSortBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Sort;
+        FilterOverlayTitle.Text = "Sort By";
+        FilterSelectionList.ItemsSource = new[] 
+        { 
+            "Alphabetical", "Date Added", "Release Year", "Date Watched", "Date Updated", "Duration", "Rating", "Favorites" 
+        };
+        FilterSelectionList.SelectedItem = _currentSort;
+        OpenFilterOverlay();
+    }
+
+    private void CollectionOrderBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Order;
+        FilterOverlayTitle.Text = "Order";
+        FilterSelectionList.ItemsSource = new[] { "Forward", "Reverse" };
+        FilterSelectionList.SelectedItem = _currentOrder;
+        OpenFilterOverlay();
+    }
+
+    private void OpenFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Visible;
+        _lastFocusedElement = Keyboard.FocusedElement;
+
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (FilterSelectionList.SelectedItem != null)
+            {
+                FilterSelectionList.ScrollIntoView(FilterSelectionList.SelectedItem);
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromItem(FilterSelectionList.SelectedItem) as UIElement;
+                item?.Focus();
+            }
+            else if (FilterSelectionList.Items.Count > 0)
+            {
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void CloseFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Collapsed;
+        _currentFilterMode = FilterMode.None;
+        
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+        {
+            Keyboard.Focus(uiElement);
+        }
+    }
+
+    private void ProcessFilterSelection(object selectedItem)
+    {
+        if (selectedItem is string selection)
+        {
+            if (_currentFilterMode == FilterMode.Sort)
+            {
+                _currentSort = selection;
+                CollectionSortBtn.Content = $"{selection} ▼";
+            }
+            else if (_currentFilterMode == FilterMode.Order)
+            {
+                _currentOrder = selection;
+                CollectionOrderBtn.Content = $"{selection} ▼";
+            }
+
+            CloseFilterOverlay();
+            ApplyCollectionSorting();
+        }
+    }
+
+    private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FilterSelectionList.SelectedItem != null) 
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+    }
+
+    private void FilterSelectionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && FilterSelectionList.SelectedItem != null)
+        {
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    private void FilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                            command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                            command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+            (sender as FrameworkElement)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true; 
         }
     }
 }

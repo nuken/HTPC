@@ -57,52 +57,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="#1E1E1E"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#333333"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton x:Name="ToggleButton" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-                                <ToggleButton.Template>
-                                    <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="BgBorder" Background="#1E1E1E" BorderBrush="#333333" BorderThickness="1" CornerRadius="8" Padding="15,10">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Path Grid.Column="1" Fill="#B3B3B3" Data="M 0 0 L 5 5 L 10 0 Z" VerticalAlignment="Center" Margin="15,0,0,0"/>
-                                            </Grid>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="BgBorder" Property="Background" Value="#2A2A2A"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </ToggleButton.Template>
-                            </ToggleButton>
-                            <ContentPresenter IsHitTestVisible="False" Margin="15,10,35,10" VerticalAlignment="Center" TextElement.Foreground="White"
-                                              Content="{TemplateBinding SelectionBoxItem}" />
-                            <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
-                                <Border Background="#1A1A1A" CornerRadius="8" Margin="0,5,0,0" MinWidth="{TemplateBinding ActualWidth}" Padding="0,5">
-                                    <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Auto">
-                                        <ItemsPresenter/>
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </UserControl.Resources>
 
     <Grid Margin="0,40,0,0" FocusManager.IsFocusScope="True" 
@@ -115,7 +69,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
+            <StackPanel x:Name="TopNavPanel" Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
                 <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
@@ -133,6 +87,7 @@
                     <Grid Margin="40,0,40,30">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
@@ -152,25 +107,17 @@
                             </TextBlock.Style>
                         </TextBlock>
 
-                        <ComboBox x:Name="SortDropdown" PreviewKeyDown="Dropdown_PreviewKeyDown" Grid.Column="1" Width="220" FontSize="16" FontWeight="SemiBold" SelectionChanged="SortDropdown_SelectionChanged">
-                            <ComboBoxItem Content="Recently Recorded" IsSelected="True"/>
-                            <ComboBoxItem Content="Alphabetical (A-Z)"/>
-                            <ComboBoxItem Content="Alphabetical (Z-A)"/>
-                            <ComboBox.ItemContainerStyle>
-                                <Style TargetType="ComboBoxItem">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                    <Setter Property="Foreground" Value="White"/>
-                                    <Setter Property="Padding" Value="15,10"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                    <Setter Property="Cursor" Value="Hand"/>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter Property="Background" Value="#404040"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ComboBox.ItemContainerStyle>
-                        </ComboBox>
+                        <Button x:Name="SortFilterBtn" Grid.Column="1" Width="180" Content="Date Added ▼" 
+                                Background="#1A1A1A" Foreground="White" BorderThickness="1" BorderBrush="#333333" FontSize="16" FontWeight="SemiBold" Margin="0,0,10,0"
+                                Click="SortFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                        </Button>
+
+                        <Button x:Name="OrderFilterBtn" Grid.Column="2" Width="120" Content="Forward ▼" 
+                                Background="#1A1A1A" Foreground="White" BorderThickness="1" BorderBrush="#333333" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,0"
+                                Click="OrderFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                        </Button>
                     </Grid>
 
                     <ListBox x:Name="ShowsGrid" ItemsSource="{Binding ShowLibrary}" Background="Transparent" BorderThickness="0"
@@ -444,7 +391,8 @@
                 <Button Grid.Row="3" Content="Close" Width="120" Height="40" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseMediaInfo_Click" HorizontalAlignment="Right" FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
             </Grid>
         </Border>
-		<Border x:Name="BingeChoiceOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
+		
+        <Border x:Name="BingeChoiceOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
             <Border Background="#1A1A1A" BorderBrush="#333333" BorderThickness="1" CornerRadius="16" Padding="40" HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="450">
                 <Border.Effect>
                     <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="10" Opacity="0.8"/>
@@ -464,5 +412,61 @@
                 </StackPanel>
             </Border>
         </Border>
+
+        <!-- FILTER SELECTION OVERLAY -->
+        <Border x:Name="FilterOverlay" Grid.RowSpan="2" Background="#F20A0A0A" Visibility="Collapsed" Panel.ZIndex="600">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="FilterOverlayTitle" Text="Select Option" Foreground="White" FontSize="28" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center"/>
+
+                <ListBox x:Name="FilterSelectionList" Grid.Row="1" MaxHeight="500" MinWidth="350" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         PreviewKeyDown="FilterSelectionList_PreviewKeyDown"
+                         MouseLeftButtonUp="FilterSelectionList_MouseUp">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="20,15"/>
+                            <Setter Property="Margin" Value="0,0,0,10"/>
+                            <Setter Property="Background" Value="#1A1A1A"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="FontSize" Value="20"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="2">
+                                            <ContentPresenter HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#333333"/>
+                                                <Setter Property="Foreground" Value="#00A4EF"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#444444"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter TargetName="bg" Property="BorderBrush" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" HorizontalAlignment="Center"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+
     </Grid>
 </UserControl>

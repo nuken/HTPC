@@ -173,18 +173,40 @@ public class MediaLibraryService
                         ? new[] { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" } 
                         : null;
 
-                    items.Add(new MediaItem
-                    {
-                        Id = id,
-                        Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
-                        Categories = categories, 
-                        // Pass the custom priorities into the image fetcher!
-                        PosterUrl = GetBestImageUrl(baseUrl, element, id, customPriorities),
-                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                        Path = GetStringOrNumber(element, "Path", "path"),
-                        Summary = GetStringOrNumber(element, "summary", "full_summary"),
-                        Commercials = ParseDoubleArray(element, "commercials")
-                    });
+                    // Extract the new sorting properties
+long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number ? cProp.GetInt64() : 0;
+long lastWatchedAt = element.TryGetProperty("last_watched_at", out var lwProp) && lwProp.ValueKind == JsonValueKind.Number ? lwProp.GetInt64() : 0;
+long updatedAt = element.TryGetProperty("updated_at", out var upProp) && upProp.ValueKind == JsonValueKind.Number ? upProp.GetInt64() : 0;
+long lastRecordedAt = element.TryGetProperty("last_recorded_at", out var lrProp) && lrProp.ValueKind == JsonValueKind.Number ? lrProp.GetInt64() : 0;
+double duration = element.TryGetProperty("duration", out var dProp) && dProp.ValueKind == JsonValueKind.Number ? dProp.GetDouble() : 0;
+int releaseYear = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == JsonValueKind.Number ? yProp.GetInt32() : 0;
+string contentRating = GetStringOrNumber(element, "content_rating");
+
+bool isFavorited = element.TryGetProperty("favorited", out var fProp) && (fProp.ValueKind == JsonValueKind.True || (fProp.ValueKind == JsonValueKind.Number && fProp.GetInt32() == 1));
+bool isWatched = element.TryGetProperty("watched", out var wProp) && (wProp.ValueKind == JsonValueKind.True || (wProp.ValueKind == JsonValueKind.Number && wProp.GetInt32() == 1));
+
+items.Add(new MediaItem
+{
+    Id = id,
+    Title = string.IsNullOrEmpty(title) ? "Unknown" : title,
+    Categories = categories,
+    PosterUrl = GetBestImageUrl(baseUrl, element, id, customPriorities),
+    StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+    Path = GetStringOrNumber(element, "Path", "path"),
+    Summary = GetStringOrNumber(element, "summary", "full_summary"),
+    Commercials = ParseDoubleArray(element, "commercials"),
+    
+    // Assign the new properties for sorting
+    CreatedAt = createdAt,
+    LastWatchedAt = lastWatchedAt,
+    UpdatedAt = updatedAt,
+    LastRecordedAt = lastRecordedAt,
+    Duration = duration,
+    ReleaseYear = releaseYear,
+    ContentRating = contentRating,
+    IsFavorite = isFavorited,
+    IsWatched = isWatched
+});
                 }
             }
             return items;
@@ -461,74 +483,80 @@ public class MediaLibraryService
     }
 
     private async Task EnsureMoviesCacheAsync()
+{
+    if (_masterMoviesCache != null) return;
+
+    var activeServer = _serverManager.GetActiveServer();
+    if (activeServer == null) return;
+    string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+    string apiUrl = $"{baseUrl}/api/v1/movies"; 
+
+    try
     {
-        if (_masterMoviesCache != null) return;
-
-        var activeServer = _serverManager.GetActiveServer();
-        if (activeServer == null) return;
-        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        string apiUrl = $"{baseUrl}/api/v1/movies"; 
-
-        try
+        string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(jsonResponse);
+        _masterMoviesCache = new List<MediaItem>();
+        
+        if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
         {
-            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
-            using JsonDocument doc = JsonDocument.Parse(jsonResponse);
-            _masterMoviesCache = new List<MediaItem>();
-            
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            foreach (var element in doc.RootElement.EnumerateArray())
             {
-                foreach (var element in doc.RootElement.EnumerateArray())
+                string id = GetStringOrNumber(element, "id");
+                if (string.IsNullOrEmpty(id)) continue;
+
+                string title = GetStringOrNumber(element, "title");
+                string[] posterPriorities = { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" };
+                string posterUrl = GetBestImageUrl(baseUrl, element, id, posterPriorities);
+
+                long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == System.Text.Json.JsonValueKind.Number ? cProp.GetInt64() : 0;
+                int year = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == System.Text.Json.JsonValueKind.Number ? yProp.GetInt32() : 0;
+                
+                // Fetch new properties required for sorting
+                long lastWatchedAt = element.TryGetProperty("last_watched_at", out var lwProp) && lwProp.ValueKind == System.Text.Json.JsonValueKind.Number ? lwProp.GetInt64() : 0;
+                double duration = element.TryGetProperty("duration", out var dProp) && dProp.ValueKind == System.Text.Json.JsonValueKind.Number ? dProp.GetDouble() : 0;
+                string contentRating = GetStringOrNumber(element, "content_rating");
+
+                bool isWatched = false;
+                if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
+                    isWatched = w1.ValueKind == System.Text.Json.JsonValueKind.True || (w1.ValueKind == System.Text.Json.JsonValueKind.Number && w1.GetInt32() == 1);
+
+                bool isFavorite = false;
+                if (element.TryGetProperty("favorited", out var f1) || element.TryGetProperty("Favorited", out f1))
+                    isFavorite = f1.ValueKind == System.Text.Json.JsonValueKind.True || (f1.ValueKind == System.Text.Json.JsonValueKind.Number && f1.GetInt32() == 1);
+                else if (element.TryGetProperty("favorited_at", out var f2) || element.TryGetProperty("FavoritedAt", out f2))
+                    isFavorite = f2.ValueKind == System.Text.Json.JsonValueKind.Number && f2.GetInt64() > 0;
+
+                string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+
+                _masterMoviesCache.Add(new MediaItem
                 {
-                    string id = GetStringOrNumber(element, "id");
-                    if (string.IsNullOrEmpty(id)) continue;
-
-                    string title = GetStringOrNumber(element, "title");
-                    
-                    // --- FIX: Force Movies to grab their official vertical posters ---
-                    string[] posterPriorities = { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" };
-                    string posterUrl = GetBestImageUrl(baseUrl, element, id, posterPriorities);
-
-                    long createdAt = element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == System.Text.Json.JsonValueKind.Number ? cProp.GetInt64() : 0;
-                    int year = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == JsonValueKind.Number ? yProp.GetInt32() : 0;
-
-                    bool isWatched = false;
-                    if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
-                        isWatched = w1.ValueKind == JsonValueKind.True || (w1.ValueKind == JsonValueKind.Number && w1.GetInt32() == 1);
-
-                    bool isFavorite = false;
-                    if (element.TryGetProperty("favorited", out var f1) || element.TryGetProperty("Favorited", out f1))
-                        isFavorite = f1.ValueKind == JsonValueKind.True || (f1.ValueKind == JsonValueKind.Number && f1.GetInt32() == 1);
-                    else if (element.TryGetProperty("favorited_at", out var f2) || element.TryGetProperty("FavoritedAt", out f2))
-                        isFavorite = f2.ValueKind == JsonValueKind.Number && f2.GetInt64() > 0;
-
-                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
-
-                    _masterMoviesCache.Add(new MediaItem
-                    {
-						Path = GetStringOrNumber(element, "Path", "path"),
-                        Id = id,
-						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
-                        Title = string.IsNullOrEmpty(title) ? "Unknown Movie" : title,
-                        PosterUrl = posterUrl,
-                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                        CreatedAt = createdAt,
-                        ReleaseYear = year,
-                        Genres = ParseStringArray(element, "genres"),
-                        Cast = ParseStringArray(element, "cast"),
-                        Directors = ParseStringArray(element, "directors"),
-                        IsWatched = isWatched,
-                        IsFavorite = isFavorite,
-						Commercials = ParseDoubleArray(element, "commercials")
-                    });
-                }
+                    Path = GetStringOrNumber(element, "Path", "path"),
+                    Id = id,
+                    SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
+                    Title = string.IsNullOrEmpty(title) ? "Unknown Movie" : title,
+                    PosterUrl = posterUrl,
+                    StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                    CreatedAt = createdAt,
+                    ReleaseYear = year,
+                    Genres = ParseStringArray(element, "genres"),
+                    Cast = ParseStringArray(element, "cast"),
+                    Directors = ParseStringArray(element, "directors"),
+                    IsWatched = isWatched,
+                    IsFavorite = isFavorite,
+                    Commercials = ParseDoubleArray(element, "commercials"),
+                    LastWatchedAt = lastWatchedAt,
+                    Duration = duration,
+                    ContentRating = contentRating
+                });
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Failed to fetch master movies list: {ex.Message}");
-            _masterMoviesCache = new List<MediaItem>();
-        }
     }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Failed to fetch master movies list: {ex.Message}");
+        _masterMoviesCache = new List<MediaItem>();
+    }
+}
 	
 	public async Task<MediaItem?> GetNextEpisodeAsync(MediaItem currentEpisode)
     {
@@ -973,6 +1001,15 @@ public class MediaLibraryService
         }
         catch { return false; }
     }
+	
+	public async Task<bool> SendFileAdminCommandAsync(string fileId, string command)
+{
+    var activeServer = _serverManager.GetActiveServer();
+    if (activeServer == null || string.IsNullOrEmpty(fileId)) return false;
+
+    string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+    return await SendFileAdminCommandAsync(baseUrl, fileId, command);
+}
 
     public async Task<string> GetMediaInfoAsync(string baseUrl, string fileId)
     {
@@ -985,43 +1022,57 @@ public class MediaLibraryService
         catch { return string.Empty; }
     }
     
-    public async Task<List<MediaItem>> GetFilteredMoviesAsync(int startIndex, int chunkSize, string searchQuery, string genreFilter, string sortOrder, string statusFilter = "All Movies")
+    public async Task<List<MediaItem>> GetFilteredMoviesAsync(int startIndex, int chunkSize, string searchQuery, string genreFilter, string sortType, string sortOrder, string statusFilter = "All Movies")
+{
+    await EnsureMoviesCacheAsync();
+    if (_masterMoviesCache == null) return new List<MediaItem>();
+
+    var query = _masterMoviesCache.AsEnumerable();
+
+    if (!string.IsNullOrWhiteSpace(searchQuery))
     {
-        await EnsureMoviesCacheAsync();
-        if (_masterMoviesCache == null) return new List<MediaItem>();
-
-        var query = _masterMoviesCache.AsEnumerable();
-
-        if (!string.IsNullOrWhiteSpace(searchQuery))
-        {
-            var searchLower = searchQuery.ToLower();
-            query = query.Where(m => 
-                m.Title.ToLower().Contains(searchLower) ||
-                m.Cast.Any(c => c.ToLower().Contains(searchLower)) ||
-                m.Directors.Any(d => d.ToLower().Contains(searchLower))
-            );
-        }
-
-        if (!string.IsNullOrWhiteSpace(genreFilter) && genreFilter != "All")
-            query = query.Where(m => m.Genres.Any(g => string.Equals(g, genreFilter, StringComparison.OrdinalIgnoreCase)));
-
-        if (statusFilter == "Favorites") query = query.Where(m => m.IsFavorite);
-        else if (statusFilter == "Watched") query = query.Where(m => m.IsWatched);
-        else if (statusFilter == "Unwatched") query = query.Where(m => !m.IsWatched);
-
-        query = sortOrder switch
-        {
-            "Alphabetical (A-Z)" => query.OrderBy(m => m.Title),
-            "Alphabetical (Z-A)" => query.OrderByDescending(m => m.Title),
-            "Release Year (Newest)" => query.OrderByDescending(m => m.ReleaseYear),
-            "Release Year (Oldest)" => query.OrderBy(m => m.ReleaseYear),
-            _ => query.OrderByDescending(m => m.CreatedAt) 
-        };
-
-        return query.Skip(startIndex).Take(chunkSize).ToList();
+        var searchLower = searchQuery.ToLower();
+        query = query.Where(m => 
+            m.Title.ToLower().Contains(searchLower) ||
+            m.Cast.Any(c => c.ToLower().Contains(searchLower)) ||
+            m.Directors.Any(d => d.ToLower().Contains(searchLower))
+        );
     }
 
-    public void ClearMoviesCache() => _masterMoviesCache = null;
+    if (!string.IsNullOrWhiteSpace(genreFilter) && genreFilter != "All")
+        query = query.Where(m => m.Genres.Any(g => string.Equals(g, genreFilter, StringComparison.OrdinalIgnoreCase)));
+
+    if (statusFilter == "Favorites") query = query.Where(m => m.IsFavorite);
+    else if (statusFilter == "Watched") query = query.Where(m => m.IsWatched);
+    else if (statusFilter == "Unwatched") query = query.Where(m => !m.IsWatched);
+
+    bool isReverse = sortOrder == "Reverse";
+    
+    // Ignore words like "The", "A", and "An" when ordering alphabetically
+    string StripArticles(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return "";
+        string lower = title.ToLower();
+        if (lower.StartsWith("the ")) return title.Substring(4);
+        if (lower.StartsWith("a ")) return title.Substring(2);
+        if (lower.StartsWith("an ")) return title.Substring(3);
+        return title;
+    }
+
+    query = sortType switch
+    {
+        "Alphabetically" => isReverse ? query.OrderByDescending(m => StripArticles(m.Title)) : query.OrderBy(m => StripArticles(m.Title)),
+        "Date Released" => isReverse ? query.OrderBy(m => m.ReleaseYear) : query.OrderByDescending(m => m.ReleaseYear),
+        "Date Watched" => isReverse ? query.OrderBy(m => m.LastWatchedAt) : query.OrderByDescending(m => m.LastWatchedAt),
+        "Date Favorited" => isReverse ? query.OrderBy(m => m.IsFavorite).ThenByDescending(m => m.CreatedAt) : query.OrderByDescending(m => m.IsFavorite).ThenByDescending(m => m.CreatedAt),
+        "Duration" => isReverse ? query.OrderBy(m => m.Duration) : query.OrderByDescending(m => m.Duration),
+        "Rating" => isReverse ? query.OrderBy(m => m.ContentRating) : query.OrderByDescending(m => m.ContentRating),
+        "Date Added" or _ => isReverse ? query.OrderBy(m => m.CreatedAt) : query.OrderByDescending(m => m.CreatedAt) 
+    };
+
+    return query.Skip(startIndex).Take(chunkSize).ToList();
+}    
+	public void ClearMoviesCache() => _masterMoviesCache = null;
     
     private List<MediaItem>? _masterEpisodesCache = null;
 
@@ -1097,83 +1148,107 @@ public class MediaLibraryService
         }
     }
 
-    public async Task<List<MediaItem>> GetFilteredShowsAsync(int startIndex, int chunkSize, string searchQuery, string sortOrder)
+    public async Task<List<MediaItem>> GetFilteredShowsAsync(int startIndex, int chunkSize, string searchQuery, string sortType, string sortOrder)
+{
+    var activeServer = _serverManager.GetActiveServer();
+    if (activeServer == null) return new List<MediaItem>();
+
+    string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+    
+    // The base endpoint, removing the hardcoded sorting parameters
+    string apiUrl = $"{baseUrl}/api/v1/shows"; 
+    
+    var showsList = new List<MediaItem>();
+
+    try
     {
-        var activeServer = _serverManager.GetActiveServer();
-        if (activeServer == null) return new List<MediaItem>();
+        string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(jsonResponse);
 
-        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        string apiUrl = $"{baseUrl}/api/v1/shows?sort=date_added&dir=desc"; 
-        
-        var showsList = new List<MediaItem>();
-
-        try
+        if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
         {
-            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
-            using JsonDocument doc = JsonDocument.Parse(jsonResponse);
-
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            foreach (var element in doc.RootElement.EnumerateArray())
             {
-                foreach (var element in doc.RootElement.EnumerateArray())
-                {
-                    string id = GetStringOrNumber(element, "id");
-                    string title = GetStringOrNumber(element, "title", "name");
-                    string summary = GetStringOrNumber(element, "summary", "full_summary");
+                string id = GetStringOrNumber(element, "id");
+                string title = GetStringOrNumber(element, "title", "name");
+                string summary = GetStringOrNumber(element, "summary", "full_summary");
+                
+                string[] posterPriorities = { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" };
+                string posterUrl = GetBestImageUrl(baseUrl, element, "", posterPriorities);
+
+                // Safely grab dates
+                long createdAt = 0;
+                if (element.TryGetProperty("last_recorded_at", out var lProp) && lProp.ValueKind == System.Text.Json.JsonValueKind.Number) 
+                    createdAt = lProp.GetInt64();
+                else if (element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == System.Text.Json.JsonValueKind.Number) 
+                    createdAt = cProp.GetInt64();
+
+                long lastWatchedAt = element.TryGetProperty("last_watched_at", out var lwProp) && lwProp.ValueKind == System.Text.Json.JsonValueKind.Number ? lwProp.GetInt64() : 0;
+                long updatedAt = element.TryGetProperty("updated_at", out var upProp) && upProp.ValueKind == System.Text.Json.JsonValueKind.Number ? upProp.GetInt64() : 0;
+                int releaseYear = element.TryGetProperty("release_year", out var yProp) && yProp.ValueKind == System.Text.Json.JsonValueKind.Number ? yProp.GetInt32() : 0;
+
+                // Watch Statuses
+                bool isFavorite = false;
+                if (element.TryGetProperty("favorited", out var f1) || element.TryGetProperty("Favorited", out f1))
+                    isFavorite = f1.ValueKind == System.Text.Json.JsonValueKind.True || (f1.ValueKind == System.Text.Json.JsonValueKind.Number && f1.GetInt32() == 1);
+                else if (element.TryGetProperty("favorited_at", out var f2) || element.TryGetProperty("FavoritedAt", out f2))
+                    isFavorite = f2.ValueKind == System.Text.Json.JsonValueKind.Number && f2.GetInt64() > 0;
+
+                showsList.Add(new MediaItem
+                {   
+                    Path = GetStringOrNumber(element, "Path", "path"),
+                    Id = id,
+                    Title = string.IsNullOrEmpty(title) ? "Unknown Show" : title,
+                    Summary = summary,
+                    PosterUrl = posterUrl,
                     
-                    // --- FIX: Force Shows to grab their official vertical posters ---
-                    string[] posterPriorities = { "image_url", "image", "cover_url", "art", "thumbnail_url", "thumbnail", "Image" };
-                    string posterUrl = GetBestImageUrl(baseUrl, element, "", posterPriorities);
-
-                    long createdAt = 0;
-                    if (element.TryGetProperty("last_recorded_at", out var lProp) && lProp.ValueKind == JsonValueKind.Number) 
-                        createdAt = lProp.GetInt64();
-                    else if (element.TryGetProperty("created_at", out var cProp) && cProp.ValueKind == JsonValueKind.Number) 
-                        createdAt = cProp.GetInt64();
-
-                    showsList.Add(new MediaItem
-                    {   
-                        Path = GetStringOrNumber(element, "Path", "path"),
-                        Id = id,
-                        Title = string.IsNullOrEmpty(title) ? "Unknown Show" : title,
-                        Summary = summary,
-                        PosterUrl = posterUrl,
-                        CreatedAt = createdAt
-                    });
-                }
+                    // Assign new properties for robust sorting
+                    CreatedAt = createdAt,
+                    LastWatchedAt = lastWatchedAt,
+                    UpdatedAt = updatedAt,
+                    ReleaseYear = releaseYear,
+                    IsFavorite = isFavorite
+                });
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Failed to fetch shows from API: {ex.Message}");
-        }
-
-        var showsQuery = showsList.AsEnumerable();
-
-        if (!string.IsNullOrWhiteSpace(searchQuery))
-        {
-            var searchLower = searchQuery.ToLower();
-            showsQuery = showsQuery.Where(s => s.Title.ToLower().Contains(searchLower));
-        }
-
-        string StripArticles(string title)
-        {
-            if (string.IsNullOrWhiteSpace(title)) return "";
-            string lower = title.ToLower();
-            if (lower.StartsWith("the ")) return title.Substring(4);
-            if (lower.StartsWith("a ")) return title.Substring(2);
-            if (lower.StartsWith("an ")) return title.Substring(3);
-            return title;
-        }
-
-        showsQuery = sortOrder switch
-        {
-            "Alphabetical (A-Z)" => showsQuery.OrderBy(s => StripArticles(s.Title)),
-            "Alphabetical (Z-A)" => showsQuery.OrderByDescending(s => StripArticles(s.Title)),
-            _ => showsQuery.OrderByDescending(s => s.CreatedAt)
-        };
-
-        return showsQuery.Skip(startIndex).Take(chunkSize).ToList();
     }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Failed to fetch shows from API: {ex.Message}");
+    }
+
+    var showsQuery = showsList.AsEnumerable();
+
+    if (!string.IsNullOrWhiteSpace(searchQuery))
+    {
+        var searchLower = searchQuery.ToLower();
+        showsQuery = showsQuery.Where(s => s.Title.ToLower().Contains(searchLower));
+    }
+
+    string StripArticles(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return "";
+        string lower = title.ToLower();
+        if (lower.StartsWith("the ")) return title.Substring(4);
+        if (lower.StartsWith("a ")) return title.Substring(2);
+        if (lower.StartsWith("an ")) return title.Substring(3);
+        return title;
+    }
+
+    bool isReverse = sortOrder == "Reverse";
+
+    showsQuery = sortType switch
+    {
+        "Alphabetically" => isReverse ? showsQuery.OrderByDescending(s => StripArticles(s.Title)) : showsQuery.OrderBy(s => StripArticles(s.Title)),
+        "Date Released" => isReverse ? showsQuery.OrderBy(s => s.ReleaseYear) : showsQuery.OrderByDescending(s => s.ReleaseYear),
+        "Date Updated" => isReverse ? showsQuery.OrderBy(s => s.UpdatedAt) : showsQuery.OrderByDescending(s => s.UpdatedAt),
+        "Date Watched" => isReverse ? showsQuery.OrderBy(s => s.LastWatchedAt) : showsQuery.OrderByDescending(s => s.LastWatchedAt),
+        "Date Favorited" => isReverse ? showsQuery.OrderBy(s => s.IsFavorite).ThenByDescending(s => s.CreatedAt) : showsQuery.OrderByDescending(s => s.IsFavorite).ThenByDescending(s => s.CreatedAt),
+        "Date Added" or _ => isReverse ? showsQuery.OrderBy(s => s.CreatedAt) : showsQuery.OrderByDescending(s => s.CreatedAt)
+    };
+
+    return showsQuery.Skip(startIndex).Take(chunkSize).ToList();
+}
 
     public async Task<List<MediaItem>> GetEpisodesForShowAsync(string showTitle)
     {

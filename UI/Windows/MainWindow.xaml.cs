@@ -341,6 +341,20 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+		
+		if (e.Key == Key.Apps)
+        {
+            MainShellContainer.Content = _guideView;
+            e.Handled = true;
+            return;
+        }
+		
+		if (e.Key == Key.BrowserHome)
+        {
+            NavigateToDashboard(this, EventArgs.Empty);
+            e.Handled = true;
+            return;
+        }
 
         // 5. STANDARD NAVIGATION (REMOTE BACK/HOME)
         if (command == Core.Input.HtpcCommand.Home)
@@ -446,6 +460,9 @@ public partial class MainWindow : Window
 
             switch (cmd)
             {
+                case 7:  // --- NEW: APPCOMMAND_BROWSER_HOME ---
+                    resolvedCommand = HTPC.Core.Input.HtpcCommand.Home;
+                    break;
                 case 8:  // APPCOMMAND_BROWSER_BACKWARD
                     resolvedCommand = HTPC.Core.Input.HtpcCommand.Back;
                     break;
@@ -468,11 +485,12 @@ public partial class MainWindow : Window
                     RoutedEvent = UIElement.PreviewKeyDownEvent
                 };
                 
-                // FIX: Changed MainContent to MainShellContainer to match your UI
                 if (MainShellContainer.Content is UIElement activeView)
                 {
                     // This forces standard handling as if they pressed a normal key
-                    if (resolvedCommand == HTPC.Core.Input.HtpcCommand.Back)
+                    if (resolvedCommand == HTPC.Core.Input.HtpcCommand.Home) // --- NEW: Route the Home command ---
+                        activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.BrowserHome) { RoutedEvent = UIElement.PreviewKeyDownEvent });
+                    else if (resolvedCommand == HTPC.Core.Input.HtpcCommand.Back)
                         activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.BrowserBack) { RoutedEvent = UIElement.PreviewKeyDownEvent });
                     else if (resolvedCommand == HTPC.Core.Input.HtpcCommand.PlayPause)
                         activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.MediaPlayPause) { RoutedEvent = UIElement.PreviewKeyDownEvent });
@@ -481,6 +499,9 @@ public partial class MainWindow : Window
                     else if (resolvedCommand == HTPC.Core.Input.HtpcCommand.SkipBackward)
                         activeView.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(this)!, 0, Key.MediaPreviousTrack) { RoutedEvent = UIElement.PreviewKeyDownEvent });
                 }
+                
+                // --- THIS IS THE MAGIC BULLET ---
+                // Telling Windows "handled = true" completely cancels the OS-level browser launch
                 handled = true;
             }
         }

@@ -36,85 +36,6 @@
             </Setter>
         </Style>
 		
-		<Style x:Key="DarkComboBoxItemStyle" TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="15,10"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4" Margin="4,2">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#333333"/>
-                                <Setter Property="Foreground" Value="#00A4EF"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#222222"/>
-                                <Setter Property="Foreground" Value="#00A4EF"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-       <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="15,10"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{StaticResource TvGuideFocusStyle}"/>
-            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton x:Name="ToggleButton" Grid.Column="2" Focusable="false" 
-                                          IsChecked="{Binding Path=IsDropDownOpen,Mode=TwoWay,RelativeSource={RelativeSource TemplatedParent}}" 
-                                          ClickMode="Press">
-                                <ToggleButton.Template>
-                                    <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="MainBorder" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="8">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Path Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,15,0" Fill="#AAAAAA" Data="M 0 0 L 5 5 L 10 0 Z"/>
-                                            </Grid>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="MainBorder" Property="Background" Value="#1A1A1A"/>
-                                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="#333333"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </ToggleButton.Template>
-                            </ToggleButton>
-                            
-                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False" 
-                                              Content="{TemplateBinding SelectionBoxItem}" 
-                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" 
-                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" 
-                                              Margin="15,10,35,10" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                              TextElement.Foreground="White"/>
-                            
-                            <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
-                                <Border x:Name="DropDownBorder" Background="#1A1A1A" BorderThickness="1" BorderBrush="#333333" CornerRadius="8" Margin="0,5,0,0" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                                    <ScrollViewer Margin="0,5" SnapsToDevicePixels="True">
-                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
 		<Style x:Key="NavPillStyle" TargetType="Button">
             <Setter Property="Background" Value="#2A2A2A"/>
             <Setter Property="Foreground" Value="#B3B3B3"/>
@@ -166,7 +87,6 @@
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue">
             <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
-            <!-- NAMED THE GUIDE BUTTON -->
             <Button x:Name="GuideNavBtn" Content="Guide" Style="{StaticResource NavPillActiveStyle}"/>
             <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
 			<Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
@@ -175,7 +95,6 @@
             <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
-            <!-- ADDED PREVIEW KEY DOWN FOR CHECKBOX -->
             <CheckBox x:Name="ShowHiddenCheckBox" PreviewKeyDown="ShowHidden_PreviewKeyDown" Content="👁 Show Hidden Channels" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="20,0,0,0" Click="ShowHidden_Click"/>
         </StackPanel>
 
@@ -220,14 +139,22 @@
             </Grid.Resources>
             
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             
-           <ComboBox x:Name="CollectionDropdown" Grid.Column="0" VerticalAlignment="Bottom" Margin="0,0,15,5" 
-                      FontSize="16" FontWeight="Bold" SelectionChanged="CollectionDropdown_SelectionChanged" 
-                      PreviewKeyDown="Dropdown_PreviewKeyDown" Style="{StaticResource DarkComboBoxStyle}">
-            </ComboBox>
+            <!-- UI UPDATED: Replaced ComboBox with Overlay Trigger Button -->
+            <Button x:Name="CollectionFilterBtn" Grid.Column="0" VerticalAlignment="Bottom" Margin="0,0,15,5" Width="200" HorizontalAlignment="Left"
+                    Content="All Channels ▼" Background="#2A2A2A" Foreground="White" BorderThickness="0" 
+                    FontSize="16" FontWeight="Bold" Padding="15,8" Height="40"
+                    Click="CollectionFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" 
+                    FocusVisualStyle="{StaticResource TvGuideFocusStyle}">
+                <Button.Resources>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="8"/>
+                    </Style>
+                </Button.Resources>
+            </Button>
             
             <Grid Grid.Column="1" Margin="0,0,0,5">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -270,17 +197,17 @@
                         <DataTemplate>
                             <Border Height="70" Background="#1A1A1A" CornerRadius="8" Margin="0,5,15,5" Padding="10,5">
                                 <Border.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Hide / Unhide Channel" Click="HideChannel_Click" FontSize="14" Padding="5"/>
-                    <Separator/>
-                        <MenuItem Header="Move Channel Up (↑)" Click="MoveChannelUp_Click" FontSize="14" Padding="5"/>
-                        <MenuItem Header="Move Channel Down (↓)" Click="MoveChannelDown_Click" FontSize="14" Padding="5"/>
-                        <MenuItem Header="Move to Top" Click="MoveChannelTop_Click" FontSize="14" Padding="5"/>
-                        <MenuItem Header="Move to Bottom" Click="MoveChannelBottom_Click" FontSize="14" Padding="5"/>
-                    </ContextMenu>
-                </Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Hide / Unhide Channel" Click="HideChannel_Click" FontSize="14" Padding="5"/>
+                                    <Separator/>
+                                        <MenuItem Header="Move Channel Up (↑)" Click="MoveChannelUp_Click" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Move Channel Down (↓)" Click="MoveChannelDown_Click" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Move to Top" Click="MoveChannelTop_Click" FontSize="14" Padding="5"/>
+                                        <MenuItem Header="Move to Bottom" Click="MoveChannelBottom_Click" FontSize="14" Padding="5"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
 
-                <Grid>
+                                <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*"/>
                                         <RowDefinition Height="Auto"/>
@@ -363,7 +290,6 @@
                                                                     <Border Grid.Column="0" Width="4" Background="{Binding CategoryColor}" CornerRadius="2" Margin="0,0,10,0"/>
                                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                                         <TextBlock Text="{Binding DisplayTitle}" Foreground="White" FontWeight="Bold" FontSize="14" TextTrimming="CharacterEllipsis"/>
-                                                                        
                                                                     </StackPanel>
                                                                 </Grid>
                                                             </Border>
@@ -389,7 +315,7 @@
             </ScrollViewer>
         </Grid>
 
-        <Border x:Name="ModalOverlay" Grid.RowSpan="3" Background="#F20A0A0A" Visibility="Collapsed" VerticalAlignment="Bottom" Height="300" Padding="40" CornerRadius="24,24,0,0">
+        <Border x:Name="ModalOverlay" Grid.RowSpan="3" Background="#F20A0A0A" Visibility="Collapsed" VerticalAlignment="Bottom" Height="300" Padding="40" CornerRadius="24,24,0,0" Panel.ZIndex="500">
             <Border.Effect>
                 <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
             </Border.Effect>
@@ -433,6 +359,62 @@
                     <Button x:Name="WatchLiveBtn" Content="▶ Watch Live" Width="160" Height="40" Background="White" Foreground="Black" FontWeight="Bold" FontSize="16" BorderThickness="0" Margin="0,0,0,15" Cursor="Hand" Click="WatchButton_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
                     <Button Content="Close" Width="160" Height="40" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseModal_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}"/>
                 </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- NEW: FILTER SELECTION OVERLAY -->
+        <Border x:Name="FilterOverlay" Grid.RowSpan="3" Background="#F20A0A0A" Visibility="Collapsed" Panel.ZIndex="600">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="FilterOverlayTitle" Text="Select Channel Filter" Foreground="White" FontSize="28" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center"/>
+
+                <ListBox x:Name="FilterSelectionList" Grid.Row="1" MaxHeight="500" Width="350" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         PreviewKeyDown="FilterSelectionList_PreviewKeyDown"
+                         MouseLeftButtonUp="FilterSelectionList_MouseUp">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="20,15"/>
+                            <Setter Property="Margin" Value="0,0,0,10"/>
+                            <Setter Property="Background" Value="#1A1A1A"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="FontSize" Value="20"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="FocusVisualStyle" Value="{StaticResource TvGuideFocusStyle}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="2">
+                                            <ContentPresenter HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#333333"/>
+                                                <Setter Property="Foreground" Value="#00A4EF"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#444444"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter TargetName="bg" Property="BorderBrush" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <!-- Simple string binding since these are just sorting/ordering strings -->
+                            <TextBlock Text="{Binding}" HorizontalAlignment="Center"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
         </Border>
     </Grid>

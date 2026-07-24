@@ -68,7 +68,8 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <StackPanel x:Name="TopNavPanel" Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue" PreviewKeyDown="TopNavPanel_PreviewKeyDown">                <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
+            <StackPanel x:Name="TopNavPanel" Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" KeyboardNavigation.DirectionalNavigation="Continue" PreviewKeyDown="TopNavPanel_PreviewKeyDown">                
+                <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
 				<Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
@@ -81,7 +82,18 @@
 
             <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                 <StackPanel Margin="0,0,0,60" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <TextBlock Text="Video Folders" FontSize="24" FontWeight="Bold" Margin="40,0,0,20"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="40,0,0,20">
+                        <TextBlock Text="Video Folders" FontSize="24" FontWeight="Bold" Margin="0,0,20,0" VerticalAlignment="Center"/>
+                        
+                        <Button x:Name="GroupSortBtn" Content="Alphabetical ▼" Width="180" Height="40" Background="#1A1A1A" Foreground="White" BorderThickness="1" BorderBrush="#333333" FontSize="16" FontWeight="SemiBold" Margin="0,0,10,0" Click="GroupSortBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                        </Button>
+
+                        <Button x:Name="GroupOrderBtn" Content="Forward ▼" Width="120" Height="40" Background="#1A1A1A" Foreground="White" BorderThickness="1" BorderBrush="#333333" FontSize="16" FontWeight="SemiBold" Click="GroupOrderBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                        </Button>
+                    </StackPanel>
 
                     <ListBox x:Name="GroupsGrid" ItemsSource="{Binding VideoGroups}" Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" 
@@ -154,8 +166,16 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,40,0,20" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <Button x:Name="BackToFoldersBtn" Content="🔙 Back to Folders" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" Click="CloseOverlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="BackToFoldersBtn_PreviewKeyDown"/>
-                    <TextBlock x:Name="SelectedGroupName" Text="Folder Name" Foreground="#00A4EF" FontSize="24" FontWeight="Bold" Margin="30,0,0,0" VerticalAlignment="Center"/>
+                    <Button x:Name="BackToFoldersBtn" Content="🔙 Back" Background="Transparent" Foreground="White" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" Click="CloseOverlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="BackToFoldersBtn_PreviewKeyDown" Margin="0,0,20,0"/>
+                    <TextBlock x:Name="SelectedGroupName" Text="Folder Name" Foreground="#00A4EF" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,30,0"/>
+
+                    <Button x:Name="VideoSortBtn" Content="Date Added ▼" Width="180" Height="40" Background="#1A1A1A" Foreground="White" BorderThickness="1" BorderBrush="#333333" FontSize="16" FontWeight="SemiBold" Margin="0,0,10,0" Click="VideoSortBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+
+                    <Button x:Name="VideoOrderBtn" Content="Forward ▼" Width="120" Height="40" Background="#1A1A1A" Foreground="White" BorderThickness="1" BorderBrush="#333333" FontSize="16" FontWeight="SemiBold" Click="VideoOrderBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
                 </StackPanel>
 
                 <ScrollViewer x:Name="OverlayScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -291,6 +311,61 @@
                 <TextBlock x:Name="MediaInfoTitle" Grid.Row="1" FontSize="18" FontWeight="SemiBold" Foreground="#00A4EF" Margin="0,0,0,15" TextWrapping="Wrap"/>
                 <StackPanel x:Name="MediaInfoDetails" Grid.Row="2" Margin="0,0,0,30"/>
                 <Button Grid.Row="3" Content="Close" Width="120" Height="40" Background="#333333" Foreground="White" FontWeight="SemiBold" FontSize="16" BorderThickness="0" Cursor="Hand" Click="CloseMediaInfo_Click" HorizontalAlignment="Right" FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
+            </Grid>
+        </Border>
+        
+        <!-- FILTER SELECTION OVERLAY -->
+        <Border x:Name="FilterOverlay" Grid.RowSpan="2" Background="#F20A0A0A" Visibility="Collapsed" Panel.ZIndex="600">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="FilterOverlayTitle" Text="Select Option" Foreground="White" FontSize="28" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center"/>
+
+                <ListBox x:Name="FilterSelectionList" Grid.Row="1" MaxHeight="500" MinWidth="350" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         PreviewKeyDown="FilterSelectionList_PreviewKeyDown"
+                         MouseLeftButtonUp="FilterSelectionList_MouseUp">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="20,15"/>
+                            <Setter Property="Margin" Value="0,0,0,10"/>
+                            <Setter Property="Background" Value="#1A1A1A"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="FontSize" Value="20"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="2">
+                                            <ContentPresenter HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#333333"/>
+                                                <Setter Property="Foreground" Value="#00A4EF"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#444444"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter TargetName="bg" Property="BorderBrush" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" HorizontalAlignment="Center"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
         </Border>
 

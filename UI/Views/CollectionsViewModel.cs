@@ -61,6 +61,16 @@ public class CollectionsViewModel : INotifyPropertyChanged
     {
         return await _mediaLibraryService.GetCollectionMediaAsync(id);
     }
+	
+	public async Task<bool> DeleteMediaAsync(string fileId)
+{
+    return await _mediaLibraryService.DeleteRecordingAsync(fileId);
+}
+
+public async Task<bool> SendAdminCommandAsync(string fileId, string command)
+{
+    return await _mediaLibraryService.SendFileAdminCommandAsync(fileId, command);
+}
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

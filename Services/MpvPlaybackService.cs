@@ -36,7 +36,7 @@ public class MpvPlaybackService : IDisposable
 	private CancellationTokenSource? _loadingWatchdogCts;
     private int _retryCount = 0;
     private const int MaxRetries = 2;
-    private const int LoadingTimeoutSeconds = 8;
+    private const int LoadingTimeoutSeconds = 15;
 	
 	// --- NEW: TUNER DIAGNOSTICS SWITCH ---
     private bool EnableTunerDiagnostics = false;

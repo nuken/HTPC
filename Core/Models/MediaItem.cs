@@ -34,6 +34,12 @@ public class MediaItem : INotifyPropertyChanged
     public List<string> Cast { get; set; } = new List<string>();
     public List<string> Directors { get; set; } = new List<string>();
 	
+	public double Duration { get; set; }
+    public string ContentRating { get; set; } = string.Empty;
+    public long LastWatchedAt { get; set; }
+    public long UpdatedAt { get; set; }
+    public long LastRecordedAt { get; set; }
+	
 	public List<double>? Commercials { get; set; } = new List<double>();
 	
 	public string Path { get; set; } = string.Empty;

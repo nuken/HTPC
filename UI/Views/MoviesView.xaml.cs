@@ -17,11 +17,11 @@ public partial class MoviesView : UserControl
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
-	public event EventHandler? OnRecordingsRequested;
+    public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
-	public event EventHandler? OnMultiviewRequested;
-	public event EventHandler? OnCollectionsRequested;
+    public event EventHandler? OnMultiviewRequested;
+    public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
@@ -36,10 +36,15 @@ public partial class MoviesView : UserControl
     private bool _isInitialized = false;
 
     // Filter States
+    private enum FilterMode { None, Status, Sort, Order }
+    private FilterMode _currentFilterMode = FilterMode.None;
+    private IInputElement? _lastFocusedElement;
+
     private string _currentSearch = "";
     private string _currentGenre = "All";
-    private string _currentSort = "Recently Added";
-	private string _currentStatus = "All Movies";
+    private string _currentStatus = "All Movies";
+    private string _currentSort = "Date Added";
+    private string _currentOrder = "Forward";
 
     public MoviesView(MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -48,13 +53,11 @@ public partial class MoviesView : UserControl
         _serverManager = serverManager;
         this.DataContext = this;
 
-        // Setup the Debounce Timer for smooth typing
         _typingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         _typingTimer.Tick += TypingTimer_Tick;
 
         Loaded += OnLoaded;
-		
-		this.PreviewKeyDown += MoviesView_PreviewKeyDown;
+        this.PreviewKeyDown += MoviesView_PreviewKeyDown;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -65,16 +68,9 @@ public partial class MoviesView : UserControl
             return;
         }
 
-        // Load the saved sort preference
-        _currentSort = PreferencesManager.LoadMovieSort();
-        foreach (ComboBoxItem item in SortDropdown.Items)
-        {
-            if (item.Content.ToString() == _currentSort)
-            {
-                SortDropdown.SelectedItem = item;
-                break;
-            }
-        }
+        // Load the saved sort preference (gracefully falling back)
+        _currentSort = PreferencesManager.LoadMovieSort() ?? "Date Added";
+        SortFilterBtn.Content = $"{_currentSort} ▼";
 
         _isInitialized = true;
         await ResetAndLoadAsync();
@@ -83,6 +79,19 @@ public partial class MoviesView : UserControl
         {
             SearchBox.Focus();
         }), DispatcherPriority.Input);
+    }
+
+    private void FocusTopNav()
+    {
+        if (TopNavPanel == null) return;
+        foreach (UIElement child in TopNavPanel.Children)
+        {
+            if (child is Button btn && btn.Focusable && btn.Visibility == Visibility.Visible)
+            {
+                btn.Focus();
+                return;
+            }
+        }
     }
 
     private async Task ResetAndLoadAsync()
@@ -104,7 +113,8 @@ public partial class MoviesView : UserControl
         _isLoading = true;
         LoadingText.Visibility = Visibility.Visible;
 
-        var newMovies = await _libraryService.GetFilteredMoviesAsync(_currentOffset, _chunkSize, _currentSearch, _currentGenre, _currentSort, _currentStatus);
+        // Note: The service now receives _currentOrder alongside _currentSort
+        var newMovies = await _libraryService.GetFilteredMoviesAsync(_currentOffset, _chunkSize, _currentSearch, _currentGenre, _currentSort, _currentOrder, _currentStatus);
         
         if (newMovies.Count == 0)
         {
@@ -126,7 +136,148 @@ public partial class MoviesView : UserControl
             await LoadNextChunkAsync();
     }
 
-    // --- FILTERS & SEARCH ---
+    // --- OVERLAY FILTERS ---
+
+    private void StatusFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Status;
+        FilterOverlayTitle.Text = "Filter Status";
+        FilterSelectionList.ItemsSource = new[] { "All Movies", "Favorites", "Watched", "Unwatched" };
+        FilterSelectionList.SelectedItem = _currentStatus;
+        OpenFilterOverlay();
+    }
+
+    private void SortFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Sort;
+        FilterOverlayTitle.Text = "Sort By";
+        FilterSelectionList.ItemsSource = new[] { "Alphabetically", "Date Released", "Date Added", "Date Watched", "Date Favorited", "Duration", "Rating" };
+        FilterSelectionList.SelectedItem = _currentSort;
+        OpenFilterOverlay();
+    }
+
+    private void OrderFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Order;
+        FilterOverlayTitle.Text = "Order";
+        FilterSelectionList.ItemsSource = new[] { "Forward", "Reverse" };
+        FilterSelectionList.SelectedItem = _currentOrder;
+        OpenFilterOverlay();
+    }
+
+    private void OpenFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Visible;
+        _lastFocusedElement = Keyboard.FocusedElement;
+
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (FilterSelectionList.SelectedItem != null)
+            {
+                FilterSelectionList.ScrollIntoView(FilterSelectionList.SelectedItem);
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromItem(FilterSelectionList.SelectedItem) as UIElement;
+                item?.Focus();
+            }
+            else if (FilterSelectionList.Items.Count > 0)
+            {
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void CloseFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Collapsed;
+        _currentFilterMode = FilterMode.None;
+        
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+        {
+            Keyboard.Focus(uiElement);
+        }
+    }
+
+    private async void ProcessFilterSelection(object selectedItem)
+    {
+        if (selectedItem is string selection)
+        {
+            if (_currentFilterMode == FilterMode.Status)
+            {
+                _currentStatus = selection;
+                StatusFilterBtn.Content = $"{selection} ▼";
+            }
+            else if (_currentFilterMode == FilterMode.Sort)
+            {
+                _currentSort = selection;
+                SortFilterBtn.Content = $"{selection} ▼";
+                try { PreferencesManager.SaveMovieSort(_currentSort); } catch { }
+            }
+            else if (_currentFilterMode == FilterMode.Order)
+            {
+                _currentOrder = selection;
+                OrderFilterBtn.Content = $"{selection} ▼";
+            }
+
+            CloseFilterOverlay();
+            await ResetAndLoadAsync();
+        }
+    }
+
+    private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FilterSelectionList.SelectedItem != null) 
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+    }
+
+    private void FilterSelectionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && FilterSelectionList.SelectedItem != null)
+        {
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    private void FilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Down) 
+        {
+            // Focus the first genre pill
+            if (GenrePanel.Children.Count > 0)
+            {
+                (GenrePanel.Children[0] as UIElement)?.Focus();
+                e.Handled = true;
+            }
+        }
+        else if (command == HtpcCommand.Up)
+        {
+            FocusTopNav();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Left)
+        {
+            if (sender == OrderFilterBtn) { SortFilterBtn.Focus(); e.Handled = true; }
+            else if (sender == SortFilterBtn) { StatusFilterBtn.Focus(); e.Handled = true; }
+            else if (sender == StatusFilterBtn) { e.Handled = true; } // Trap left
+        }
+        else if (command == HtpcCommand.Right)
+        {
+            if (sender == StatusFilterBtn) { SortFilterBtn.Focus(); e.Handled = true; }
+            else if (sender == SortFilterBtn) { OrderFilterBtn.Focus(); e.Handled = true; }
+            else if (sender == OrderFilterBtn) { e.Handled = true; } // Trap right
+        }
+    }
+   
+   // --- SEARCH ---
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
@@ -144,27 +295,6 @@ public partial class MoviesView : UserControl
         }
     }
 
-    private async void SortDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_isInitialized) return;
-        if (SortDropdown.SelectedItem is ComboBoxItem item)
-        {
-            _currentSort = item.Content.ToString() ?? "Recently Added";
-            PreferencesManager.SaveMovieSort(_currentSort); 
-            await ResetAndLoadAsync();
-        }
-    }
-	
-	private async void StatusDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_isInitialized) return;
-        if (StatusDropdown.SelectedItem is ComboBoxItem item)
-        {
-            _currentStatus = item.Content.ToString() ?? "All Movies";
-            await ResetAndLoadAsync();
-        }
-    }
-
     private async void Genre_Checked(object sender, RoutedEventArgs e)
     {
         if (!_isInitialized) return;
@@ -172,6 +302,50 @@ public partial class MoviesView : UserControl
         {
             _currentGenre = rb.Content.ToString() ?? "All";
             await ResetAndLoadAsync();
+        }
+    }
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        var tb = sender as TextBox;
+
+        // FOCUS BRIDGE: Jump to the right if the caret is at the end of the text (or box is empty)
+        if (command == HtpcCommand.Right)
+        {
+            if (tb != null && tb.CaretIndex >= tb.Text.Length)
+            {
+                tb.MoveFocus(new TraversalRequest(FocusNavigationDirection.Right));
+                e.Handled = true;
+                return;
+            }
+        }
+        else if (command == HtpcCommand.Down)
+        {
+            // Keep your existing Down logic (jumping into the MoviesGrid)
+            if (MoviesGrid.Items.Count > 0)
+            {
+                var rowElement = MoviesGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+                e.Handled = true;
+            }
+        }
+        else if (command == HtpcCommand.Up)
+        {
+            FocusTopNav();
+            e.Handled = true; 
+        }
+    }
+    
+    private void GenrePill_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
+            (sender as RadioButton)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true;
         }
     }
 
@@ -194,31 +368,32 @@ public partial class MoviesView : UserControl
         
         if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
-            OpenMovieDetails(movie); // FIXED: 'movie' instead of 'media'
+            OpenMovieDetails(movie); 
             e.Handled = true;
         }
     }
-	
-	// --- MASTER REMOTE BACK HANDLER ---
+    
     private void MoviesView_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
 
-        // Catch the hardware Back button, Escape, or Backspace
         if (command == HtpcCommand.Back || e.Key == Key.Escape || e.Key == Key.BrowserBack || e.Key == Key.Back)
         {
-            // 1. If the new Movie Details overlay is open, close it
+            if (FilterOverlay.Visibility == Visibility.Visible)
+            {
+                CloseFilterOverlay();
+                e.Handled = true;
+                return;
+            }
+
             if (MovieDetailsOverlay != null && MovieDetailsOverlay.Visibility == Visibility.Visible)
             {
                 CloseMovieDetails_Click(null!, null!);
-                
-                // Safely return focus to the list so your D-Pad keeps working
                 MoviesGrid.Focus(); 
                 e.Handled = true;
                 return;
             }
 
-            // 2. If the old Context Menu Media Info modal is open, close it
             if (MediaInfoModal != null && MediaInfoModal.Visibility == Visibility.Visible)
             {
                 CloseMediaInfo_Click(null!, null!);
@@ -232,18 +407,17 @@ public partial class MoviesView : UserControl
     {
         if (sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
-            OpenMovieDetails(movie); // FIXED: 'movie' instead of 'media'
+            OpenMovieDetails(movie); 
         }
     }
-	
-	// --- MOVIE DETAILS ENGINE ---
+    
+    // --- MOVIE DETAILS ENGINE ---
     private MediaItem? _activeMovieForDetails;
 
     private async void OpenMovieDetails(MediaItem movie)
     {
         _activeMovieForDetails = movie;
 
-        // 1. Instantly load what we already know from the local library state
         DetailTitle.Text = movie.Title;
         DetailSummary.Text = !string.IsNullOrEmpty(movie.Summary) ? movie.Summary : "No summary available.";
         
@@ -262,7 +436,6 @@ public partial class MoviesView : UserControl
         }
         catch { DetailPoster.Source = null; }
 
-        // Clear out secondary data while the API fetches
         DetailYear.Text = "----";
         DetailRating.Text = "NR";
         DetailDuration.Text = "--m";
@@ -272,14 +445,12 @@ public partial class MoviesView : UserControl
 
         MovieDetailsOverlay.Visibility = Visibility.Visible;
 
-        // Force 10-foot UI focus onto the Play button
         _ = Dispatcher.BeginInvoke(new Action(() =>
         {
             DetailPlayBtn.Focus();
             Keyboard.Focus(DetailPlayBtn);
         }), DispatcherPriority.ContextIdle);
 
-        // 2. Fetch the deep metadata from Channels DVR API safely
         try
         {
             var activeServer = _serverManager.GetActiveServer();
@@ -288,13 +459,11 @@ public partial class MoviesView : UserControl
                 string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
                 using var client = new System.Net.Http.HttpClient();
                 
-                // Hit the exact, single-movie endpoint!
                 var response = await client.GetStringAsync($"{baseUrl}/api/v1/movies/{movie.Id}");
 
                 using var doc = System.Text.Json.JsonDocument.Parse(response);
                 var root = doc.RootElement;
                 
-                // Read properties directly off the returned movie object
                 if (root.TryGetProperty("release_year", out var yr) && yr.ValueKind != System.Text.Json.JsonValueKind.Null) 
                     DetailYear.Text = yr.ToString();
                 
@@ -333,7 +502,6 @@ public partial class MoviesView : UserControl
                 }
                 else DetailCast.Text = "Unknown";
 
-                // Prioritize full_summary if it exists, otherwise fall back to regular summary
                 if (root.TryGetProperty("full_summary", out var fSum) && fSum.ValueKind != System.Text.Json.JsonValueKind.Null && !string.IsNullOrWhiteSpace(fSum.ToString()))
                 {
                      DetailSummary.Text = fSum.ToString();
@@ -356,7 +524,6 @@ public partial class MoviesView : UserControl
     {
         if (_activeMovieForDetails != null)
         {
-            // Now we actually play the movie!
             OnPlayRequested?.Invoke(this, _activeMovieForDetails);
         }
     }
@@ -364,17 +531,15 @@ public partial class MoviesView : UserControl
     private void CloseMovieDetails_Click(object sender, RoutedEventArgs e)
     {
         MovieDetailsOverlay.Visibility = Visibility.Collapsed;
-        // The Master Back Handler will handle returning focus to the grid
     }
 
-    // --- 10-FOOT UI ROUTING TRAPS ---
     private void MovieDetailsButtons_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
 
         if (command == HtpcCommand.Right)
         {
-            e.Handled = true; // Prevent remote from escaping right into the text boxes
+            e.Handled = true; 
         }
         else if (command == HtpcCommand.Left || command == HtpcCommand.Back)
         {
@@ -383,13 +548,12 @@ public partial class MoviesView : UserControl
         }
         else if (command == HtpcCommand.Up && sender == DetailBackBtn)
         {
-            e.Handled = true; // Trap at top
+            e.Handled = true; 
         }
         else if (command == HtpcCommand.Down && sender == DetailPlayBtn)
         {
-            e.Handled = true; // Trap at bottom
+            e.Handled = true; 
         }
-        // Explicit spatial routing to prevent WPF confusion
         else if (command == HtpcCommand.Up && sender == DetailPlayBtn)
         {
             DetailBackBtn.Focus();
@@ -398,54 +562,6 @@ public partial class MoviesView : UserControl
         else if (command == HtpcCommand.Down && sender == DetailBackBtn)
         {
             DetailPlayBtn.Focus();
-            e.Handled = true;
-        }
-    }
-    
-    // --- 10-FOOT UI FOCUS TRAP FIXES ---
-
-    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var cb = sender as ComboBox;
-        var command = InputMapper.GetCommand(e.Key);
-
-        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list!
-        if (cb != null && !cb.IsDropDownOpen)
-        {
-            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
-            {
-                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
-                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
-                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
-
-                cb.MoveFocus(new TraversalRequest(direction));
-                e.Handled = true; // Stop the ComboBox from stealing the input
-            }
-        }
-    }
-
-    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var command = InputMapper.GetCommand(e.Key);
-
-        // TextBoxes naturally capture Left/Right for typing, but we want Up/Down to escape!
-        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
-        {
-            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
-            e.Handled = true;
-        }
-    }
-    
-    private void GenrePill_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var command = InputMapper.GetCommand(e.Key);
-        
-        // If the user pushes Up or Down on a genre pill, force the focus to jump!
-        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
-        {
-            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            (sender as RadioButton)?.MoveFocus(new TraversalRequest(direction));
             e.Handled = true;
         }
     }
@@ -464,7 +580,6 @@ public partial class MoviesView : UserControl
 
             string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
             
-            // Show working toast
             ShowToast($"Sending command: {menuItem.Header}...");
 
             bool success = await _libraryService.SendFileAdminCommandAsync(baseUrl, movie.Id, command);
@@ -473,7 +588,6 @@ public partial class MoviesView : UserControl
             {
                 ShowToast($"Success: {menuItem.Header} triggered.");
                 
-                // --- INSTANTLY UPDATE MEMORY SO THE MENU FLIPS ---
                 if (command == "watch") movie.IsWatched = true;
                 else if (command == "unwatch") movie.IsWatched = false;
                 else if (command == "favorite") movie.IsFavorite = true;
@@ -487,45 +601,40 @@ public partial class MoviesView : UserControl
     }
     
     private void ContextMenu_Opened(object sender, RoutedEventArgs e)
-{
-    if (sender is ContextMenu menu && menu.PlacementTarget is FrameworkElement target && target.DataContext is MediaItem movie)
     {
-        foreach (var item in menu.Items)
+        if (sender is ContextMenu menu && menu.PlacementTarget is FrameworkElement target && target.DataContext is MediaItem movie)
         {
-            if (item is MenuItem menuItem)
+            foreach (var item in menu.Items)
             {
-                // Toggle "Watch" / "Unwatch"
-                if (menuItem.Tag?.ToString() == "watch")
-                    menuItem.Visibility = movie.IsWatched ? Visibility.Collapsed : Visibility.Visible;
-                
-                if (menuItem.Tag?.ToString() == "unwatch")
-                    menuItem.Visibility = movie.IsWatched ? Visibility.Visible : Visibility.Collapsed;
+                if (item is MenuItem menuItem)
+                {
+                    if (menuItem.Tag?.ToString() == "watch")
+                        menuItem.Visibility = movie.IsWatched ? Visibility.Collapsed : Visibility.Visible;
+                    
+                    if (menuItem.Tag?.ToString() == "unwatch")
+                        menuItem.Visibility = movie.IsWatched ? Visibility.Visible : Visibility.Collapsed;
 
-                // Toggle "Favorite" / "Unfavorite"
-                if (menuItem.Tag?.ToString() == "favorite")
-                    menuItem.Visibility = movie.IsFavorite ? Visibility.Collapsed : Visibility.Visible;
-                
-                if (menuItem.Tag?.ToString() == "unfavorite")
-                    menuItem.Visibility = movie.IsFavorite ? Visibility.Visible : Visibility.Collapsed;
+                    if (menuItem.Tag?.ToString() == "favorite")
+                        menuItem.Visibility = movie.IsFavorite ? Visibility.Collapsed : Visibility.Visible;
+                    
+                    if (menuItem.Tag?.ToString() == "unfavorite")
+                        menuItem.Visibility = movie.IsFavorite ? Visibility.Visible : Visibility.Collapsed;
+                }
             }
         }
     }
-}
 
     private void ShowToast(string message)
     {
         ToastText.Text = message;
         ToastNotification.Visibility = Visibility.Visible;
 
-        // Auto-hide the toast after 3 seconds
         _ = Task.Run(async () => 
         {
             await Task.Delay(3000);
             Application.Current.Dispatcher.Invoke(() => ToastNotification.Visibility = Visibility.Collapsed);
         });
     }
-
-    // --- MEDIA INFO MODAL ---
 
     // --- MEDIA INFO MODAL ---
 
@@ -554,11 +663,9 @@ public partial class MoviesView : UserControl
 
                     if (root.TryGetProperty("format", out var format))
                     {
-                        // 1. File Path
                         if (format.TryGetProperty("filename", out var fileProp))
                             AddMediaInfoRow("Path", fileProp.GetString() ?? "Unknown");
 
-                        // 2. Duration
                         if (format.TryGetProperty("duration", out var durProp) && double.TryParse(durProp.GetString(), out double seconds))
                         {
                             var time = TimeSpan.FromSeconds(seconds);
@@ -566,23 +673,18 @@ public partial class MoviesView : UserControl
                             AddMediaInfoRow("Duration", durationText);
                         }
 
-                        // 3. Bit Rate
                         if (format.TryGetProperty("bit_rate", out var brProp) && long.TryParse(brProp.GetString(), out long bitRate))
                             AddMediaInfoRow("Bit Rate", $"{bitRate:N0} bits/sec");
 
-                        // 4. File Size
                         if (format.TryGetProperty("size", out var sizeProp) && long.TryParse(sizeProp.GetString(), out long bytes))
                             AddMediaInfoRow("File Size", $"{bytes:N0} bytes");
                     }
 
-                    // 5. File ID
                     AddMediaInfoRow("File ID", movie.Id);
 
-                    // 6. Streaming Index
                     if (root.TryGetProperty("m3u8_up_to_date", out var m3u8Prop))
                         AddMediaInfoRow("Streaming Index", m3u8Prop.GetBoolean() ? "Up to date" : "Needs update");
 
-                    // 7. Track Information
                     if (root.TryGetProperty("streams", out var streams) && streams.ValueKind == System.Text.Json.JsonValueKind.Array)
                     {
                         int trackIndex = 0;
@@ -600,7 +702,6 @@ public partial class MoviesView : UserControl
                                 string pixFmt = stream.TryGetProperty("pix_fmt", out var pfProp) ? pfProp.GetString() ?? "" : "";
                                 string fieldOrder = stream.TryGetProperty("field_order", out var foProp) ? foProp.GetString() ?? "" : "";
                                 
-                                // Calculate exact FPS from fraction (e.g. "30000/1001" or "30/1")
                                 string fpsText = "";
                                 if (stream.TryGetProperty("avg_frame_rate", out var frProp))
                                 {
@@ -641,7 +742,6 @@ public partial class MoviesView : UserControl
         }
     }
 
-    // Standard row generator for key/value pairs
     private void AddMediaInfoRow(string label, string value)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
@@ -667,7 +767,6 @@ public partial class MoviesView : UserControl
         MediaInfoDetails.Children.Add(panel);
     }
 
-    // Custom row generator for Track data
     private void AddTrackInfo(int trackIndex, string codec, string details)
     {
         var panel = new StackPanel { Margin = new Thickness(0, 15, 0, 0) };
@@ -675,7 +774,7 @@ public partial class MoviesView : UserControl
         panel.Children.Add(new TextBlock 
         { 
             Text = $"Track #{trackIndex}: {codec}", 
-            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 164, 239)), // Blue accent
+            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 164, 239)),
             FontSize = 15, 
             FontWeight = FontWeights.Bold 
         });

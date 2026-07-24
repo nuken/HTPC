@@ -18,39 +18,46 @@ public partial class SettingsView : UserControl
     public event EventHandler? OnHomeRequested;
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnMoviesRequested;
-	public event EventHandler? OnRecordingsRequested;
+    public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
-	public event EventHandler? OnMultiviewRequested;
-	public event EventHandler? OnCollectionsRequested;
+    public event EventHandler? OnMultiviewRequested;
+    public event EventHandler? OnCollectionsRequested;
 
     private readonly ServerManagerService _serverManager;
     private bool _isInitialized = false;
-	private static readonly HttpClient _httpClient = new HttpClient();
-	public System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig> DashboardRows { get; set; } = new System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig>();
+    private static readonly HttpClient _httpClient = new HttpClient();
+    public System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig> DashboardRows { get; set; } = new System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig>();
+
+    // Overlay State Variables
+    private enum FilterMode { None, PaddingStart, PaddingEnd, CommercialSkip, UpscalerPreset }
+    private FilterMode _currentFilterMode = FilterMode.None;
+    private IInputElement? _lastFocusedElement;
+    private string[] _paddingOptions;
 
     public SettingsView(ServerManagerService serverManager)
     {
         InitializeComponent();
-		LoadVersionNumber();
+        LoadVersionNumber();
         _serverManager = serverManager;
+        
+        _paddingOptions = new string[31];
+        for (int i = 0; i <= 30; i++) _paddingOptions[i] = i == 0 ? "None" : $"{i} Min";
+
         Loaded += OnLoaded;
     }
-	
-	private void LoadVersionNumber()
-{
-    var version = Assembly.GetExecutingAssembly().GetName().Version;
     
-    string versionString = version?.ToString(3) ?? "Unknown";
-
-    VersionText.Text = $"Nucleus HTPC v{versionString}";
-}
+    private void LoadVersionNumber()
+    {
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        string versionString = version?.ToString(3) ?? "Unknown";
+        VersionText.Text = $"Nucleus HTPC v{versionString}";
+    }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_isInitialized) 
         {
-            // The Heavy Hammer Focus Fix for returning to the page
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 HomeNavBtn.Focus(); 
@@ -60,16 +67,19 @@ public partial class SettingsView : UserControl
         }
 
         var prefs = PreferencesManager.Load();
-		
-		// Load Commercial Skip Mode
-        if (prefs.CommercialSkipMode >= 0 && prefs.CommercialSkipMode <= 2)
-        {
-            CommercialSkipBox.SelectedIndex = prefs.CommercialSkipMode;
-        }
-        else
-        {
-            CommercialSkipBox.SelectedIndex = 2; // Default to Auto
-        }
+        
+        // Load Commercial Skip Mode
+        int skipMode = prefs.CommercialSkipMode >= 0 && prefs.CommercialSkipMode <= 2 ? prefs.CommercialSkipMode : 2;
+        string[] skipModes = { "Disabled (Off)", "Prompt (Click to Skip)", "Automatic (Seamless)" };
+        CommercialSkipBtn.Content = $"{skipModes[skipMode]} ▼";
+        
+        // Load Padding
+        int pStart = prefs.PaddingStartMinutes <= 30 ? prefs.PaddingStartMinutes : 0;
+        PaddingStartBtn.Content = $"{_paddingOptions[pStart]} ▼";
+        
+        int pEnd = prefs.PaddingEndMinutes <= 30 ? prefs.PaddingEndMinutes : 0;
+        PaddingEndBtn.Content = $"{_paddingOptions[pEnd]} ▼";
+
         // Load Dashboard Layout
         DashboardRows.Clear();
         if (prefs.DashboardLayout != null)
@@ -80,85 +90,167 @@ public partial class SettingsView : UserControl
             }
         }
         DashboardLayoutList.ItemsSource = DashboardRows;
+        
         // Load UI Scale
         UiScaleSlider.Value = prefs.UiScaleMultiplier;
         UiScaleTextText.Text = $"{(int)(prefs.UiScaleMultiplier * 100)}%";
 
         // Load Video Processing
         EnableUpscalingCheck.IsChecked = prefs.EnableUpscaling;
-        UpscalerPresetBox.IsEnabled = prefs.EnableUpscaling; // Gray out dropdown if disabled
+        UpscalerPresetBtn.IsEnabled = prefs.EnableUpscaling; 
         
-        if (prefs.UpscalerPreset == "ArtCNN") UpscalerPresetBox.SelectedIndex = 1;
-        else UpscalerPresetBox.SelectedIndex = 0; // Default to RAVU
+        string preset = prefs.UpscalerPreset == "ArtCNN" ? "ArtCNN (High-End GPUs)" : "RAVU (Mid-Range GPUs)";
+        UpscalerPresetBtn.Content = $"{preset} ▼";
 
         _isInitialized = true;
         LoadServers();
 
-        for (int i = 0; i <= 30; i++)
+        _ = Dispatcher.BeginInvoke(new Action(() => 
         {
-            string label = i == 0 ? "None" : $"{i} Min";
-            PaddingStartBox.Items.Add(label); 
-            PaddingEndBox.Items.Add(label);
-        }
-        PaddingStartBox.SelectedIndex = prefs.PaddingStartMinutes <= 30 ? prefs.PaddingStartMinutes : 0;
-        PaddingEndBox.SelectedIndex = prefs.PaddingEndMinutes <= 30 ? prefs.PaddingEndMinutes : 0;
+            SettingsNavBtn.Focus();         
+            Keyboard.Focus(SettingsNavBtn); 
+        }), DispatcherPriority.ApplicationIdle);
+    }
 
-       // The Heavy Hammer Focus Fix
-            _ = Dispatcher.BeginInvoke(new Action(() => 
+    // --- OVERLAY FILTERS ---
+
+    private void PaddingStartBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.PaddingStart;
+        FilterOverlayTitle.Text = "Padding Before (Start)";
+        FilterSelectionList.ItemsSource = _paddingOptions;
+        FilterSelectionList.SelectedItem = PaddingStartBtn.Content.ToString()?.Replace(" ▼", "");
+        OpenFilterOverlay();
+    }
+
+    private void PaddingEndBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.PaddingEnd;
+        FilterOverlayTitle.Text = "Padding After (End)";
+        FilterSelectionList.ItemsSource = _paddingOptions;
+        FilterSelectionList.SelectedItem = PaddingEndBtn.Content.ToString()?.Replace(" ▼", "");
+        OpenFilterOverlay();
+    }
+
+    private void CommercialSkipBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.CommercialSkip;
+        FilterOverlayTitle.Text = "Commercial Skip";
+        FilterSelectionList.ItemsSource = new[] { "Disabled (Off)", "Prompt (Click to Skip)", "Automatic (Seamless)" };
+        FilterSelectionList.SelectedItem = CommercialSkipBtn.Content.ToString()?.Replace(" ▼", "");
+        OpenFilterOverlay();
+    }
+
+    private void UpscalerPresetBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.UpscalerPreset;
+        FilterOverlayTitle.Text = "Upscaler Quality";
+        FilterSelectionList.ItemsSource = new[] { "RAVU (Mid-Range GPUs)", "ArtCNN (High-End GPUs)" };
+        FilterSelectionList.SelectedItem = UpscalerPresetBtn.Content.ToString()?.Replace(" ▼", "");
+        OpenFilterOverlay();
+    }
+
+    private void OpenFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Visible;
+        _lastFocusedElement = Keyboard.FocusedElement;
+
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (FilterSelectionList.SelectedItem != null)
             {
-                SettingsNavBtn.Focus();          // <-- Changed
-                Keyboard.Focus(SettingsNavBtn);  // <-- Changed
-            }), DispatcherPriority.ApplicationIdle);
+                FilterSelectionList.ScrollIntoView(FilterSelectionList.SelectedItem);
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromItem(FilterSelectionList.SelectedItem) as UIElement;
+                item?.Focus();
+            }
+            else if (FilterSelectionList.Items.Count > 0)
+            {
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void CloseFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Collapsed;
+        _currentFilterMode = FilterMode.None;
+        
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+        {
+            Keyboard.Focus(uiElement);
+        }
+    }
+
+    private void ProcessFilterSelection(object selectedItem)
+    {
+        if (selectedItem is string selection)
+        {
+            var prefs = PreferencesManager.Load();
+
+            if (_currentFilterMode == FilterMode.PaddingStart)
+            {
+                PaddingStartBtn.Content = $"{selection} ▼";
+                prefs.PaddingStartMinutes = Array.IndexOf(_paddingOptions, selection);
+            }
+            else if (_currentFilterMode == FilterMode.PaddingEnd)
+            {
+                PaddingEndBtn.Content = $"{selection} ▼";
+                prefs.PaddingEndMinutes = Array.IndexOf(_paddingOptions, selection);
+            }
+            else if (_currentFilterMode == FilterMode.CommercialSkip)
+            {
+                CommercialSkipBtn.Content = $"{selection} ▼";
+                prefs.CommercialSkipMode = selection.StartsWith("Disabled") ? 0 : selection.StartsWith("Prompt") ? 1 : 2;
+            }
+            else if (_currentFilterMode == FilterMode.UpscalerPreset)
+            {
+                UpscalerPresetBtn.Content = $"{selection} ▼";
+                prefs.UpscalerPreset = selection.StartsWith("ArtCNN") ? "ArtCNN" : "RAVU";
+            }
+
+            PreferencesManager.Save(prefs);
+            CloseFilterOverlay();
+        }
+    }
+
+    private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FilterSelectionList.SelectedItem != null) 
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+    }
+
+    private void FilterSelectionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && FilterSelectionList.SelectedItem != null)
+        {
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    private void FilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                            command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                            command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+            (sender as FrameworkElement)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true; 
+        }
     }
 
     // --- 10-FOOT UI FOCUS TRAPS & ESCAPE HATCHES ---
-
-    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var cb = sender as ComboBox;
-        var command = InputMapper.GetCommand(e.Key);
-
-        if (cb != null)
-        {
-            if (!cb.IsDropDownOpen)
-            {
-                if (command == HtpcCommand.Select)
-                {
-                    cb.IsDropDownOpen = true;
-                    
-                    // FOCUS BRIDGE: Force the remote into the popup menu so you can select an item
-                    Dispatcher.BeginInvoke(new Action(() => 
-                    {
-                        var item = cb.ItemContainerGenerator.ContainerFromIndex(cb.SelectedIndex >= 0 ? cb.SelectedIndex : 0) as UIElement;
-                        item?.Focus();
-                    }), DispatcherPriority.Loaded);
-                    
-                    e.Handled = true;
-                    return;
-                }
-
-                if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
-                {
-                    var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
-                                    command == HtpcCommand.Up ? FocusNavigationDirection.Up :
-                                    command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
-
-                    cb.MoveFocus(new TraversalRequest(direction));
-                    e.Handled = true; 
-                }
-            }
-            else
-            {
-                // If the dropdown IS open, allow the Enter key to confirm selection and close it
-                if (command == HtpcCommand.Select)
-                {
-                    cb.IsDropDownOpen = false;
-                    cb.Focus(); // Return focus safely to the closed box
-                    e.Handled = true;
-                }
-            }
-        }
-    }
 
     private void TextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -175,14 +267,12 @@ public partial class SettingsView : UserControl
     {
         var command = InputMapper.GetCommand(e.Key);
         
-        // Sliders naturally eat Up/Down to change values. We force them to navigate instead!
         if (command == HtpcCommand.Up || command == HtpcCommand.Down)
         {
             var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
             (sender as Slider)?.MoveFocus(new TraversalRequest(direction));
             e.Handled = true;
         }
-        // We leave Left/Right alone so the remote can actually adjust the slider value.
     }
 
     private void CheckBox_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -190,7 +280,6 @@ public partial class SettingsView : UserControl
         var command = InputMapper.GetCommand(e.Key);
         var chk = sender as CheckBox;
 
-        // FOCUS BRIDGE: Toggle the Checkbox when pressing Enter/Select on the remote
         if (command == HtpcCommand.Select && chk != null)
         {
             chk.IsChecked = !chk.IsChecked;
@@ -205,12 +294,9 @@ public partial class SettingsView : UserControl
             e.Handled = true;
         }
     }
-	
-	// --- NEW: Automatically physical-scroll the page to follow the remote focus! ---
+    
     private void MainScroll_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        // FIX: If the user is actively clicking with the mouse, do NOT force a scroll!
-        // This prevents the screen from aggressively jumping when you click an item.
         if (Mouse.LeftButton == MouseButtonState.Pressed)
             return;
 
@@ -227,11 +313,9 @@ public partial class SettingsView : UserControl
             var content = scrollViewer.Content as UIElement;
             if (content == null) return;
 
-            // Calculate the exact pixel location of the focused control
             var transform = element.TransformToAncestor(content);
             Point position = transform.Transform(new Point(0, 0));
             
-            // Add a 50px buffer so the control isn't jammed against the top of the screen
             double targetY = position.Y - 50; 
             
             if (targetY < 0) targetY = 0;
@@ -248,7 +332,6 @@ public partial class SettingsView : UserControl
         var item = sender as ListBoxItem;
         if (item == null) return;
 
-        // Explicit Focus Bridge: Jump RIGHT to the Action Buttons
         if (command == HtpcCommand.Right)
         {
             LayoutMoveUpBtn.Focus();
@@ -256,31 +339,25 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        // FOCUS BRIDGE: Fix the Up/Down Click Trap by intercepting the ListBox edges
         if (command == HtpcCommand.Up || command == HtpcCommand.Down)
         {
-            // Find out exactly which row the remote is currently resting on
             int index = DashboardLayoutList.ItemContainerGenerator.IndexFromContainer(item);
 
-            // ESCAPE UP: If we are on the very first row and press Up, jump to Commercial Skip
             if (command == HtpcCommand.Up && index == 0)
             {
-                CommercialSkipBox.Focus();
+                CommercialSkipBtn.Focus();
                 e.Handled = true;
             }
-            // ESCAPE DOWN: If we are on the very last row and press Down, jump to UI Scale
             else if (command == HtpcCommand.Down && index == DashboardLayoutList.Items.Count - 1)
             {
                 UiScaleSlider.Focus();
                 e.Handled = true;
             }
-            // INTERNAL MOVEMENT: If we are in the middle, just move normally
             else
             {
                 var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
                 item.MoveFocus(new TraversalRequest(direction));
                 
-                // Force the inner ListBox to scroll if the new item is off-screen
                 var newFocus = Keyboard.FocusedElement as FrameworkElement;
                 if (newFocus != null && newFocus.DataContext != null)
                 {
@@ -296,10 +373,8 @@ public partial class SettingsView : UserControl
     {
         var command = InputMapper.GetCommand(e.Key);
 
-        // Explicit Focus Bridge: Jump LEFT back to the Layout List
         if (command == HtpcCommand.Left)
         {
-            // Since the ListBox container is invisible, we target the specific highlighted row
             var targetData = DashboardLayoutList.SelectedItem ?? (DashboardLayoutList.Items.Count > 0 ? DashboardLayoutList.Items[0] : null);
             
             if (targetData != null)
@@ -309,7 +384,6 @@ public partial class SettingsView : UserControl
             }
             e.Handled = true;
         }
-        // Explicit Focus Bridge: Jump RIGHT to the Saved Servers List
         else if (command == HtpcCommand.Right)
         {
             if (SavedServersList.Items.Count > 0)
@@ -319,7 +393,7 @@ public partial class SettingsView : UserControl
             }
             else
             {
-                TxtName.Focus(); // Fallback if no servers exist
+                TxtName.Focus(); 
             }
             e.Handled = true;
         }
@@ -329,54 +403,34 @@ public partial class SettingsView : UserControl
     {
         var command = InputMapper.GetCommand(e.Key);
         
-        // Let user hit "Enter" on a saved server to make it active instantly
         if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is ServerConfig server)
         {
             _serverManager.SetActiveServer(server.Id);
             LoadServers();
             e.Handled = true;
         }
-        // Explicit Focus Bridge: Jump LEFT back to the center column buttons
         else if (command == HtpcCommand.Left)
         {
             LayoutMoveUpBtn.Focus(); 
             e.Handled = true;
         }
     }
-	
-	    // --- END FOCUS TRAPS ---
 
-    private void Padding_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_isInitialized) return;
-        
-        var prefs = PreferencesManager.Load();
-        
-        prefs.PaddingStartMinutes = Math.Max(0, PaddingStartBox.SelectedIndex);
-        prefs.PaddingEndMinutes = Math.Max(0, PaddingEndBox.SelectedIndex);
-        
-        PreferencesManager.Save(prefs);
-    }
-    
     private void UiScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (UiScaleTextText == null) return;
 
-        // Instantly update the text so the user sees the percentage changing
         double newScale = Math.Round(e.NewValue, 1);
         UiScaleTextText.Text = $"{(int)(newScale * 100)}%";
 
-        // If the user is physically holding down the mouse to drag, DO NOT scale the UI yet!
         if (System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed) 
             return;
 
-        // If they clicked the track or used the keyboard, apply it instantly
         ApplyUiScale(newScale);
     }
 
     private void UiScaleSlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
-        // Once they let go of the mouse, apply the actual scale
         double newScale = Math.Round(UiScaleSlider.Value, 1);
         ApplyUiScale(newScale);
     }
@@ -393,22 +447,13 @@ public partial class SettingsView : UserControl
         }
     }
     
-    private void Upscaler_SelectionChanged(object sender, RoutedEventArgs e)
+    private void UpscalerCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!_isInitialized) return;
         
         var prefs = PreferencesManager.Load();
-        
-        // Save the Checkbox state
         prefs.EnableUpscaling = EnableUpscalingCheck.IsChecked == true;
-        
-        // Enable or Disable the dropdown visually based on the checkbox
-        UpscalerPresetBox.IsEnabled = prefs.EnableUpscaling;
-        
-        // Save the dropdown string
-        if (UpscalerPresetBox.SelectedIndex == 1) prefs.UpscalerPreset = "ArtCNN";
-        else prefs.UpscalerPreset = "RAVU";
-        
+        UpscalerPresetBtn.IsEnabled = prefs.EnableUpscaling;
         PreferencesManager.Save(prefs);
     }
 
@@ -435,7 +480,7 @@ public partial class SettingsView : UserControl
         TxtPort.Text = "8089";
         LoadServers();
         
-        HomeNavBtn.Focus(); // Re-focus navigation instead of getting stuck
+        HomeNavBtn.Focus(); 
     }
 
     private void DeleteServer_Click(object sender, RoutedEventArgs e)
@@ -450,12 +495,12 @@ public partial class SettingsView : UserControl
             if (result == MessageBoxResult.Yes)
             {
                 _serverManager.DeleteServer(server.Id);
-                LoadServers(); // Refresh the list
+                LoadServers(); 
             }
         }
     }
-	
-	private void MakeActive_Click(object sender, RoutedEventArgs e)
+    
+    private void MakeActive_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button button && button.DataContext is HTPC.Core.Models.ServerConfig server)
         {
@@ -463,8 +508,8 @@ public partial class SettingsView : UserControl
             LoadServers();
         }
     }
-	
-	private void AdminMenu_Click(object sender, RoutedEventArgs e)
+    
+    private void AdminMenu_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.ContextMenu != null)
         {
@@ -489,7 +534,6 @@ public partial class SettingsView : UserControl
             {
                 HttpResponseMessage response;
 
-                // Explicitly route DELETE for the cache, and PUT for everything else
                 if (endpoint == "/dvr/cache")
                 {
                     response = await _httpClient.DeleteAsync(url);
@@ -515,17 +559,8 @@ public partial class SettingsView : UserControl
             }
         }
     }
-	
-	private void CommercialSkip_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_isInitialized) return;
-        
-        var prefs = PreferencesManager.Load();
-        prefs.CommercialSkipMode = CommercialSkipBox.SelectedIndex;
-        PreferencesManager.Save(prefs);
-    }
-	
-	// --- DASHBOARD LAYOUT LOGIC ---
+    
+    // --- DASHBOARD LAYOUT LOGIC ---
 
     private void MoveRowUp_Click(object sender, RoutedEventArgs e)
     {
@@ -535,7 +570,7 @@ public partial class SettingsView : UserControl
             var item = DashboardRows[index];
             DashboardRows.RemoveAt(index);
             DashboardRows.Insert(index - 1, item);
-            DashboardLayoutList.SelectedIndex = index - 1; // Keep it selected
+            DashboardLayoutList.SelectedIndex = index - 1; 
             SaveDashboardLayout();
         }
     }
@@ -548,7 +583,7 @@ public partial class SettingsView : UserControl
             var item = DashboardRows[index];
             DashboardRows.RemoveAt(index);
             DashboardRows.Insert(index + 1, item);
-            DashboardLayoutList.SelectedIndex = index + 1; // Keep it selected
+            DashboardLayoutList.SelectedIndex = index + 1; 
             SaveDashboardLayout();
         }
     }
@@ -582,14 +617,14 @@ public partial class SettingsView : UserControl
         
         for (int i = 0; i < DashboardRows.Count; i++)
         {
-            DashboardRows[i].Order = i; // Update the order integer based on physical list position
+            DashboardRows[i].Order = i; 
             prefs.DashboardLayout.Add(DashboardRows[i]);
         }
         
         PreferencesManager.Save(prefs);
     }
-	
-	private void ExitApp_Click(object sender, RoutedEventArgs e)
+    
+    private void ExitApp_Click(object sender, RoutedEventArgs e)
     {
         Application.Current.Shutdown();
     }
@@ -598,9 +633,9 @@ public partial class SettingsView : UserControl
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
-	private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
-	private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
-	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
+    private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+    private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 }

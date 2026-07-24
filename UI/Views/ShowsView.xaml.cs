@@ -7,7 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
-using HTPC.Core.Input; // Required for the new InputMapper
+using HTPC.Core.Input; 
 using HTPC.Core.Models;
 using HTPC.Services;
 
@@ -19,15 +19,15 @@ public partial class ShowsView : UserControl
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnMoviesRequested;
-	public event EventHandler? OnRecordingsRequested;
+    public event EventHandler? OnRecordingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
-	public event EventHandler<(System.Collections.Generic.List<MediaItem> Queue, int StartIndex)>? OnPlayQueueRequested;
+    public event EventHandler<(System.Collections.Generic.List<MediaItem> Queue, int StartIndex)>? OnPlayQueueRequested;
     public event EventHandler? OnVideosRequested;
-	public event EventHandler? OnMultiviewRequested;
-	public event EventHandler? OnCollectionsRequested;
+    public event EventHandler? OnMultiviewRequested;
+    public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
-	private readonly ServerManagerService _serverManager;
+    private readonly ServerManagerService _serverManager;
     private readonly DispatcherTimer _typingTimer;
     
     // Data Bindings
@@ -35,7 +35,6 @@ public partial class ShowsView : UserControl
     public ObservableCollection<int> Seasons { get; set; } = new ObservableCollection<int>();
     public ObservableCollection<MediaItem> CurrentEpisodes { get; set; } = new ObservableCollection<MediaItem>();
 
-    // Master list of episodes for the currently selected show
     private List<MediaItem> _allEpisodesForSelectedShow = new List<MediaItem>();
 
     // Pagination State
@@ -45,10 +44,15 @@ public partial class ShowsView : UserControl
     private bool _hasReachedEnd = false;
     private bool _isInitialized = false;
 
-    private string _currentSearch = "";
-    private string _currentSort = "Recently Recorded";
+    // Filter States
+    private enum FilterMode { None, Sort, Order }
+    private FilterMode _currentFilterMode = FilterMode.None;
+    private IInputElement? _lastFocusedElement;
 
-    // THE FIX: Added 'ServerManagerService serverManager' to the parameter list
+    private string _currentSearch = "";
+    private string _currentSort = "Date Added";
+    private string _currentOrder = "Forward";
+
     public ShowsView(MediaLibraryService libraryService, ServerManagerService serverManager)
     {
         InitializeComponent();
@@ -60,7 +64,7 @@ public partial class ShowsView : UserControl
         _typingTimer.Tick += TypingTimer_Tick;
 
         Loaded += OnLoaded;
-        this.PreviewKeyDown += ShowsView_PreviewKeyDown; // Master listener for the remote's Back button
+        this.PreviewKeyDown += ShowsView_PreviewKeyDown; 
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -72,16 +76,29 @@ public partial class ShowsView : UserControl
         }
 
         _isInitialized = true;
+        SortFilterBtn.Content = $"{_currentSort} ▼";
         await ResetAndLoadAsync();
 
-        // THE FIX: Push the cursor to the Search Box so the remote D-Pad works instantly
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
             SearchBox.Focus();
         }), DispatcherPriority.Input);
     }
-	
-	// --- ADMIN COMMANDS & CONTEXT MENU ---
+    
+    private void FocusTopNav()
+    {
+        if (TopNavPanel == null) return;
+        foreach (UIElement child in TopNavPanel.Children)
+        {
+            if (child is Button btn && btn.Focusable && btn.Visibility == Visibility.Visible)
+            {
+                btn.Focus();
+                return;
+            }
+        }
+    }
+
+    // --- ADMIN COMMANDS & CONTEXT MENU ---
 
     private async void AdminCommand_Click(object sender, RoutedEventArgs e)
     {
@@ -168,7 +185,6 @@ public partial class ShowsView : UserControl
                     using var doc = System.Text.Json.JsonDocument.Parse(json);
                     var root = doc.RootElement;
                     
-                    // Shows use the Episode title for the popup
                     MediaInfoTitle.Text = string.IsNullOrEmpty(episode.CurrentShowTitle) ? episode.Title : episode.CurrentShowTitle;
 
                     if (root.TryGetProperty("format", out var format))
@@ -272,15 +288,18 @@ public partial class ShowsView : UserControl
     {
         var command = InputMapper.GetCommand(e.Key);
 
-        // NEW: If the Binge Prompt is open, don't let this master handler interfere
         if (BingeChoiceOverlay.Visibility == Visibility.Visible) return;
+        
+        if (FilterOverlay.Visibility == Visibility.Visible && (command == HtpcCommand.Back || e.Key == Key.Escape))
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+            return;
+        }
 
-        // If the Modal is open and the user presses Back on the remote, close the modal
-        if (EpisodesOverlay.Visibility == Visibility.Visible && command == HtpcCommand.Back)
+        if (EpisodesOverlay.Visibility == Visibility.Visible && (command == HtpcCommand.Back || e.Key == Key.Escape))
         {
             CloseOverlay_Click(null!, null!);
-            
-            // Return focus to the main grid so they can keep scrolling shows
             ShowsGrid.Focus();
             e.Handled = true;
         }
@@ -300,7 +319,7 @@ public partial class ShowsView : UserControl
         if (_isLoading || _hasReachedEnd) return;
         _isLoading = true;
 
-        var newShows = await _libraryService.GetFilteredShowsAsync(_currentOffset, _chunkSize, _currentSearch, _currentSort);
+        var newShows = await _libraryService.GetFilteredShowsAsync(_currentOffset, _chunkSize, _currentSearch, _currentSort, _currentOrder);
         
         if (newShows.Count == 0) _hasReachedEnd = true;
         else
@@ -313,12 +332,12 @@ public partial class ShowsView : UserControl
 
     private async void MainScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        // Infinite scrolling trigger
         if (MainScroll.VerticalOffset >= MainScroll.ScrollableHeight - 100)
             await LoadNextChunkAsync();
     }
 
-    // --- SEARCH & SORT ---
+    // --- OVERLAY FILTERS & SEARCH ---
+
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         _typingTimer.Stop();
@@ -335,13 +354,155 @@ public partial class ShowsView : UserControl
         }
     }
 
-    private async void SortDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void SortFilterBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (!_isInitialized) return;
-        if (SortDropdown.SelectedItem is ComboBoxItem item)
+        _currentFilterMode = FilterMode.Sort;
+        FilterOverlayTitle.Text = "Sort By";
+        FilterSelectionList.ItemsSource = new[] { "Alphabetically", "Date Released", "Date Added", "Date Updated", "Date Watched", "Date Favorited" };
+        FilterSelectionList.SelectedItem = _currentSort;
+        OpenFilterOverlay();
+    }
+
+    private void OrderFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilterMode = FilterMode.Order;
+        FilterOverlayTitle.Text = "Order";
+        FilterSelectionList.ItemsSource = new[] { "Forward", "Reverse" };
+        FilterSelectionList.SelectedItem = _currentOrder;
+        OpenFilterOverlay();
+    }
+
+    private void OpenFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Visible;
+        _lastFocusedElement = Keyboard.FocusedElement;
+
+        _ = Dispatcher.InvokeAsync(() =>
         {
-            _currentSort = item.Content.ToString() ?? "Recently Recorded";
+            if (FilterSelectionList.SelectedItem != null)
+            {
+                FilterSelectionList.ScrollIntoView(FilterSelectionList.SelectedItem);
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromItem(FilterSelectionList.SelectedItem) as UIElement;
+                item?.Focus();
+            }
+            else if (FilterSelectionList.Items.Count > 0)
+            {
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void CloseFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Collapsed;
+        _currentFilterMode = FilterMode.None;
+        
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+        {
+            Keyboard.Focus(uiElement);
+        }
+    }
+
+    private async void ProcessFilterSelection(object selectedItem)
+    {
+        if (selectedItem is string selection)
+        {
+            if (_currentFilterMode == FilterMode.Sort)
+            {
+                _currentSort = selection;
+                SortFilterBtn.Content = $"{selection} ▼";
+            }
+            else if (_currentFilterMode == FilterMode.Order)
+            {
+                _currentOrder = selection;
+                OrderFilterBtn.Content = $"{selection} ▼";
+            }
+
+            CloseFilterOverlay();
             await ResetAndLoadAsync();
+        }
+    }
+
+    private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FilterSelectionList.SelectedItem != null) 
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+    }
+
+    private void FilterSelectionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && FilterSelectionList.SelectedItem != null)
+        {
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    private void FilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Down) 
+        {
+            if (ShowsGrid.Items.Count > 0)
+            {
+                var element = ShowsGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                element?.Focus();
+                e.Handled = true;
+            }
+        }
+        else if (command == HtpcCommand.Up)
+        {
+            FocusTopNav();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Left)
+        {
+            if (sender == OrderFilterBtn) { SortFilterBtn.Focus(); e.Handled = true; }
+            else if (sender == SortFilterBtn) { e.Handled = true; } // Trap left
+        }
+        else if (command == HtpcCommand.Right)
+        {
+            if (sender == SortFilterBtn) { OrderFilterBtn.Focus(); e.Handled = true; }
+            else if (sender == OrderFilterBtn) { e.Handled = true; } // Trap right
+        }
+    }
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        var tb = sender as TextBox;
+
+        if (command == HtpcCommand.Right)
+        {
+            if (tb != null && tb.CaretIndex >= tb.Text.Length)
+            {
+                tb.MoveFocus(new TraversalRequest(FocusNavigationDirection.Right));
+                e.Handled = true;
+                return;
+            }
+        }
+        else if (command == HtpcCommand.Down)
+        {
+            if (ShowsGrid.Items.Count > 0)
+            {
+                var rowElement = ShowsGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+                e.Handled = true;
+            }
+        }
+        else if (command == HtpcCommand.Up)
+        {
+            FocusTopNav();
+            e.Handled = true; 
         }
     }
 
@@ -353,7 +514,6 @@ public partial class ShowsView : UserControl
         MainScroll.RaiseEvent(eventArg);
     }
 
-    // THE FIX: Listen for Enter/OK on the Show Posters
     private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
@@ -372,16 +532,13 @@ public partial class ShowsView : UserControl
         }
     }
 
-    // Unified logic for opening a show (used by both Mouse and Keyboard/Remote)
     private async void OpenShowOverlay(MediaItem show)
     {
         try
         {
-            // Populate Column 0 details
             OverlayShowTitle.Text = show.Title;
             OverlayShowSummary.Text = string.IsNullOrEmpty(show.Summary) ? "No summary available." : show.Summary;
             
-            // Safe, crash-proof image loading!
             try 
             { 
                 if (!string.IsNullOrWhiteSpace(show.PosterUrl))
@@ -397,26 +554,21 @@ public partial class ShowsView : UserControl
             } 
             catch { OverlayShowPoster.Source = null; }
 
-            // Explicitly nuke the old UI state so WPF is forced to update!
             SeasonsList.SelectedIndex = -1;
             CurrentEpisodes.Clear();
             Seasons.Clear();
 
-            // Fetch every episode for this show
             _allEpisodesForSelectedShow = await _libraryService.GetEpisodesForShowAsync(show.Title) ?? new List<MediaItem>();
 
-            // Populate Column 1 (Unique Seasons)
             if (_allEpisodesForSelectedShow.Any())
             {
                 var uniqueSeasons = _allEpisodesForSelectedShow.Select(ep => ep.SeasonNumber).Distinct().OrderBy(s => s).ToList();
                 foreach (var s in uniqueSeasons) Seasons.Add(s);
             }
 
-            // Open the overlay
             EpisodesOverlay.Visibility = Visibility.Visible;
             if (Seasons.Count > 0) SeasonsList.SelectedIndex = 0;
 
-            // THE FIX: Push D-Pad focus into the Seasons list so the remote works instantly
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 if (SeasonsList.Items.Count > 0)
@@ -432,7 +584,6 @@ public partial class ShowsView : UserControl
         }
     }
 
-    // OVERLAY LOGIC: User selects a Season Number
     private void SeasonsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         try
@@ -461,10 +612,9 @@ public partial class ShowsView : UserControl
         
         if (command == HtpcCommand.Right)
         {
-            // FOCUS BRIDGE: Jump Right into the Episodes List
             if (CurrentEpisodes.Count > 0)
             {
-                EpisodesList.UpdateLayout(); // CRITICAL: Force UI to render the episodes instantly!
+                EpisodesList.UpdateLayout(); 
                 var firstEp = EpisodesList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
                 
                 if (firstEp != null) firstEp.Focus();
@@ -474,27 +624,23 @@ public partial class ShowsView : UserControl
         }
        else if (command == HtpcCommand.Left)
         {
-            // FOCUS BRIDGE: Jump Left to the Action Buttons
             BingeShowBtn.Focus(); 
             e.Handled = true;
         }
         else if (command == HtpcCommand.Back)
         {
-            // FOCUS BRIDGE: Escape back to the main grid
             CloseOverlay_Click(null!, null!);
             ShowsGrid.Focus();
             e.Handled = true;
         }
     }
 	
-	// --- 10-FOOT UI ROUTING FOR OVERLAY BUTTONS ---
     private void OverlayButtons_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
         
         if (command == HtpcCommand.Right)
         {
-            // FOCUS BRIDGE: Jump Right into the Seasons List
             if (SeasonsList.Items.Count > 0)
             {
                 SeasonsList.UpdateLayout();
@@ -506,35 +652,30 @@ public partial class ShowsView : UserControl
         }
         else if (command == HtpcCommand.Back || command == HtpcCommand.Left)
         {
-            // Escape the overlay and go back to the library
             CloseOverlay_Click(null!, null!);
             ShowsGrid.Focus();
             e.Handled = true;
         }
         else if (command == HtpcCommand.Up && sender == BingeShowBtn)
         {
-            // Explicitly force focus up to the Back button to bypass WPF spatial traps
             BackToLibraryBtn.Focus();
             e.Handled = true;
         }
         else if (command == HtpcCommand.Down && sender == BackToLibraryBtn)
         {
-            // Explicitly force focus down to the Binge button
             BingeShowBtn.Focus();
             e.Handled = true;
         }
-        // --- NEW: FOCUS TRAPS ---
         else if (command == HtpcCommand.Down && sender == BingeShowBtn)
         {
-            e.Handled = true; // Trap focus on the bottom button
+            e.Handled = true; 
         }
         else if (command == HtpcCommand.Up && sender == BackToLibraryBtn)
         {
-            e.Handled = true; // Trap focus on the top button
+            e.Handled = true; 
         }
     }
 
-    // THE FIX: Listen for Enter/OK on the Episode Items
     private void EpisodeItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
@@ -546,7 +687,6 @@ public partial class ShowsView : UserControl
         }
         else if (command == HtpcCommand.Left)
         {
-            // FOCUS BRIDGE: Jump back to Seasons List
             SeasonsList.UpdateLayout(); 
             if (SeasonsList.SelectedItem != null)
             {
@@ -567,7 +707,7 @@ public partial class ShowsView : UserControl
         }
         else if (command == HtpcCommand.Right)
         {
-            e.Handled = true; // Block escaping right into the void
+            e.Handled = true; 
         }
     }
 
@@ -576,41 +716,6 @@ public partial class ShowsView : UserControl
         if (sender is ListBoxItem item && item.DataContext is MediaItem episode)
         {
             OnPlayRequested?.Invoke(this, episode);
-        }
-    }
-	
-	// --- 10-FOOT UI FOCUS TRAP FIXES ---
-
-    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var cb = sender as ComboBox;
-        var command = InputMapper.GetCommand(e.Key);
-
-        // If the dropdown is CLOSED, allow the D-Pad to escape instead of scrolling the hidden list!
-        if (cb != null && !cb.IsDropDownOpen)
-        {
-            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
-            {
-                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
-                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
-                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
-
-                cb.MoveFocus(new TraversalRequest(direction));
-                e.Handled = true; // Stop the ComboBox from stealing the input
-            }
-        }
-    }
-
-    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var command = InputMapper.GetCommand(e.Key);
-
-        // TextBoxes naturally capture Left/Right for typing, but we want Up/Down to escape!
-        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
-        {
-            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
-            e.Handled = true;
         }
     }
 	
@@ -626,11 +731,10 @@ public partial class ShowsView : UserControl
         {
             BingeChoiceOverlay.Visibility = Visibility.Visible;
             
-            // FIX: Wait for WPF to completely finish drawing the popup before snatching focus
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 BingeResumeBtn.Focus();
-                Keyboard.Focus(BingeResumeBtn); // Forcefully snatch hardware focus
+                Keyboard.Focus(BingeResumeBtn); 
             }), DispatcherPriority.ContextIdle);
         }
         else
@@ -652,21 +756,18 @@ public partial class ShowsView : UserControl
 
     private void LaunchBingeQueue(int startIndex)
     {
-        // Hide all overlays
         BingeChoiceOverlay.Visibility = Visibility.Collapsed;
         EpisodesOverlay.Visibility = Visibility.Collapsed;
         
-        // Send the queue to the player
         OnPlayQueueRequested?.Invoke(this, (_allEpisodesForSelectedShow, startIndex));
     }
 
     private void BingeCancel_Click(object sender, RoutedEventArgs e)
     {
         BingeChoiceOverlay.Visibility = Visibility.Collapsed;
-        BingeShowBtn.Focus(); // Return focus back to the original Binge button
+        BingeShowBtn.Focus(); 
     }
 
-    // --- 10-FOOT UI ROUTING FOR BINGE PROMPT ---
     private void BingeChoice_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
@@ -684,7 +785,7 @@ public partial class ShowsView : UserControl
         }
         else if (command == HtpcCommand.Right)
         {
-            e.Handled = true; // Prevent focus from flying off to the right side of the screen
+            e.Handled = true; 
         }
     }
 

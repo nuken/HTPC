@@ -10,6 +10,7 @@ using System.Windows.Controls.Primitives;
 using HTPC.Core.Input; 
 using HTPC.Core.Models;
 using HTPC.Services;
+using System.Threading.Tasks;
 
 namespace HTPC.UI.Views;
 
@@ -17,25 +18,30 @@ public partial class GuideView : UserControl
 {
     public event EventHandler? OnHomeRequested;
     public event EventHandler? OnMoviesRequested;
-	public event EventHandler? OnRecordingsRequested;
+    public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested; 
-	public event EventHandler? OnMultiviewRequested;
-	public event EventHandler? OnCollectionsRequested;
+    public event EventHandler? OnMultiviewRequested;
+    public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
     public ObservableCollection<Channel> DisplayedChannels { get; set; } = new ObservableCollection<Channel>();
-	private List<Channel> _allChannels = new List<Channel>();
-	private string _currentCollectionId = "All";
-	private List<ChannelCollection> _collections = new List<ChannelCollection>();
+    private List<Channel> _allChannels = new List<Channel>();
+    private List<ChannelCollection> _collections = new List<ChannelCollection>();
 
     private Airing? _selectedAiring;
     private Button? _lastFocusedAiringButton;
     private DateTime _lastTimeFocus = DateTime.MinValue;
-	private readonly DispatcherTimer _autoRefreshTimer;
+    private readonly DispatcherTimer _autoRefreshTimer;
+    
+    // --- Overlay Filter Variables ---
+    private string _activeCollectionName = "All Channels";
+    private string _currentCollectionId = "All";
+    private List<string> _availableCollections = new();
+    private IInputElement? _lastFocusedElement;
 
     public GuideView(MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -50,7 +56,6 @@ public partial class GuideView : UserControl
         this.PreviewKeyDown += GuideView_PreviewKeyDown; 
         this.IsVisibleChanged += GuideView_IsVisibleChanged;
 
-        // --- NEW: Start the Smart Sync EPG auto-refresh timer ---
         DateTime now = DateTime.Now;
         int minutesUntilNextHalfHour = 30 - (now.Minute % 30);
         int secondsUntilNextHalfHour = (minutesUntilNextHalfHour * 60) - now.Second;
@@ -59,52 +64,45 @@ public partial class GuideView : UserControl
         _autoRefreshTimer.Tick += AutoRefreshTimer_Tick;
         _autoRefreshTimer.Start();
     }
-	
-	private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
+    
+    private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
     {
-        // --- NEW: Lock the timer to exactly 30 minutes going forward ---
         if (sender is DispatcherTimer timer && timer.Interval.TotalMinutes != 30)
         {
             timer.Interval = TimeSpan.FromMinutes(30);
         }
 
-        if (CollectionDropdown.SelectedItem is string selection)
+        string selection = _activeCollectionName;
+
+        Airing? focusedAiring = (Keyboard.FocusedElement as Button)?.Tag as Airing;
+
+        ChannelCollection? targetCollection = null;
+        if (selection != "All Channels" && selection != "Favorites" && selection != "HD Channels" && selection != "SD Channels")
         {
-            // Remember what the user is currently highlighting...
-            Airing? focusedAiring = (Keyboard.FocusedElement as Button)?.Tag as Airing;
+            targetCollection = _collections.FirstOrDefault(c => c.Name == selection);
+        }
 
-            // 2. Fetch fresh data
-            ChannelCollection? targetCollection = null;
-            if (selection != "All Channels" && selection != "Favorites" && selection != "HD Channels" && selection != "SD Channels")
+        var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 4);
+
+        if (selection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
+        else if (selection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
+        else if (selection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
+
+        RenderGuideData(channels, selection);
+
+        if (focusedAiring != null)
+        {
+            var channel = DisplayedChannels.FirstOrDefault(c => c.Number == focusedAiring.ChannelNumber);
+            if (channel != null)
             {
-                targetCollection = _collections.FirstOrDefault(c => c.Name == selection);
-            }
-
-            var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 4);
-
-            if (selection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
-            else if (selection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
-            else if (selection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
-
-            // 3. Render the new data quietly
-            RenderGuideData(channels, selection);
-
-            // 4. Restore the user's focus seamlessly
-            if (focusedAiring != null)
-            {
-                var channel = DisplayedChannels.FirstOrDefault(c => c.Number == focusedAiring.ChannelNumber);
-                if (channel != null)
-                {
-                    var newAiring = channel.CurrentAirings?.FirstOrDefault(a => a.StartTime == focusedAiring.StartTime);
-                    if (newAiring != null) FocusAiringSafely(channel, newAiring);
-                }
+                var newAiring = channel.CurrentAirings?.FirstOrDefault(a => a.StartTime == focusedAiring.StartTime);
+                if (newAiring != null) FocusAiringSafely(channel, newAiring);
             }
         }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // 1. FOCUS HAMMER: Start on the Guide Button so we aren't lost in the void
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
             if (_lastFocusedAiringButton == null)
@@ -116,108 +114,160 @@ public partial class GuideView : UserControl
 
         if (DisplayedChannels.Count > 0) return; 
         
-        // 2. Fetch available custom collections from the DVR
-        _collections = await _libraryService.GetCollectionsAsync();
-        
-        // 3. Populate the Dropdown with our static roots + custom collections
-        CollectionDropdown.Items.Clear();
-        CollectionDropdown.Items.Add("All Channels");
-        CollectionDropdown.Items.Add("Favorites");
-        CollectionDropdown.Items.Add("HD Channels");
-        CollectionDropdown.Items.Add("SD Channels");
-        
-        foreach (var col in _collections)
+        if (_availableCollections.Count == 0)
         {
-            CollectionDropdown.Items.Add(col.Name);
+            _collections = await _libraryService.GetCollectionsAsync();
+            
+            _availableCollections.Add("All Channels");
+            _availableCollections.Add("Favorites");
+            _availableCollections.Add("HD Channels");
+            _availableCollections.Add("SD Channels");
+            
+            foreach (var col in _collections)
+            {
+                _availableCollections.Add(col.Name);
+            }
         }
 
-        // 4. Select the saved preference (or default to All Channels)
         var prefs = PreferencesManager.Load();
-        string savedSelection = string.IsNullOrEmpty(prefs.LastGuideCollection) ? "All Channels" : prefs.LastGuideCollection;
+        _activeCollectionName = string.IsNullOrEmpty(prefs.LastGuideCollection) ? "All Channels" : prefs.LastGuideCollection;
         
-        if (CollectionDropdown.Items.Contains(savedSelection))
-            CollectionDropdown.SelectedItem = savedSelection;
-        else
-            CollectionDropdown.SelectedIndex = 0;            
-        
-    }
-	
-	// --- DROPDOWN FILTER LOGIC ---
-    
-    private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (CollectionDropdown.SelectedItem is string selection)
-        {
-            // Clear the grid to give immediate visual feedback that it is loading
-            DisplayedChannels.Clear(); 
-            ChannelItemsControl.ItemsSource = null;
-            GuideItemsControl.ItemsSource = null;
-
-            ChannelCollection? targetCollection = null;
+        if (!_availableCollections.Contains(_activeCollectionName))
+            _activeCollectionName = "All Channels";
             
-            // If it's a custom collection, find the ID to pass to the API
-            if (selection != "All Channels" && selection != "Favorites" && selection != "HD Channels" && selection != "SD Channels")
+        CollectionFilterBtn.Content = $"{_activeCollectionName} ▼";
+
+        await LoadGuideDataAsync(_activeCollectionName);
+    }
+    
+    private async Task LoadGuideDataAsync(string selection)
+    {
+        DisplayedChannels.Clear(); 
+        ChannelItemsControl.ItemsSource = null;
+        GuideItemsControl.ItemsSource = null;
+
+        ChannelCollection? targetCollection = null;
+        
+        if (selection != "All Channels" && selection != "Favorites" && selection != "HD Channels" && selection != "SD Channels")
+        {
+            targetCollection = _collections.FirstOrDefault(c => c.Name == selection);
+        }
+
+        var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 4);
+
+        if (selection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
+        else if (selection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
+        else if (selection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
+
+        ChannelItemsControl.ItemsSource = DisplayedChannels;
+        GuideItemsControl.ItemsSource = DisplayedChannels;
+        RenderGuideData(channels, selection);
+    }
+
+    // --- NEW TV-OVERLAY FILTER LOGIC ---
+    
+    private void CollectionFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        FilterSelectionList.ItemsSource = _availableCollections;
+        FilterSelectionList.SelectedItem = _activeCollectionName;
+        OpenFilterOverlay();
+    }
+
+    private void OpenFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Visible;
+        _lastFocusedElement = Keyboard.FocusedElement;
+
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (FilterSelectionList.SelectedItem != null)
             {
-                targetCollection = _collections.FirstOrDefault(c => c.Name == selection);
+                FilterSelectionList.ScrollIntoView(FilterSelectionList.SelectedItem);
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromItem(FilterSelectionList.SelectedItem) as UIElement;
+                item?.Focus();
             }
+            else if (FilterSelectionList.Items.Count > 0)
+            {
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+        }, DispatcherPriority.Loaded);
+    }
 
-            // Fetch Base Data (If targetCollection is null, this fetches ALL channels)
-            var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 4);
+    private void CloseFilterOverlay()
+    {
+        FilterOverlay.Visibility = Visibility.Collapsed;
+        
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+        {
+            Keyboard.Focus(uiElement);
+        }
+    }
 
-            // Apply Secondary Static Filters
-            if (selection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
-            else if (selection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
-            else if (selection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
-
-            // Re-bind and Render
-            ChannelItemsControl.ItemsSource = DisplayedChannels;
-            GuideItemsControl.ItemsSource = DisplayedChannels;
-            RenderGuideData(channels, selection);
-
-            // --- SAVE THE SELECTION SO IT PERSISTS ON RESTART ---
+    private async void ProcessFilterSelection(object selectedItem)
+    {
+        if (selectedItem is string selection)
+        {
+            _activeCollectionName = selection;
+            CollectionFilterBtn.Content = $"{selection} ▼";
+            CloseFilterOverlay();
+            
             try 
             {
                 var prefs = PreferencesManager.Load();
                 prefs.LastGuideCollection = selection;
                 PreferencesManager.Save(prefs);
             }
-            catch 
-            { 
-                /* Silently fail if file is locked */ 
-            }
+            catch { }
+
+            await LoadGuideDataAsync(selection);
+        }
+    }
+
+    private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FilterSelectionList.SelectedItem != null) ProcessFilterSelection(FilterSelectionList.SelectedItem);
+    }
+
+    private void FilterSelectionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && FilterSelectionList.SelectedItem != null)
+        {
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    private void FilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Up) 
+        {
+            GuideNavBtn.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Down)
+        {
+            FocusFirstAiring();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            var direction = command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+            (sender as FrameworkElement)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true; 
         }
     }
 
     // --- 10-FOOT UI FOCUS BRIDGES ---
-    
-    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var cb = sender as ComboBox;
-        var command = InputMapper.GetCommand(e.Key);
-
-        if (cb != null && !cb.IsDropDownOpen)
-        {
-            // FOCUS BRIDGE: Pushing UP escapes to the Top Nav!
-            if (command == HtpcCommand.Up)
-            {
-                GuideNavBtn.Focus();
-                e.Handled = true;
-            }
-            // FOCUS BRIDGE: Pushing DOWN jumps exactly into the first TV show!
-            else if (command == HtpcCommand.Down)
-            {
-                FocusFirstAiring();
-                e.Handled = true;
-            }
-            // Allow Left/Right to still navigate between the UI columns normally
-            else if (command == HtpcCommand.Left || command == HtpcCommand.Right)
-            {
-                var direction = command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
-                cb.MoveFocus(new TraversalRequest(direction));
-                e.Handled = true; 
-            }
-        }
-    }
 
     private void GuideNav_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -228,7 +278,6 @@ public partial class GuideView : UserControl
             FocusFirstAiring();
             e.Handled = true;
         }
-        // FOCUS BRIDGE: Pushing UP from the side scrolling buttons escapes to the Top Nav!
         else if (command == HtpcCommand.Up)
         {
             GuideNavBtn.Focus();
@@ -242,7 +291,7 @@ public partial class GuideView : UserControl
         
         if (command == HtpcCommand.Down)
         {
-            CollectionDropdown.Focus();
+            CollectionFilterBtn.Focus();
             e.Handled = true;
         }
     }
@@ -255,10 +304,20 @@ public partial class GuideView : UserControl
 
         if (ModalOverlay.Visibility == Visibility.Visible)
         {
-            if (command == HtpcCommand.Back)
+            if (command == HtpcCommand.Back || e.Key == Key.Escape)
             {
                 CloseModal_Click(null!, null!);
                 _lastFocusedAiringButton?.Focus();
+                e.Handled = true;
+            }
+            return;
+        }
+        
+        if (FilterOverlay.Visibility == Visibility.Visible)
+        {
+            if (command == HtpcCommand.Back || e.Key == Key.Escape)
+            {
+                CloseFilterOverlay();
                 e.Handled = true;
             }
             return;
@@ -267,14 +326,12 @@ public partial class GuideView : UserControl
         bool isArrowKey = command == HtpcCommand.Left || command == HtpcCommand.Right || command == HtpcCommand.Up || command == HtpcCommand.Down;
         if (!isArrowKey) return;
 
-        // --- NEW: TOP NAV BRIDGE ---
-        // Prevent focus from falling into the invisible channel list when pushing down from the top menu
-        if (command == HtpcCommand.Down && Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null)
+        if (command == HtpcCommand.Down && Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null && topBtn != CollectionFilterBtn)
         {
             string? btnText = topBtn.Content?.ToString();
             if (btnText == "Home" || btnText == "Guide" || btnText == "Multiview" || btnText == "Movies" || btnText == "Shows" || btnText == "Videos" || btnText == "Settings")
             {
-                CollectionDropdown.Focus();
+                CollectionFilterBtn.Focus();
                 e.Handled = true;
                 return;
             }
@@ -300,9 +357,7 @@ public partial class GuideView : UserControl
                     }
                     else if (nextIndex < 0 && command == HtpcCommand.Left)
                     {
-                        // --- NEW: LEFT EDGE BRIDGE ---
-                        // Stop focus from falling off the far left edge of the grid
-                        CollectionDropdown.Focus();
+                        CollectionFilterBtn.Focus();
                     }
                 }
             }
@@ -327,14 +382,13 @@ public partial class GuideView : UserControl
                 }
                 else if (nextIndex < 0 && command == HtpcCommand.Up)
                 {
-                    // FOCUS BRIDGE: Pushing UP from the very top row of the EPG escapes to the dropdown!
-                    CollectionDropdown.Focus();
+                    CollectionFilterBtn.Focus();
                 }
             }
             return; 
         }
 
-        bool isFocusedOnTopMenu = Keyboard.FocusedElement is ComboBox || Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is CheckBox ||
+        bool isFocusedOnTopMenu = Keyboard.FocusedElement == CollectionFilterBtn || Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is CheckBox ||
                                   (Keyboard.FocusedElement is Button tb && tb.Tag == null) ||
                                   (Keyboard.FocusedElement is RepeatButton);
 
@@ -347,14 +401,12 @@ public partial class GuideView : UserControl
             }
         }
     }
-	
+    
     private void GuideView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if ((bool)e.NewValue && DisplayedChannels.Count > 0)
+        if ((bool)e.NewValue)
         {
-            // Only restore focus to the grid if they were ACTUALLY in the grid previously
-            // This stops the UI from "stealing" focus away from the Top Nav when swapping tabs
-            if (_lastFocusedAiringButton != null && _lastFocusedAiringButton.Tag is Airing lastAiring)
+            if (DisplayedChannels.Count > 0 && _lastFocusedAiringButton != null && _lastFocusedAiringButton.Tag is Airing lastAiring)
             {
                 var channel = DisplayedChannels.FirstOrDefault(c => c.Number == lastAiring.ChannelNumber);
                 if (channel != null) 
@@ -364,11 +416,14 @@ public partial class GuideView : UserControl
                 }
             }
             
-            // If they are just tabbing over, leave the focus safely on the Top Nav
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 GuideNavBtn.Focus();
             }), DispatcherPriority.ApplicationIdle);
+        }
+        else
+        {
+            if (FilterOverlay.Visibility == Visibility.Visible) CloseFilterOverlay();
         }
     }
 
@@ -376,16 +431,14 @@ public partial class GuideView : UserControl
     {
         this.Focus(); 
 
-        // --- NEW: Custom TV "Camera Bounds" Scrolling ---
         var sv = GetScrollViewer(GuideItemsControl);
         if (sv != null)
         {
             int index = DisplayedChannels.IndexOf(channel);
-            double rowHeight = 80.0; // 70 height + 5 top margin + 5 bottom margin
+            double rowHeight = 80.0; 
             
-            // Calculate our desired viewport boundaries
-            double desiredTopOffset = (index - 3) * rowHeight; // Pushes scroll down if we go below the 4th row
-            double desiredBottomOffset = index * rowHeight;    // Pushes scroll up if we go above the 1st row
+            double desiredTopOffset = (index - 3) * rowHeight; 
+            double desiredBottomOffset = index * rowHeight;    
             
             if (desiredTopOffset > sv.VerticalOffset)
             {
@@ -397,7 +450,6 @@ public partial class GuideView : UserControl
             }
         }
 
-        // We still call the native method as a fallback to ensure WPF Virtualization wakes up properly
         GuideItemsControl.ScrollIntoView(channel);
         
         Dispatcher.BeginInvoke(new Action(() => 
@@ -462,7 +514,7 @@ public partial class GuideView : UserControl
 
     // --- OTHER UI LOGIC ---
     
-	private async void FavoriteToggle_Click(object sender, RoutedEventArgs e)
+    private async void FavoriteToggle_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is Channel channel)
         {
@@ -483,13 +535,13 @@ public partial class GuideView : UserControl
             }
         }
     }
-	
-	private void FilterChannels()
+    
+    private void FilterChannels()
     {
         DisplayedChannels.Clear();
         bool showHidden = ShowHiddenCheckBox.IsChecked == true;
         
-        string currentFilter = CollectionDropdown.SelectedItem as string ?? "All Channels";
+        string currentFilter = _activeCollectionName;
 
         foreach (var channel in _allChannels)
         {
@@ -636,10 +688,8 @@ public partial class GuideView : UserControl
     {
         ModalOverlay.Visibility = Visibility.Collapsed;
         
-        // --- FIX: Restore focus directly to the specific cell we were tracking! ---
         if (_lastFocusedAiringButton != null)
         {
-            // Use Dispatcher to ensure the modal is fully hidden before trying to grab focus
             _ = Dispatcher.BeginInvoke(new Action(() => 
             {
                 _lastFocusedAiringButton.Focus();
@@ -649,13 +699,13 @@ public partial class GuideView : UserControl
 
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
-	private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
-	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
-	
+    private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
+    
     private void ChannelItemsControl_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         var sv = GetScrollViewer(GuideItemsControl);
@@ -686,14 +736,13 @@ public partial class GuideView : UserControl
     {
         _currentCollectionId = string.IsNullOrEmpty(collectionId) ? "All" : collectionId;
 
-        // Apply saved custom sorting before rendering!
         var prefs = PreferencesManager.Load();
         if (prefs.CustomChannelOrders != null && prefs.CustomChannelOrders.TryGetValue(_currentCollectionId, out var savedOrder))
         {
             channels = channels.OrderBy(c => 
             {
                 int idx = savedOrder.IndexOf(c.Number);
-                return idx != -1 ? idx : 999999; // If it's a new channel, put it at the bottom
+                return idx != -1 ? idx : 999999; 
             }).ToList();
         }
 
@@ -716,8 +765,8 @@ public partial class GuideView : UserControl
         }
         TimeHeadersControl.ItemsSource = headers;
     }
-	
-	// --- CUSTOM SORTING LOGIC ---
+    
+    // --- CUSTOM SORTING LOGIC ---
 
     private void MoveChannelUp_Click(object sender, RoutedEventArgs e)
     {
@@ -728,7 +777,7 @@ public partial class GuideView : UserControl
             {
                 _allChannels.RemoveAt(index);
                 _allChannels.Insert(index - 1, channel);
-                FilterChannels(); // Instantly redraws the UI
+                FilterChannels(); 
                 SaveCurrentSortOrder();
             }
         }
@@ -777,10 +826,8 @@ public partial class GuideView : UserControl
         if (prefs.CustomChannelOrders == null) 
             prefs.CustomChannelOrders = new Dictionary<string, List<string>>();
         
-        // Extract the new order of Channel Numbers
         var newOrder = _allChannels.Select(c => c.Number).ToList();
         
-        // Save it to this specific collection
         prefs.CustomChannelOrders[_currentCollectionId] = newOrder;
         PreferencesManager.Save(prefs);
     }

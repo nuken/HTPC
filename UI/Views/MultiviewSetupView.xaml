@@ -2,7 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="#0F0F0F" Foreground="White"
-             Focusable="True">
+             Focusable="True"
+             PreviewKeyDown="UserControl_PreviewKeyDown">
 
     <UserControl.Resources>
         <Style x:Key="StandardFocusStyle" TargetType="Control">
@@ -114,9 +115,18 @@
                     
                     <TextBlock Grid.Row="0" Text="1. Select Live Channels" FontSize="24" FontWeight="Bold" Margin="0,0,0,15"/>
                     
-                    <ComboBox x:Name="CollectionDropdown" PreviewKeyDown="Dropdown_PreviewKeyDown" Grid.Row="1" Width="250" HorizontalAlignment="Left" FontSize="16" FontWeight="Bold" Margin="0,0,0,20" Height="45"
-                              SelectionChanged="CollectionDropdown_SelectionChanged" FocusVisualStyle="{StaticResource StandardFocusStyle}">
-                    </ComboBox>
+                    <!-- UI UPDATED: Replaced ComboBox with Overlay Trigger Button -->
+                    <Button x:Name="CollectionFilterBtn" Grid.Row="1" Width="250" HorizontalAlignment="Left" 
+                            Content="All Channels ▼" Background="#1A1A1A" Foreground="White" BorderThickness="1" BorderBrush="#333333" 
+                            FontSize="16" FontWeight="Bold" Margin="0,0,0,20" Height="45"
+                            Click="CollectionFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" 
+                            FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="8"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
 
                     <ListBox x:Name="ChannelItemsControl" Grid.Row="2" Background="Transparent" BorderThickness="0" 
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" 
@@ -228,5 +238,60 @@
                 </StackPanel>
             </Border>
         </Grid>
+        
+        <!-- NEW: FILTER SELECTION OVERLAY -->
+        <Border x:Name="FilterOverlay" Grid.RowSpan="2" Background="#F20A0A0A" Visibility="Collapsed" Panel.ZIndex="600">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="FilterOverlayTitle" Text="Select Channel Filter" Foreground="White" FontSize="28" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center"/>
+
+                <ListBox x:Name="FilterSelectionList" Grid.Row="1" MaxHeight="500" Width="350" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         PreviewKeyDown="FilterSelectionList_PreviewKeyDown"
+                         MouseLeftButtonUp="FilterSelectionList_MouseUp">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="20,15"/>
+                            <Setter Property="Margin" Value="0,0,0,10"/>
+                            <Setter Property="Background" Value="#1A1A1A"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="FontSize" Value="20"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="2">
+                                            <ContentPresenter HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#333333"/>
+                                                <Setter Property="Foreground" Value="#00A4EF"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="#444444"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter TargetName="bg" Property="BorderBrush" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" HorizontalAlignment="Center"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

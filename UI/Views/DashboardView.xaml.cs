@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
-using HTPC.Core.Input; // Required for the new InputMapper
+using HTPC.Core.Input; 
 using HTPC.Core.Models;
 using HTPC.Services;
 
@@ -19,55 +19,54 @@ public partial class DashboardView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnMoviesRequested;
-	public event EventHandler? OnRecordingsRequested;
+    public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
-	public event EventHandler? OnMultiviewRequested;
-	public event EventHandler? OnCollectionsRequested;
+    public event EventHandler? OnMultiviewRequested;
+    public event EventHandler? OnCollectionsRequested;
 
     private readonly MediaLibraryService _libraryService;
     private readonly ServerManagerService _serverManager;
-    private bool _isUpdatingDropdown = true;
-	private readonly UpdateService _updateService;
+    private readonly UpdateService _updateService;
+    
     private string _latestReleaseUrl = string.Empty;
     private string _latestReleaseVersion = string.Empty;
 
-    // ObservableCollection automatically notifies the UI when items are added/removed
+    // --- Overlay Filter Variables ---
+    private ChannelCollection? _activeCollection;
+    private System.Collections.Generic.List<ChannelCollection> _availableCollections = new();
+    private IInputElement? _lastFocusedElement;
+
     public ObservableCollection<MediaItem> FeaturedMovies { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> LiveChannels { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> RecentEpisodes { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> RecentVideos { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<MediaItem> UpNextQueue { get; set; } = new ObservableCollection<MediaItem>();
-	
+    
     public DashboardView(MediaLibraryService libraryService, ServerManagerService serverManager, UpdateService updateService)
-{
-    InitializeComponent();
-    _libraryService = libraryService;
-    _serverManager = serverManager;
-    _updateService = updateService; // Save the injected service
-    this.DataContext = this;
-    Loaded += OnLoaded;
-}
+    {
+        InitializeComponent();
+        _libraryService = libraryService;
+        _serverManager = serverManager;
+        _updateService = updateService; 
+        this.DataContext = this;
+        Loaded += OnLoaded;
+    }
 
-    // 1. THIS IS THE NEW HELPER METHOD
     private void ApplyDashboardLayout()
     {
         var prefs = PreferencesManager.Load();
         
-        // Remove all sections from the visual tree
         DashboardContentPanel.Children.Clear();
-
-        // Sort the saved layout by the Order integer
         var sortedLayout = prefs.DashboardLayout.OrderBy(r => r.Order).ToList();
 
         foreach (var row in sortedLayout)
         {
-            if (!row.IsVisible) continue; // Skip it entirely if the user disabled it
+            if (!row.IsVisible) continue; 
 
             switch (row.Id)
             {
                 case "UpNext":
-                    // Only add Up Next if there is actually content in the queue
                     if (UpNextQueue.Count > 0) DashboardContentPanel.Children.Add(SectionUpNext);
                     break;
                 case "LiveTv":
@@ -86,24 +85,18 @@ public partial class DashboardView : UserControl
         }
     }
 
-    // 2. THIS IS YOUR UPDATED ONLOADED METHOD (Now 100% Null-Safe & Scope-Safe)
     private async void OnLoaded(object sender, RoutedEventArgs e)
-{
-    var activeServer = _serverManager.GetActiveServer();
-    
-    // Redirect to settings if the database is empty or missing a server IP
-    if (activeServer == null || string.IsNullOrWhiteSpace(activeServer.IpAddress))
     {
-        OnSettingsRequested?.Invoke(this, EventArgs.Empty);
-        return; 
-    } 
-    
-    // --- NEW: FIRE AND FORGET THE UPDATE CHECK ---
-    // We don't await this directly because we don't want a slow network 
-    // to block the UI from loading the media library below.
-    _ = CheckForUpdatesAsync();
+        var activeServer = _serverManager.GetActiveServer();
         
-        // --- 1. INSTANT UI LOAD ---
+        if (activeServer == null || string.IsNullOrWhiteSpace(activeServer.IpAddress))
+        {
+            OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+            return; 
+        } 
+        
+        _ = CheckForUpdatesAsync();
+        
         if (FeaturedMovies.Count > 0) 
         {
             if (LoadingOverlay != null) LoadingOverlay.Visibility = Visibility.Collapsed;
@@ -120,23 +113,18 @@ public partial class DashboardView : UserControl
             if (LoadingOverlay != null) LoadingOverlay.Visibility = Visibility.Visible;
         }
 
-        // --- 2. BACKGROUND DATA REFRESH ---
         var collections = await _libraryService.GetCollectionsAsync();
         var allChannels = new ChannelCollection { Id = "", Name = "All Channels" };
         collections.Insert(0, allChannels);
         
-        // FIX: Declare savedCollection OUTSIDE the if-block so it can be used later!
         var savedCollection = collections.FirstOrDefault(c => c.Id == activeServer?.DefaultCollectionId);
 
-        // Safely update the dropdown
-        if (CollectionDropdown != null)
-        {
-            CollectionDropdown.ItemsSource = collections;
-            CollectionDropdown.SelectedItem = savedCollection ?? allChannels;
-        }
-        _isUpdatingDropdown = false; 
+        // Populate new Overlay Button logic
+        _availableCollections = collections;
+        _activeCollection = savedCollection ?? allChannels;
+        if (CollectionFilterBtn != null) CollectionFilterBtn.Content = $"{_activeCollection.Name} ▼";
 
-        await LoadLiveTvData(savedCollection ?? allChannels);
+        await LoadLiveTvData(_activeCollection);
         
         var movies = await _libraryService.GetFeaturedMoviesAsync();
         FeaturedMovies.Clear(); 
@@ -156,8 +144,6 @@ public partial class DashboardView : UserControl
         
         ApplyDashboardLayout();
 
-        // --- 3. FINAL CLEANUP ---
-        // Safely check if the overlay exists before touching its properties
         if (LoadingOverlay != null && LoadingOverlay.Visibility == Visibility.Visible)
         {
             LoadingOverlay.Visibility = Visibility.Collapsed;
@@ -166,18 +152,6 @@ public partial class DashboardView : UserControl
                 HomeNavBtn?.Focus();
                 if (HomeNavBtn != null) Keyboard.Focus(HomeNavBtn); 
             }), DispatcherPriority.ApplicationIdle);
-        }
-    }
-
-    private async void CollectionDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isUpdatingDropdown) return;
-        
-        if (CollectionDropdown.SelectedItem is ChannelCollection selectedCollection)
-        {
-            // Save to database instantly
-            _serverManager.SetDefaultCollection(selectedCollection.Id);
-            await LoadLiveTvData(selectedCollection);
         }
     }
 
@@ -190,72 +164,135 @@ public partial class DashboardView : UserControl
             LiveChannels.Add(channel);
         }
     }
-    
-    // --- UPDATED NAVIGATION SIGNATURES (RoutedEventArgs) ---
-    private void Guide_Click(object sender, RoutedEventArgs e)
+
+    // --- NEW TV-OVERLAY FILTER LOGIC ---
+
+    private void CollectionFilterBtn_Click(object sender, RoutedEventArgs e)
     {
-        OnGuideRequested?.Invoke(this, EventArgs.Empty);
+        FilterSelectionList.ItemsSource = _availableCollections;
+        FilterSelectionList.SelectedItem = _activeCollection;
+        OpenFilterOverlay();
     }
 
-    private void ExitApp_Click(object sender, RoutedEventArgs e)
+    private void OpenFilterOverlay()
     {
-        OnExitRequested?.Invoke(this, EventArgs.Empty);
+        FilterOverlay.Visibility = Visibility.Visible;
+        _lastFocusedElement = Keyboard.FocusedElement;
+
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (FilterSelectionList.SelectedItem != null)
+            {
+                FilterSelectionList.ScrollIntoView(FilterSelectionList.SelectedItem);
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromItem(FilterSelectionList.SelectedItem) as UIElement;
+                item?.Focus();
+            }
+            else if (FilterSelectionList.Items.Count > 0)
+            {
+                var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                item?.Focus();
+            }
+        }, DispatcherPriority.Loaded);
     }
 
-    private void Settings_Click(object sender, RoutedEventArgs e)
+    private void CloseFilterOverlay()
     {
-        OnSettingsRequested?.Invoke(this, EventArgs.Empty);
-    }
-    
-    private void Movies_Click(object sender, RoutedEventArgs e)
-    {
-        OnMoviesRequested?.Invoke(this, EventArgs.Empty);
-    }
-	
-	private void Recordings_Click(object sender, RoutedEventArgs e)
-    {
-        OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
-    }
-	
-	private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
-	    
-    private void Shows_Click(object sender, RoutedEventArgs e)
-    {
-        OnShowsRequested?.Invoke(this, EventArgs.Empty);
+        FilterOverlay.Visibility = Visibility.Collapsed;
+        if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible)
+        {
+            Keyboard.Focus(uiElement);
+        }
     }
 
-    private void Videos_Click(object sender, RoutedEventArgs e)
+    private async void ProcessFilterSelection(object selectedItem)
     {
-        OnVideosRequested?.Invoke(this, EventArgs.Empty);
+        if (selectedItem is ChannelCollection collection)
+        {
+            _activeCollection = collection;
+            CollectionFilterBtn.Content = $"{collection.Name} ▼";
+            CloseFilterOverlay();
+            
+            _serverManager.SetDefaultCollection(collection.Id);
+            await LoadLiveTvData(collection);
+        }
     }
-	
-	private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
+
+    private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FilterSelectionList.SelectedItem != null) 
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+    }
+
+    private void FilterSelectionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Select && FilterSelectionList.SelectedItem != null)
+        {
+            ProcessFilterSelection(FilterSelectionList.SelectedItem);
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    private void FilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
+                            command == HtpcCommand.Up ? FocusNavigationDirection.Up :
+                            command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
+
+            (sender as FrameworkElement)?.MoveFocus(new TraversalRequest(direction));
+            e.Handled = true; 
+        }
+    }
+
+    private void UserControl_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+
+        if (FilterOverlay.Visibility == Visibility.Visible && (command == HtpcCommand.Back || e.Key == Key.Escape))
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+    }
+
+    // --- NAVIGATION LOGIC ---
+    private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
+    private void ExitApp_Click(object sender, RoutedEventArgs e) => OnExitRequested?.Invoke(this, EventArgs.Empty);
+    private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
+    private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
+    private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
+    private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
+    private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+    private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 
     // --- NATIVE NAVIGATION FIXES ---
-
     private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
         
-        // 1. Handle OK/Enter to play the movie
         if (command == HtpcCommand.Select && sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
             OnPlayRequested?.Invoke(this, movie);
             e.Handled = true; 
         }
-        // 2. THE ESCAPE HATCH: Handle Up/Down to jump between rows instantly
         else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
         {
             var currentItem = sender as ListBoxItem;
             if (currentItem == null) return;
 
             var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            
-            // Predict where WPF wants to go natively BEFORE we actually move
             var predicted = currentItem.PredictFocus(direction) as FrameworkElement;
 
-            // FIX 1: THE WRAP-AROUND BUG
-            // If WPF's spatial cone misses the top nav, it wraps to the bottom of the page.
             if (command == HtpcCommand.Up)
             {
                 bool isWrapAround = false;
@@ -266,43 +303,36 @@ public partial class DashboardView : UserControl
                         Point currentPos = currentItem.PointToScreen(new Point(0, 0));
                         Point predictedPos = predicted.PointToScreen(new Point(0, 0));
                         
-                        // If the "Up" target is physically lower on the screen, it wrapped around!
                         if (predictedPos.Y >= currentPos.Y) isWrapAround = true;
                     } 
-                    catch { /* Ignore coordinate errors during rapid scrolling */ }
+                    catch { }
                 }
 
-                // If it missed entirely, or it wrapped around, snap directly to the Top Nav!
                 if (predicted == null || isWrapAround)
                 {
                     HomeNavBtn.Focus();
-                    MainScroll.ScrollToTop(); // Instantly bring top menu into view
+                    MainScroll.ScrollToTop(); 
                     e.Handled = true;
                     return;
                 }
             }
 
-            // Execute the physical movement
             currentItem.MoveFocus(new TraversalRequest(direction));
             
-            // FIX 2: THE DOUBLE-CLICK BUG
-            // We force it to physically scroll into view by mathematically calculating its position.
             var newFocus = Keyboard.FocusedElement as FrameworkElement;
             if (newFocus != null)
             {
                 ScrollToElement(MainScroll, newFocus);
             }
 
-            e.Handled = true; // Tell WPF we handled the movement
+            e.Handled = true; 
         }
     }
 
-    // --- TOUCH & MOUSE SCROLLING SAFETY LOGIC ---
     private Point? _touchDownPosition;
 
     private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // Capture the position BEFORE the ScrollViewer can intercept it
         _touchDownPosition = e.GetPosition(this);
     }
 
@@ -310,36 +340,27 @@ public partial class DashboardView : UserControl
     {
         if (_touchDownPosition == null) return;
 
-        // 1. Calculate how far the finger/mouse moved
         var currentPosition = e.GetPosition(this);
         double distanceX = Math.Abs(currentPosition.X - _touchDownPosition.Value.X);
         double distanceY = Math.Abs(currentPosition.Y - _touchDownPosition.Value.Y);
 
-        _touchDownPosition = null; // Reset for the next interaction
+        _touchDownPosition = null; 
 
-        // 2. If it moved more than 15 pixels, it was a swipe/pan. Ignore the click!
         if (distanceX > 15 || distanceY > 15) return;
 
-        // 3. Otherwise, it was a clean mouse click or screen tap. Play the media.
         if (sender is ListBoxItem item && item.DataContext is MediaItem movie)
         {
             OnPlayRequested?.Invoke(this, movie);
-            e.Handled = true; // Tell WPF we handled this, stopping the ScrollViewer from interfering
+            e.Handled = true; 
         }
     }
-
-    // --- MOUSE SCROLLING LOGIC ---
 
     private void ScrollLeft_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is ListBox listBox)
         {
             var viewer = GetScrollViewer(listBox);
-            if (viewer != null)
-            {
-                // Jump left by roughly 3 posters
-                viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - 600);
-            }
+            if (viewer != null) viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - 600);
         }
     }
 
@@ -348,17 +369,12 @@ public partial class DashboardView : UserControl
         if (sender is Button btn && btn.Tag is ListBox listBox)
         {
             var viewer = GetScrollViewer(listBox);
-            if (viewer != null)
-            {
-                // Jump right by roughly 3 posters
-                viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset + 600);
-            }
+            if (viewer != null) viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset + 600);
         }
     }
     
     private void HorizontalList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // If the user holds Shift, scroll the horizontal row
         if (Keyboard.Modifiers == ModifierKeys.Shift)
         {
             if (sender is ListBox listBox)
@@ -373,7 +389,6 @@ public partial class DashboardView : UserControl
         }
         else
         {
-            // Otherwise, pass the scroll event UP to the Main ScrollViewer so the whole page moves naturally!
             e.Handled = true;
             var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
             {
@@ -383,78 +398,68 @@ public partial class DashboardView : UserControl
             MainScroll.RaiseEvent(eventArg);
         }
     }
-	
-	private async Task CheckForUpdatesAsync()
-{
-    var update = await _updateService.CheckForUpdatesAsync();
     
-    if (update.UpdateAvailable)
+    private async Task CheckForUpdatesAsync()
     {
-        var prefs = PreferencesManager.Load();
+        var update = await _updateService.CheckForUpdatesAsync();
         
-        // Only show if it's a version they haven't explicitly ignored yet, OR if their 1-week timeout expired
-        if (prefs.LastIgnoredVersion != update.LatestVersion || DateTime.Now > prefs.IgnoreUntilDate)
+        if (update.UpdateAvailable)
         {
-            _latestReleaseUrl = update.ReleaseUrl;
-            _latestReleaseVersion = update.LatestVersion;
+            var prefs = PreferencesManager.Load();
             
-            // Execute on the UI thread since we are modifying visual elements from an async background task
-            Dispatcher.Invoke(() => 
+            if (prefs.LastIgnoredVersion != update.LatestVersion || DateTime.Now > prefs.IgnoreUntilDate)
             {
-                UpdateMessageText.Text = $"Nucleus HTPC {update.LatestVersion} is available!";
-                UpdateBanner.Visibility = Visibility.Visible;
+                _latestReleaseUrl = update.ReleaseUrl;
+                _latestReleaseVersion = update.LatestVersion;
+                
+                Dispatcher.Invoke(() => 
+                {
+                    UpdateMessageText.Text = $"Nucleus HTPC {update.LatestVersion} is available!";
+                    UpdateBanner.Visibility = Visibility.Visible;
+                });
+            }
+        }
+    }
+
+    private async void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        BtnDownloadUpdate.Content = "Downloading...";
+        BtnDownloadUpdate.IsEnabled = false;
+
+        var installerPath = await _updateService.DownloadInstallerAsync(_latestReleaseVersion);
+
+        if (installerPath != null && System.IO.File.Exists(installerPath))
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo(installerPath) { UseShellExecute = true };
+            System.Diagnostics.Process.Start(startInfo);
+
+            await Task.Delay(500); 
+            Application.Current.Shutdown();
+        }
+        else
+        {
+            BtnDownloadUpdate.Content = "Retry / Open Browser";
+            BtnDownloadUpdate.IsEnabled = true;
+            
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo 
+            { 
+                FileName = _latestReleaseUrl, 
+                UseShellExecute = true 
             });
         }
     }
-}
 
-private async void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
-{
-    // 1. Give visual feedback
-    BtnDownloadUpdate.Content = "Downloading...";
-    BtnDownloadUpdate.IsEnabled = false;
-
-    // 2. Run download in the background 
-    var installerPath = await _updateService.DownloadInstallerAsync(_latestReleaseVersion);
-
-    if (installerPath != null && System.IO.File.Exists(installerPath))
+    private void BtnIgnoreUpdate_Click(object sender, RoutedEventArgs e)
     {
-        // 3. Launch the installer
-        var startInfo = new System.Diagnostics.ProcessStartInfo(installerPath) { UseShellExecute = true };
-        System.Diagnostics.Process.Start(startInfo);
-
-        // Give the installer 500ms to open, then securely close the app
-        await Task.Delay(500); 
-        Application.Current.Shutdown();
-    }
-    else
-    {
-        // 4. Fallback: If background download fails, open browser as a safety net
-        BtnDownloadUpdate.Content = "Retry / Open Browser";
-        BtnDownloadUpdate.IsEnabled = true;
+        var prefs = PreferencesManager.Load();
+        prefs.LastIgnoredVersion = _latestReleaseVersion;
+        prefs.IgnoreUntilDate = DateTime.Now.AddDays(7);
+        PreferencesManager.Save(prefs);
         
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo 
-        { 
-            FileName = _latestReleaseUrl, 
-            UseShellExecute = true 
-        });
+        UpdateBanner.Visibility = Visibility.Collapsed;
+        HomeNavBtn?.Focus();
     }
-}
 
-private void BtnIgnoreUpdate_Click(object sender, RoutedEventArgs e)
-{
-    // Update preferences to ignore this specific version for 7 days
-    var prefs = PreferencesManager.Load();
-    prefs.LastIgnoredVersion = _latestReleaseVersion;
-    prefs.IgnoreUntilDate = DateTime.Now.AddDays(7);
-    PreferencesManager.Save(prefs);
-    
-    // Hide the banner and safely drop focus back down to the main navigation menu
-    UpdateBanner.Visibility = Visibility.Collapsed;
-    HomeNavBtn?.Focus();
-}
-
-    // Standard WPF VisualTree trick to find the hidden ScrollViewer inside a ListBox
     private ScrollViewer? GetScrollViewer(DependencyObject depObj)
     {
         if (depObj is ScrollViewer viewer) return viewer;
@@ -465,62 +470,8 @@ private void BtnIgnoreUpdate_Click(object sender, RoutedEventArgs e)
             if (result != null) return result;
         }
         return null;
-    }	
-	
-	// --- 10-FOOT UI FOCUS TRAP FIXES ---
-
-    private void Dropdown_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var cb = sender as ComboBox;
-        var command = InputMapper.GetCommand(e.Key);
-
-        if (cb != null && !cb.IsDropDownOpen)
-        {
-            if (command == HtpcCommand.Up)
-            {
-                var predicted = cb.PredictFocus(FocusNavigationDirection.Up) as FrameworkElement;
-                bool isWrapAround = false;
-                try 
-                {
-                    if (predicted != null) 
-                    {
-                        Point currentPos = cb.PointToScreen(new Point(0, 0));
-                        Point predictedPos = predicted.PointToScreen(new Point(0, 0));
-                        if (predictedPos.Y >= currentPos.Y) isWrapAround = true;
-                    }
-                } 
-                catch {}
-
-                // Prevent the Dropdown from wrapping around to the bottom
-                if (predicted == null || isWrapAround)
-                {
-                    HomeNavBtn.Focus();
-                    MainScroll.ScrollToTop();
-                    e.Handled = true;
-                    return;
-                }
-            }
-
-            if (command == HtpcCommand.Down || command == HtpcCommand.Up || command == HtpcCommand.Left || command == HtpcCommand.Right)
-            {
-                var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down :
-                                command == HtpcCommand.Up ? FocusNavigationDirection.Up :
-                                command == HtpcCommand.Left ? FocusNavigationDirection.Left : FocusNavigationDirection.Right;
-
-                cb.MoveFocus(new TraversalRequest(direction));
-                
-                var newFocus = Keyboard.FocusedElement as FrameworkElement;
-                if (newFocus != null && (command == HtpcCommand.Up || command == HtpcCommand.Down))
-                {
-                    ScrollToElement(MainScroll, newFocus);
-                }
-
-                e.Handled = true; 
-            }
-        }
-    }
-
-    // --- NEW: Helper to calculate exact offset and force the ScrollViewer to move ---
+    }   
+    
     private void ScrollToElement(ScrollViewer scrollViewer, FrameworkElement element)
     {
         try
@@ -531,7 +482,6 @@ private void BtnIgnoreUpdate_Click(object sender, RoutedEventArgs e)
             var transform = element.TransformToAncestor(content);
             Point position = transform.Transform(new Point(0, 0));
             
-            // 100px padding so the focused row isn't hugging the absolute top edge of the screen
             double targetY = position.Y - 100; 
             
             if (targetY < 0) targetY = 0;
@@ -542,16 +492,47 @@ private void BtnIgnoreUpdate_Click(object sender, RoutedEventArgs e)
         catch { }
     }
 
-    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void TopNavPanel_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
-
-        // TextBoxes naturally capture Left/Right for typing, but we want Up/Down to escape!
-        if (command == HtpcCommand.Down || command == HtpcCommand.Up)
+        
+        if (command == HtpcCommand.Down)
         {
-            var direction = command == HtpcCommand.Down ? FocusNavigationDirection.Down : FocusNavigationDirection.Up;
-            (sender as TextBox)?.MoveFocus(new TraversalRequest(direction));
             e.Handled = true;
+            
+            if (UpNextList.IsVisible)
+            {
+                UpNextList.Focus();
+            }
+            else if (LiveTvList.IsVisible)
+            {
+                CollectionFilterBtn.Focus();
+            }
+            else
+            {
+                FocusFirstAvailableContentRow(); 
+            }
         }
+    }
+    
+    private bool TryFocusFirstListBoxItem(ListBox listBox)
+    {
+        if (listBox.Visibility != Visibility.Visible || listBox.Items.Count == 0) return false;
+        
+        var element = listBox.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+        if (element != null) return element.Focus();
+        
+        listBox.UpdateLayout();
+        element = listBox.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+        return element?.Focus() ?? false;
+    }
+    
+    private void FocusFirstAvailableContentRow()
+    {
+        if (TryFocusFirstListBoxItem(UpNextList)) return;
+        if (TryFocusFirstListBoxItem(LiveTvList)) return;
+        if (TryFocusFirstListBoxItem(MoviesList)) return;
+        if (TryFocusFirstListBoxItem(EpisodesList)) return;
+        TryFocusFirstListBoxItem(VideosList);
     }
 }
