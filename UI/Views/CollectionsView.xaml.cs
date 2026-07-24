@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using HTPC.Core.Input;
 using HTPC.Core.Models;
 using HTPC.UI.ViewModels;
+using HTPC.Services;
 
 namespace HTPC.UI.Views;
 
@@ -113,40 +114,41 @@ public partial class CollectionsView : UserControl
     }
 
     private async System.Threading.Tasks.Task OpenCollectionModal(CollectionItem collection)
-    {
-        _lastFocusedElement = Keyboard.FocusedElement;
-        ModalTitle.Text = collection.Name;
-        
-        CollectionSearchBox.Text = string.Empty;
-        
-        // Reset state variables and Button text instead of ComboBoxes
-        _currentSort = "Alphabetical";
-        _currentOrder = "Forward";
-        if (CollectionSortBtn != null) CollectionSortBtn.Content = "Alphabetical ▼";
-        if (CollectionOrderBtn != null) CollectionOrderBtn.Content = "Forward ▼";
-
-        _masterCollectionContents = await _viewModel.GetCollectionContentsAsync(collection.Id);
-        
-        // Force the initial sort using the default parameters
-        ApplyCollectionSorting();
-        
-        ContentModal.Visibility = Visibility.Visible;
-
-        _ = Dispatcher.InvokeAsync(() => 
-        {
-            if (CollectionContentList.Items.Count > 0)
-            {
-                var rowElement = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
-            }
-            else
-            {
-                CloseModalBtn.Focus();
-            }
-        }, DispatcherPriority.Loaded);
-    }
+{
+    _lastFocusedElement = Keyboard.FocusedElement;
+    ModalTitle.Text = collection.Name;
     
-    private void CollectionSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    CollectionSearchBox.Text = string.Empty;
+    
+    // Load saved preferences instead of resetting to defaults
+    _currentSort = PreferencesManager.LoadCollectionSort() ?? "Alphabetical";
+    _currentOrder = PreferencesManager.LoadCollectionOrder() ?? "Forward";
+    
+    if (CollectionSortBtn != null) CollectionSortBtn.Content = $"{_currentSort} ▼";
+    if (CollectionOrderBtn != null) CollectionOrderBtn.Content = $"{_currentOrder} ▼";
+
+    _masterCollectionContents = await _viewModel.GetCollectionContentsAsync(collection.Id);
+    
+    // Force the initial sort using the loaded preferences
+    ApplyCollectionSorting();
+    
+    ContentModal.Visibility = Visibility.Visible;
+
+    _ = Dispatcher.InvokeAsync(() => 
+    {
+        if (CollectionContentList.Items.Count > 0)
+        {
+            var rowElement = CollectionContentList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+            rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        }
+        else
+        {
+            CloseModalBtn.Focus();
+        }
+    }, DispatcherPriority.Loaded);
+}
+    
+	private void CollectionSearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         _searchTimer.Stop();
         _searchTimer.Start();
@@ -1013,24 +1015,26 @@ public partial class CollectionsView : UserControl
     }
 
     private void ProcessFilterSelection(object selectedItem)
+{
+    if (selectedItem is string selection)
     {
-        if (selectedItem is string selection)
+        if (_currentFilterMode == FilterMode.Sort)
         {
-            if (_currentFilterMode == FilterMode.Sort)
-            {
-                _currentSort = selection;
-                CollectionSortBtn.Content = $"{selection} ▼";
-            }
-            else if (_currentFilterMode == FilterMode.Order)
-            {
-                _currentOrder = selection;
-                CollectionOrderBtn.Content = $"{selection} ▼";
-            }
-
-            CloseFilterOverlay();
-            ApplyCollectionSorting();
+            _currentSort = selection;
+            CollectionSortBtn.Content = $"{selection} ▼";
+            try { PreferencesManager.SaveCollectionSort(_currentSort); } catch { }
         }
+        else if (_currentFilterMode == FilterMode.Order)
+        {
+            _currentOrder = selection;
+            CollectionOrderBtn.Content = $"{selection} ▼";
+            try { PreferencesManager.SaveCollectionOrder(_currentOrder); } catch { }
+        }
+
+        CloseFilterOverlay();
+        ApplyCollectionSorting();
     }
+}
 
     private void FilterSelectionList_MouseUp(object sender, MouseButtonEventArgs e)
     {

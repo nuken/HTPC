@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Text.Json;
 
 namespace HTPC.Services;
@@ -26,20 +27,25 @@ public class AppPreferences
     public double WindowTop { get; set; } = 100;
     public double WindowLeft { get; set; } = 100;
     public double UiScaleMultiplier { get; set; } = 1.0; 
-	public string LastMultiviewCollection { get; set; } = "All Channels";
-	public int CommercialSkipMode { get; set; } = 2;
-	public int Volume { get; set; } = 100;
-	public string LastIgnoredVersion { get; set; } = string.Empty;
+    public string LastMultiviewCollection { get; set; } = "All Channels";
+    public int CommercialSkipMode { get; set; } = 2;
+    public int Volume { get; set; } = 100;
+    public string LastIgnoredVersion { get; set; } = string.Empty;
     public DateTime IgnoreUntilDate { get; set; } = DateTime.MinValue;
-	// --- NEW: MPV ENGINE SETTINGS ---
+    
+    // --- NEW: COLLECTION SORTING ---
+    public string CollectionSort { get; set; } = "Alphabetical";
+    public string CollectionOrder { get; set; } = "Forward";
+
+    // --- NEW: MPV ENGINE SETTINGS ---
     public string HardwareDecoding { get; set; } = "d3d11va";
     public string VideoSync { get; set; } = "audio";
 
     // --- NEW: VIDEO PROCESSING ---
     public bool EnableUpscaling { get; set; } = false;
     public string UpscalerPreset { get; set; } = "RAVU"; 
-	
-	// --- NEW: DASHBOARD LAYOUT ---
+    
+    // --- NEW: DASHBOARD LAYOUT ---
     public List<DashboardRowConfig> DashboardLayout { get; set; } = new List<DashboardRowConfig>
     {
         new DashboardRowConfig { Id = "UpNext", DisplayName = "Up Next", Order = 0, IsVisible = true },
@@ -48,10 +54,10 @@ public class AppPreferences
         new DashboardRowConfig { Id = "Shows", DisplayName = "Recent Episodes", Order = 3, IsVisible = true },
         new DashboardRowConfig { Id = "Videos", DisplayName = "Recent Videos", Order = 4, IsVisible = true }
     };
-	
-	// --- REMOTE CONTROL MAPPINGS ---
+    
+    // --- REMOTE CONTROL MAPPINGS ---
     // Maps a WPF Key string to an HtpcCommand string
-    public System.Collections.Generic.Dictionary<string, string> KeyBindings { get; set; } = new()
+    public Dictionary<string, string> KeyBindings { get; set; } = new()
     {
         { "Up", "Up" },
         { "Down", "Down" },
@@ -102,10 +108,30 @@ public static class PreferencesManager
     // Keeping your original method signatures so we don't break existing code
     public static string LoadMovieSort() => Load().MovieSort;
     public static string LoadGuideCollection() => Load().GuideCollection;
+    
     public static void SaveMovieSort(string sortValue) 
     {
         var prefs = Load();
         prefs.MovieSort = sortValue;
+        Save(prefs);
+    }
+
+    // --- NEW: COLLECTION SAVING/LOADING ---
+    public static string LoadCollectionSort() => Load().CollectionSort;
+    
+    public static void SaveCollectionSort(string sortValue) 
+    {
+        var prefs = Load();
+        prefs.CollectionSort = sortValue;
+        Save(prefs);
+    }
+
+    public static string LoadCollectionOrder() => Load().CollectionOrder;
+    
+    public static void SaveCollectionOrder(string orderValue) 
+    {
+        var prefs = Load();
+        prefs.CollectionOrder = orderValue;
         Save(prefs);
     }
 }

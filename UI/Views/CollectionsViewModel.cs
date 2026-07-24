@@ -30,32 +30,36 @@ public class CollectionsViewModel : INotifyPropertyChanged
     }
 
     public async Task LoadCollectionsAsync()
-    {
-        var allCollections = await _mediaLibraryService.GetLibraryCollectionsAsync();
+{
+    var allCollections = await _mediaLibraryService.GetLibraryCollectionsAsync();
 
-        MovieCollections.Clear();
-        ShowCollections.Clear();
+    MovieCollections.Clear();
+    ShowCollections.Clear();
 
-        foreach (var collection in allCollections)
-        {            
-            if (collection.ContentCount <= 0) continue;
+    foreach (var collection in allCollections)
+    {            
+        if (collection.ContentCount <= 0) continue;
 
-            if (collection.CollectionType == "movies")
+        // Use case-insensitive checks to prevent API mismatches
+        bool isMovie = string.Equals(collection.CollectionType, "movies", System.StringComparison.OrdinalIgnoreCase);
+        bool isShow = string.Equals(collection.CollectionType, "shows", System.StringComparison.OrdinalIgnoreCase);
+
+        if (isMovie || isShow)
+        {
+            // Verify the collection actually has valid playable content before displaying it
+            var validContents = await _mediaLibraryService.GetCollectionMediaAsync(collection.Id);
+            
+            if (validContents != null && validContents.Count > 0)
             {
-                
-                MovieCollections.Add(collection);
-            }
-            else if (collection.CollectionType == "shows")
-            {
-                var validContents = await _mediaLibraryService.GetCollectionMediaAsync(collection.Id);
-                
-                if (validContents.Count > 0)
-                {
-                    ShowCollections.Add(collection);
-                }
+                // Sync the count so the UI doesn't show ghost numbers
+                collection.ContentCount = validContents.Count;
+
+                if (isMovie) MovieCollections.Add(collection);
+                else ShowCollections.Add(collection);
             }
         }
     }
+}
 
     public async Task<List<MediaItem>> GetCollectionContentsAsync(string id)
     {

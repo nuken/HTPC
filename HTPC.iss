@@ -1,11 +1,11 @@
 [Setup]
 ; --- Application Metadata ---
 AppName=Nucleus HTPC
-AppVersion=1.2.4
+AppVersion=1.2.5
 AppPublisher=Bobby Vaughn
 DefaultDirName={autopf}\NucleusHTPC
 DefaultGroupName=Nucleus HTPC
-OutputBaseFilename=NucleusHTPC_Installer_v1.2.4
+OutputBaseFilename=NucleusHTPC_Installer_v1.2.5
 WizardSmallImageFile=Assets\NucleusSmall.bmp
 WizardImageFile=Assets\NucleusBanner.bmp
 
