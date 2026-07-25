@@ -137,24 +137,18 @@ public class MediaLibraryService
                 string id = GetStringOrNumber(element, "id");
                 if (string.IsNullOrEmpty(id)) continue;
 
-                var categories = new List<string>();
-                if (element.TryGetProperty("categories", out var catElement) && catElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    foreach (var cat in catElement.EnumerateArray())
-                    {
-                        if (cat.ValueKind == System.Text.Json.JsonValueKind.String)
-                            categories.Add(cat.GetString() ?? "");
-                    }
-                }
+                // Use the robust helper to catch variations in casing just in case
+                var categories = ParseStringArray(element, "categories", "Categories");
 
-                // --- THE GHOST FOLDER FILTER ---
-                // Shows with 0 episodes do not have an 'episode_count' property in the JSON.
+                // --- THE GHOST FOLDER FILTER (V2) ---
                 int episodeCount = element.TryGetProperty("episode_count", out var ec) && ec.ValueKind == System.Text.Json.JsonValueKind.Number ? ec.GetInt32() : 0;
-                bool isSeries = categories.Any(c => c.Equals("Show", StringComparison.OrdinalIgnoreCase) || c.Equals("Series", StringComparison.OrdinalIgnoreCase));
+                string path = GetStringOrNumber(element, "Path", "path");
 
-                if (isSeries && episodeCount <= 0)
+                // Abstract folders (like TV Shows) do not have a physical file 'path'. 
+                // If an item lacks a path AND has 0 episodes, it is guaranteed to be an empty ghost folder.
+                if (episodeCount <= 0 && string.IsNullOrWhiteSpace(path))
                 {
-                    continue; // Skip adding empty shows like 'NOVA' to the UI
+                    continue; 
                 }
 
                 string title = GetStringOrNumber(element, "title", "name"); 
@@ -183,7 +177,7 @@ public class MediaLibraryService
                     Categories = categories,
                     PosterUrl = GetBestImageUrl(baseUrl, element, id, customPriorities),
                     StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                    Path = GetStringOrNumber(element, "Path", "path"),
+                    Path = path,
                     Summary = GetStringOrNumber(element, "summary", "full_summary"),
                     Commercials = ParseDoubleArray(element, "commercials"),
                     CreatedAt = createdAt,
