@@ -72,6 +72,8 @@ public partial class RecordingsView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ThemeToggleBtn.Content = PreferencesManager.LoadTheme() == "Dark" ? "\xE708" : "\xE706";
+
         // 1. Focus the UI instantly so the user isn't stuck waiting
         _ = Dispatcher.BeginInvoke(new Action(() => 
         {
@@ -244,6 +246,22 @@ public partial class RecordingsView : UserControl
             else FocusFirstAvailableContentRow();
         }
     }
+
+    private void ThemeToggleBtn_Click(object sender, RoutedEventArgs e)
+{
+    // Toggle the state
+    string currentTheme = PreferencesManager.LoadTheme();
+    string newTheme = currentTheme == "Dark" ? "Light" : "Dark";
+
+    // Save state to JSON
+    PreferencesManager.SaveTheme(newTheme);
+
+    // Tell App.xaml.cs to load the new dictionary
+    ((App)Application.Current).ApplyTheme(newTheme);
+
+    // Update the icon
+    ThemeToggleBtn.Content = newTheme == "Dark" ? "\xE708" : "\xE706";
+}
 
     private void DiscoverSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {

@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Windows;
+using HTPC.Services;
 
 namespace HTPC
 {
@@ -29,11 +30,35 @@ namespace HTPC
             this.DispatcherUnhandledException += (s, ex) =>
             {
                 MessageBox.Show(ex.Exception.ToString(), "Fatal Crash", MessageBoxButton.OK, MessageBoxImage.Error);
-                ex.Handled = true; 
+                ex.Handled = true;
                 Environment.Exit(1); // Force close after showing the message
             };
 
+            // 4. Load the user's saved theme preference
+            string savedTheme = PreferencesManager.LoadTheme();
+            ApplyTheme(savedTheme);
+
             base.OnStartup(e);
+        }
+
+        // --- NEW: THEME SWITCHING LOGIC ---
+        public void ApplyTheme(string themeName)
+        {
+            try
+            {
+                // Format the URI to point to the new UI/Themes folder
+                string themePath = $"UI/Themes/{themeName}Theme.xaml";
+                var themeDict = new ResourceDictionary { Source = new Uri(themePath, UriKind.Relative) };
+
+                // Clear any dynamically loaded dictionaries and inject the new theme
+                Current.Resources.MergedDictionaries.Clear();
+                Current.Resources.MergedDictionaries.Add(themeDict);
+            }
+            catch (Exception ex)
+            {
+                // Fallback logging in case the dictionary fails to load
+                Console.WriteLine($"Failed to load theme {themeName}: {ex.Message}");
+            }
         }
     }
 }

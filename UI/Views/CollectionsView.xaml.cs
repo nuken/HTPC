@@ -64,6 +64,7 @@ public partial class CollectionsView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ThemeToggleBtn.Content = PreferencesManager.LoadTheme() == "Dark" ? "\xE708" : "\xE706";
         ContentModal.Visibility = Visibility.Collapsed;
         EpisodesOverlay.Visibility = Visibility.Collapsed;
         await _viewModel.LoadCollectionsAsync();
@@ -112,6 +113,21 @@ public partial class CollectionsView : UserControl
             e.Handled = true;
         }
     }
+
+    private void ThemeToggleBtn_Click(object sender, RoutedEventArgs e)
+{
+    string currentTheme = PreferencesManager.LoadTheme();
+    string newTheme = currentTheme == "Dark" ? "Light" : "Dark";
+
+    // Save to preferences
+    PreferencesManager.SaveTheme(newTheme);
+
+    // Switch the application resources
+    ((App)Application.Current).ApplyTheme(newTheme);
+
+    // Toggle the button icon (Moon for Dark, Sun for Light)
+    ThemeToggleBtn.Content = newTheme == "Dark" ? "\xE708" : "\xE706";
+}
 
     private async System.Threading.Tasks.Task OpenCollectionModal(CollectionItem collection)
 {

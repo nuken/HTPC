@@ -56,6 +56,8 @@ public partial class SettingsView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ThemeToggleBtn.Content = PreferencesManager.LoadTheme() == "Dark" ? "\xE708" : "\xE706";
+
         if (_isInitialized) 
         {
             _ = Dispatcher.BeginInvoke(new Action(() => 
@@ -428,6 +430,22 @@ public partial class SettingsView : UserControl
 
         ApplyUiScale(newScale);
     }
+
+    private void ThemeToggleBtn_Click(object sender, RoutedEventArgs e)
+{
+    // Toggle the state
+    string currentTheme = PreferencesManager.LoadTheme();
+    string newTheme = currentTheme == "Dark" ? "Light" : "Dark";
+
+    // Save state to JSON
+    PreferencesManager.SaveTheme(newTheme);
+
+    // Tell App.xaml.cs to load the new dictionary
+    ((App)Application.Current).ApplyTheme(newTheme);
+
+    // Update the icon
+    ThemeToggleBtn.Content = newTheme == "Dark" ? "\xE708" : "\xE706";
+}
 
     private void UiScaleSlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {

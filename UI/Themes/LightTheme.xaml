@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Backgrounds -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F4F6F8"/> <!-- Soft Off-White -->
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#E5E7EB"/> <!-- Light Grey -->
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF"/> <!-- Pure White -->
+
+    <!-- Navigation & Interactive -->
+    <SolidColorBrush x:Key="NavBackgroundBrush" Color="#D1D5DB"/> <!-- Muted Grey -->
+    <SolidColorBrush x:Key="HoverBrush" Color="#9CA3AF"/> <!-- Darker Grey Hover -->
+    <SolidColorBrush x:Key="ActiveNavBackgroundBrush" Color="#0078D4"/> <!-- Professional Blue -->
+    <SolidColorBrush x:Key="ActiveNavTextBrush" Color="White"/>
+
+    <!-- Text & Accents -->
+    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#111827"/> <!-- Near Black -->
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#4B5563"/> <!-- Medium Dark Grey -->
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#6B7280"/> <!-- Medium Grey -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#0078D4"/> <!-- Professional Blue -->
+
+    <!-- Borders & Overlays -->
+    <SolidColorBrush x:Key="BorderBrush" Color="#D1D5DB"/>
+    <SolidColorBrush x:Key="OverlayBackgroundBrush" Color="#E6FFFFFF"/> <!-- Translucent White -->
+
+</ResourceDictionary>

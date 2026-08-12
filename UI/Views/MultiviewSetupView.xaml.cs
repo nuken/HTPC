@@ -114,6 +114,7 @@ public partial class MultiviewSetupView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ThemeToggleBtn.Content = PreferencesManager.LoadTheme() == "Dark" ? "\xE708" : "\xE706";
         var prefs = PreferencesManager.Load();
 
         if (_availableCollections.Count == 0)
@@ -254,6 +255,22 @@ public partial class MultiviewSetupView : UserControl
             e.Handled = true; 
         }
     }
+
+    private void ThemeToggleBtn_Click(object sender, RoutedEventArgs e)
+{
+    // Toggle the state
+    string currentTheme = PreferencesManager.LoadTheme();
+    string newTheme = currentTheme == "Dark" ? "Light" : "Dark";
+
+    // Save state to JSON
+    PreferencesManager.SaveTheme(newTheme);
+
+    // Tell App.xaml.cs to load the new dictionary
+    ((App)Application.Current).ApplyTheme(newTheme);
+
+    // Update the icon
+    ThemeToggleBtn.Content = newTheme == "Dark" ? "\xE708" : "\xE706";
+}
 
     private void UserControl_PreviewKeyDown(object sender, KeyEventArgs e)
     {
