@@ -1295,66 +1295,59 @@ public class MediaLibraryService
     }
 
     public async Task<List<MediaItem>> GetVideosInGroupAsync(string groupId)
+{
+    var activeServer = _serverManager.GetActiveServer();
+    if (activeServer == null) return new List<MediaItem>();
+    string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+    string apiUrl = $"{baseUrl}/api/v1/videos";
+    var videos = new List<MediaItem>();
+    try
     {
-        var activeServer = _serverManager.GetActiveServer();
-        if (activeServer == null) return new List<MediaItem>();
-
-        string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
-        string apiUrl = $"{baseUrl}/api/v1/videos";
-        var videos = new List<MediaItem>();
-
-        try
+        string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
+        using JsonDocument doc = JsonDocument.Parse(jsonResponse);
+        if (doc.RootElement.ValueKind == JsonValueKind.Array)
         {
-            string jsonResponse = await _httpClient.GetStringAsync(apiUrl);
-            using JsonDocument doc = JsonDocument.Parse(jsonResponse);
-
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            foreach (var element in doc.RootElement.EnumerateArray())
             {
-                foreach (var element in doc.RootElement.EnumerateArray())
+                string elementGroupId = GetStringOrNumber(element, "video_group_id", "group_id");
+                if (elementGroupId != groupId) continue;
+                string title = GetStringOrNumber(element, "title", "name");
+                string id = GetStringOrNumber(element, "id");
+                                    
+                string posterUrl = GetBestImageUrl(baseUrl, element, id);
+                bool isWatched = false;
+                if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
+                    isWatched = w1.ValueKind == JsonValueKind.True || (w1.ValueKind == JsonValueKind.Number && w1.GetInt32() == 1);
+                bool isFavorite = false;
+                if (element.TryGetProperty("favorited", out var f1) || element.TryGetProperty("Favorited", out f1))
+                    isFavorite = f1.ValueKind == JsonValueKind.True || (f1.ValueKind == JsonValueKind.Number && f1.GetInt32() == 1);
+                else if (element.TryGetProperty("favorited_at", out var f2) || element.TryGetProperty("FavoritedAt", out f2))
+                    isFavorite = f2.ValueKind == JsonValueKind.Number && f2.GetInt64() > 0;
+                string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
+                videos.Add(new MediaItem
                 {
-                    string elementGroupId = GetStringOrNumber(element, "video_group_id", "group_id");
-                    if (elementGroupId != groupId) continue;
-
-                    string title = GetStringOrNumber(element, "title", "name");
-                    string id = GetStringOrNumber(element, "id");
-                    
-                    string posterUrl = GetBestImageUrl(baseUrl, element, id);
-
-                    bool isWatched = false;
-                    if (element.TryGetProperty("watched", out var w1) || element.TryGetProperty("Watched", out w1))
-                        isWatched = w1.ValueKind == JsonValueKind.True || (w1.ValueKind == JsonValueKind.Number && w1.GetInt32() == 1);
-
-                    bool isFavorite = false;
-                    if (element.TryGetProperty("favorited", out var f1) || element.TryGetProperty("Favorited", out f1))
-                        isFavorite = f1.ValueKind == JsonValueKind.True || (f1.ValueKind == JsonValueKind.Number && f1.GetInt32() == 1);
-                    else if (element.TryGetProperty("favorited_at", out var f2) || element.TryGetProperty("FavoritedAt", out f2))
-                        isFavorite = f2.ValueKind == JsonValueKind.Number && f2.GetInt64() > 0;
-
-                    string videoUrl = GetStringOrNumber(element, "VideoURL", "video_url");
-
-                    videos.Add(new MediaItem
-                    {
-                        Path = GetStringOrNumber(element, "Path", "path"),
-						Id = id,
-						SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
-                        Title = string.IsNullOrEmpty(title) ? "Unknown Video" : title,
-                        PosterUrl = posterUrl,
-                        StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
-                        IsWatched = isWatched,
-                        IsFavorite = isFavorite,
-						Commercials = ParseDoubleArray(element, "commercials")
-                    });
-                }
+                    Path = GetStringOrNumber(element, "Path", "path"), 
+                    Id = id, 
+                    SubtitleUrl = $"{baseUrl}/dvr/files/{id}/subtitles.vtt",
+                    Title = string.IsNullOrEmpty(title) ? "Unknown Video" : title,
+                    CurrentShowTitle = string.IsNullOrEmpty(title) ? "Unknown Video" : title, // Fixed: Ensured CurrentShowTitle is populated
+                    PosterUrl = posterUrl,
+                    StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
+                    IsWatched = isWatched,
+                    IsFavorite = isFavorite, 
+                    Commercials = ParseDoubleArray(element, "commercials")
+                });
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Failed to fetch videos in group {groupId}: {ex.Message}");
-        }
-        return videos;
     }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Failed to fetch videos in group {groupId}: {ex.Message}");
+    }
+    return videos;
+}
     
-    private string DetermineColor(List<string> tags)
+	private string DetermineColor(List<string> tags)
     {
         var combined = string.Join(" ", tags).ToLower();
         if (combined.Contains("sports") || combined.Contains("event") || combined.Contains("athletics")) return "#E87C00"; 

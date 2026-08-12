@@ -32,6 +32,7 @@ public class AppPreferences
     public int Volume { get; set; } = 100;
     public string LastIgnoredVersion { get; set; } = string.Empty;
     public DateTime IgnoreUntilDate { get; set; } = DateTime.MinValue;
+    public string AppTheme { get; set; } = "Dark";
     
     // --- NEW: COLLECTION SORTING ---
     public string CollectionSort { get; set; } = "Alphabetical";
@@ -113,6 +114,15 @@ public static class PreferencesManager
     {
         var prefs = Load();
         prefs.MovieSort = sortValue;
+        Save(prefs);
+    }
+
+    public static string LoadTheme() => Load().AppTheme;
+
+    public static void SaveTheme(string themeValue)
+    {
+        var prefs = Load();
+        prefs.AppTheme = themeValue;
         Save(prefs);
     }
 

@@ -69,6 +69,8 @@ public partial class ShowsView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ThemeToggleBtn.Content = PreferencesManager.LoadTheme() == "Dark" ? "\xE708" : "\xE706";
+
         if (_isInitialized) 
         {
             SearchBox.Focus();
@@ -531,6 +533,22 @@ public partial class ShowsView : UserControl
             OpenShowOverlay(show);
         }
     }
+
+    private void ThemeToggleBtn_Click(object sender, RoutedEventArgs e)
+{
+    // Toggle the state
+    string currentTheme = PreferencesManager.LoadTheme();
+    string newTheme = currentTheme == "Dark" ? "Light" : "Dark";
+
+    // Save state to JSON
+    PreferencesManager.SaveTheme(newTheme);
+
+    // Tell App.xaml.cs to load the new dictionary
+    ((App)Application.Current).ApplyTheme(newTheme);
+
+    // Update the icon
+    ThemeToggleBtn.Content = newTheme == "Dark" ? "\xE708" : "\xE706";
+}
 
     private async void OpenShowOverlay(MediaItem show)
     {
