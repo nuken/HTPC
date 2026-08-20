@@ -96,11 +96,32 @@
                         
                         <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
                             <!-- Add Sport Dropdown Trigger -->
-                            <Button x:Name="AddSportBtn" Content="+ Add Sport" Height="40" Padding="15,0"
-                                    Background="{DynamicResource PanelBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" 
-                                    BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" FontSize="16" FontWeight="SemiBold" Margin="0,0,20,0"
-                                    Click="AddSportBtn_Click" PreviewKeyDown="AddSportBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
-                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="20"/></Style></Button.Resources>
+                            <!-- Add Sport Dropdown Trigger -->
+                            <Button x:Name="AddSportBtn" Height="40" Padding="15,0" Margin="0,0,20,0"
+                                    Click="AddSportBtn_Click" PreviewKeyDown="AddSportBtn_PreviewKeyDown" 
+                                    Cursor="Hand" FocusVisualStyle="{x:Null}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="BtnBg" Background="{DynamicResource PanelBackgroundBrush}" 
+                                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" 
+                                                CornerRadius="20" Padding="{TemplateBinding Padding}">
+                                            <TextBlock Text="+ Add Sport" Foreground="{DynamicResource PrimaryTextBrush}" 
+                                                       FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <!-- Hover State -->
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="BtnBg" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                            </Trigger>
+                                            
+                                            <!-- Remote Control Focus State -->
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="BtnBg" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                                <Setter TargetName="BtnBg" Property="BorderThickness" Value="2"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
                             </Button>
 
                             <!-- Active Filter Pills -->
@@ -112,19 +133,35 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Button Click="RemoveFilterBtn_Click" PreviewKeyDown="FilterPill_PreviewKeyDown" Tag="{Binding}" Margin="0,0,10,0" Cursor="Hand" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                                        <!-- FIX 1: Removed the mismatched StandardFocusStyle and set it to {x:Null} -->
+                                        <Button Click="RemoveFilterBtn_Click" PreviewKeyDown="FilterPill_PreviewKeyDown" Tag="{Binding}" Margin="0,0,10,0" Cursor="Hand" FocusVisualStyle="{x:Null}">
                                             <Button.Template>
                                                 <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="PillBg" Background="{DynamicResource AccentBrush}" CornerRadius="20" Padding="15,8">
+                                                    <!-- FIX 2: Matched the Movies page GenrePillStyle colors and added the border attributes -->
+                                                    <Border x:Name="PillBg" Background="{DynamicResource ActiveNavBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="16" Padding="15,6">
                                                         <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="{Binding}" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                            <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" Foreground="White" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                            <!-- FIX 3: Bound the text color to the Button's foreground so it updates correctly during triggers -->
+                                                            <TextBlock Text="{Binding}" Foreground="{TemplateBinding Foreground}" FontWeight="Bold" FontSize="15" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" Foreground="{TemplateBinding Foreground}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
                                                         </StackPanel>
                                                     </Border>
                                                     <ControlTemplate.Triggers>
+                                                        <!-- Default text color -->
+                                                        <Trigger Property="IsMouseOver" Value="False">
+                                                            <Setter Property="Foreground" Value="{DynamicResource ActiveNavTextBrush}"/>
+                                                        </Trigger>
+                                                        
+                                                        <!-- Hover State (Matches Movies Genre Pills) -->
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource ActiveNavTextBrush}"/>
+                                                            <Setter TargetName="PillBg" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                                        </Trigger>
+                                                        
+                                                        <!-- Remote Control Focus State (Matches Movies Genre Pills) -->
                                                         <Trigger Property="IsKeyboardFocused" Value="True">
-                                                            <Setter TargetName="PillBg" Property="Background" Value="White"/>
-                                                            <Setter Property="Foreground" Value="Black"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource ActiveNavTextBrush}"/>
+                                                            <Setter TargetName="PillBg" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                                            <Setter TargetName="PillBg" Property="BorderThickness" Value="2"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -444,7 +481,7 @@
                 <Button x:Name="CloseFilterBtn" Grid.Row="2" Content="Close" Margin="0,20,0,0" Height="50"
                         Background="{DynamicResource NavBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" 
                         FontSize="18" FontWeight="Bold" BorderThickness="0" Cursor="Hand" 
-                        Click="CloseFilterBtn_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        Click="CloseFilterBtn_Click" PreviewKeyDown="CloseFilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="12"/>

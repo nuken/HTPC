@@ -75,7 +75,6 @@ public partial class SportsView : UserControl
     // --- FILTER BAR LOGIC ---
     private void AddSportBtn_Click(object sender, RoutedEventArgs e)
     {
-        // NEW: Dynamically filter the list so it only shows sports that haven't been added yet
         var availableToAdd = _viewModel.AvailableGenres
             .Where(g => !_viewModel.ActiveGenreFilters.Contains(g))
             .OrderBy(g => g)
@@ -85,19 +84,37 @@ public partial class SportsView : UserControl
         FilterOverlay.Visibility = Visibility.Visible;
         _lastFocusedElement = Keyboard.FocusedElement;
 
-        _ = Dispatcher.InvokeAsync(() =>
+        // Step 1: Push the focus request slightly down the priority queue 
+        // so WPF has time to register the Visibility change.
+        Dispatcher.BeginInvoke(new Action(() =>
         {
+            // CRITICAL FIX: Update the layout of the ENTIRE UserControl. 
+            // This forces the parent FilterOverlay to calculate its physical size. 
+            // Once the parent has a size, the ListBox realizes it is visible and generates its items!
+            this.UpdateLayout(); 
+
             if (FilterSelectionList.Items.Count > 0)
             {
+                FilterSelectionList.SelectedIndex = 0;
+                
                 var item = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-                item?.Focus();
+                if (item != null)
+                {
+                    Keyboard.Focus(item);
+                }
+                else
+                {
+                    // Ultimate Fallback: If the container STILL refuses to generate, 
+                    // focus the ListBox itself so your remote isn't trapped underneath it!
+                    FilterSelectionList.Focus();
+                }
             }
             else
             {
-                // If there are no sports left to add, focus the new Close button
+                // If there are no sports left to add, focus the Close button
                 CloseFilterBtn.Focus();
             }
-        }, DispatcherPriority.Loaded);
+        }), DispatcherPriority.Loaded);
     }
 
     // NEW: Close Button Handler
@@ -145,6 +162,44 @@ public partial class SportsView : UserControl
             FilterOverlay.Visibility = Visibility.Collapsed;
             if (_lastFocusedElement is UIElement uiElement && uiElement.IsVisible) Keyboard.Focus(uiElement);
             e.Handled = true;
+        }
+        else if (command == HtpcCommand.Down)
+        {
+            if (Keyboard.FocusedElement is ListBoxItem item)
+            {
+                int index = FilterSelectionList.ItemContainerGenerator.IndexFromContainer(item);
+                if (index == FilterSelectionList.Items.Count - 1)
+                {
+                    CloseFilterBtn.Focus(); 
+                    e.Handled = true;
+                }
+            }
+        }
+        // --- NEW: Trap Left/Right inside the ListBox so focus doesn't leak out sideways ---
+        else if (command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            e.Handled = true;
+        }
+    }
+	
+	private void CloseFilterBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Up)
+        {
+            if (FilterSelectionList.Items.Count > 0)
+            {
+                FilterSelectionList.UpdateLayout();
+                var lastItem = FilterSelectionList.ItemContainerGenerator.ContainerFromIndex(FilterSelectionList.Items.Count - 1) as UIElement;
+                lastItem?.Focus();
+                e.Handled = true;
+            }
+        }
+        // --- UPDATED: Trap Down, Left, and Right so focus is completely caged ---
+        else if (command == HtpcCommand.Down || command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            e.Handled = true; 
         }
     }
 	
