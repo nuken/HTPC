@@ -95,8 +95,7 @@
 
             <!-- NEW THEME TOGGLE BUTTON -->
             <Button x:Name="ThemeToggleBtn" FontFamily="Segoe MDL2 Assets" Content="&#xE708;" FontSize="20" Click="ThemeToggleBtn_Click" Style="{StaticResource NavPillStyle}"/>
-
-            <CheckBox x:Name="ShowHiddenCheckBox" PreviewKeyDown="ShowHidden_PreviewKeyDown" Content="👁 Show Hidden Channels" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="20,0,0,0" Click="ShowHidden_Click"/>
+           
         </StackPanel>
 
         <Grid Grid.Row="1" Margin="40,0,40,5" KeyboardNavigation.DirectionalNavigation="Continue">
@@ -140,28 +139,37 @@
             </Grid.Resources>
 
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="Auto"/> <!-- Changed to Auto so both items fit -->
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- UI UPDATED: Replaced ComboBox with Overlay Trigger Button -->
-            <Button x:Name="CollectionFilterBtn" Grid.Column="0" VerticalAlignment="Bottom" Margin="0,0,15,5" Width="200" HorizontalAlignment="Left"
-                    Content="All Channels ▼" Background="{DynamicResource NavBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0"
-                    FontSize="16" FontWeight="Bold" Padding="15,8" Height="40"
-                    Click="CollectionFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown"
-                    FocusVisualStyle="{StaticResource TvGuideFocusStyle}">
-                <Button.Resources>
-                    <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="8"/>
-                    </Style>
-                </Button.Resources>
-            </Button>
+            <!-- GROUPED FILTER CONTROLS -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,15,5">
+                
+                <!-- Overlay Trigger Button -->
+                <Button x:Name="CollectionFilterBtn" Width="200" HorizontalAlignment="Left"
+                        Content="All Channels ▼" Background="{DynamicResource NavBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0"
+                        FontSize="16" FontWeight="Bold" Padding="15,8" Height="40"
+                        Click="CollectionFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown"
+                        FocusVisualStyle="{StaticResource TvGuideFocusStyle}">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="8"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+                
+                
+            </StackPanel>
 
             <Grid Grid.Column="1" Margin="0,0,0,5">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" KeyboardNavigation.DirectionalNavigation="Continue">
                     <Button Content="◀ Earlier" Width="100" Height="34" Margin="0,0,10,0" Click="ScrollLeft_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>
                     <Button Content="Later ▶" Width="100" Height="34" Click="ScrollRight_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>
-                </StackPanel>
+                <!-- MOVED: Hidden Channels Checkbox -->
+                <CheckBox x:Name="ShowHiddenCheckBox" PreviewKeyDown="ShowHidden_PreviewKeyDown" Content="👁 Show Hidden Channels" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="15,0,0,0" Click="ShowHidden_Click"/>
+                
+				</StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" KeyboardNavigation.DirectionalNavigation="Continue">
                     <RepeatButton Content="▲ Up" Width="100" Height="34" Margin="0,0,10,0" Click="PageUp_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>
                     <RepeatButton Content="Down ▼" Width="100" Height="34" Click="PageDown_Click" FocusVisualStyle="{StaticResource TvGuideFocusStyle}" PreviewKeyDown="GuideNav_PreviewKeyDown"/>

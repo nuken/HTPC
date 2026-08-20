@@ -193,11 +193,13 @@ public partial class MainWindow : Window
         {
             WindowState = WindowState.Maximized;
             TitleBarRow.Height = new GridLength(0); // Hide title bar
+			FullscreenCloseBtn.Visibility = Visibility.Visible;
         }
         else
         {
             WindowState = WindowState.Normal;
             TitleBarRow.Height = new GridLength(32); // Show title bar
+			FullscreenCloseBtn.Visibility = Visibility.Collapsed;
             
             // Reapply saved coordinates
             if (prefs.WindowWidth > 0)
@@ -236,6 +238,7 @@ public partial class MainWindow : Window
         WindowState = WindowState.Normal;
         TitleBarRow.Height = new GridLength(32);
         MaximizeRestoreBtn.Content = "🗖";
+		FullscreenCloseBtn.Visibility = Visibility.Collapsed;
 
         // Enforce the default preset size (adjust 1280 and 720 as needed)
         this.Width = 1280;
@@ -262,6 +265,7 @@ public partial class MainWindow : Window
         WindowState = WindowState.Maximized;
         TitleBarRow.Height = new GridLength(0);
         MaximizeRestoreBtn.Content = "🗗";
+	    FullscreenCloseBtn.Visibility = Visibility.Visible;
     }
 
     prefs.IsFullscreen = _isFullscreen;
@@ -300,6 +304,12 @@ public partial class MainWindow : Window
         }
 
         PreferencesManager.Save(prefs);
+    }
+	
+	// --- FORCES THE ENTIRE APPLICATION TO SHUT DOWN ---
+    private void AppExit_Click(object sender, RoutedEventArgs e)
+    {
+        Application.Current.Shutdown();
     }
 
     // ==========================================

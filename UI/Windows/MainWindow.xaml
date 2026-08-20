@@ -71,5 +71,36 @@
 
         <ContentControl x:Name="MainShellContainer" Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
 
-    </Grid>
+        <!-- FLOATING FULLSCREEN CLOSE BUTTON -->
+        <Button x:Name="FullscreenCloseBtn" 
+		        Grid.RowSpan="2"
+                Content="EXIT" 
+                FontSize="16" FontWeight="Bold"
+                Width="45" Height="45"
+                HorizontalAlignment="Right" VerticalAlignment="Top" 
+                Background="#D32F2F" Foreground="White" 
+                BorderThickness="2" BorderBrush="Transparent" Margin="0,15,15,0"
+                Cursor="Hand" Click="AppExit_Click"
+                Panel.ZIndex="9999" Visibility="Collapsed" Focusable="True">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="22">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- Mouse Hover -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bg" Property="Background" Value="#FF0000"/>
+                        </Trigger>
+                        <!-- Remote Control Focus State -->
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bg" Property="Background" Value="#FF0000"/>
+                            <Setter TargetName="bg" Property="BorderBrush" Value="White"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+   </Grid>
 </Window>
