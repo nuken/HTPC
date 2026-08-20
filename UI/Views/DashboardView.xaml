@@ -119,8 +119,9 @@
                         <TextBlock x:Name="UpdateMessageText" Foreground="White" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" Text="A new update is available!"/>
                     </StackPanel>
 
-                    <Button x:Name="BtnDownloadUpdate" Grid.Column="1" Content="Download" Margin="0,0,15,0" Style="{StaticResource NavPillActiveStyle}" Background="White" Foreground="Black"/>
-                    <Button x:Name="BtnIgnoreUpdate" Grid.Column="2" Content="Ignore for 1 week" Style="{StaticResource NavPillStyle}" Background="#33FFFFFF" Foreground="White"/>
+                    <Button x:Name="BtnDownloadUpdate" Grid.Column="1" Content="Download" Margin="0,0,15,0" Style="{StaticResource NavPillActiveStyle}" Background="White" Foreground="Black" Click="BtnDownloadUpdate_Click"/>
+
+                    <Button x:Name="BtnIgnoreUpdate" Grid.Column="2" Content="Ignore for 1 week" Style="{StaticResource NavPillStyle}" Background="#33FFFFFF" Foreground="White" Click="BtnIgnoreUpdate_Click"/>
                 </Grid>
             </Border>
 
