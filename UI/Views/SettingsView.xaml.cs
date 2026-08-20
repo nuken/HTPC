@@ -20,6 +20,7 @@ public partial class SettingsView : UserControl
     public event EventHandler? OnMoviesRequested;
     public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
+	public event EventHandler? OnSportsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnMultiviewRequested;
     public event EventHandler? OnCollectionsRequested;
@@ -30,7 +31,7 @@ public partial class SettingsView : UserControl
     public System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig> DashboardRows { get; set; } = new System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig>();
 
     // Overlay State Variables
-    private enum FilterMode { None, PaddingStart, PaddingEnd, CommercialSkip, UpscalerPreset }
+    private enum FilterMode { None, PaddingStart, PaddingEnd, CommercialSkip, UpscalerPreset, SkipForward, SkipBackward }
     private FilterMode _currentFilterMode = FilterMode.None;
     private IInputElement? _lastFocusedElement;
     private string[] _paddingOptions;
@@ -74,6 +75,10 @@ public partial class SettingsView : UserControl
         int skipMode = prefs.CommercialSkipMode >= 0 && prefs.CommercialSkipMode <= 2 ? prefs.CommercialSkipMode : 2;
         string[] skipModes = { "Disabled (Off)", "Prompt (Click to Skip)", "Automatic (Seamless)" };
         CommercialSkipBtn.Content = $"{skipModes[skipMode]} ▼";
+		
+		// Load Skip Amounts
+        SkipForwardBtn.Content = $"{prefs.SkipForwardSeconds} Seconds ▼";
+        SkipBackwardBtn.Content = $"{prefs.SkipBackwardSeconds} Seconds ▼";
         
         // Load Padding
         int pStart = prefs.PaddingStartMinutes <= 30 ? prefs.PaddingStartMinutes : 0;
@@ -96,6 +101,9 @@ public partial class SettingsView : UserControl
         // Load UI Scale
         UiScaleSlider.Value = prefs.UiScaleMultiplier;
         UiScaleTextText.Text = $"{(int)(prefs.UiScaleMultiplier * 100)}%";
+		
+		// Load Sports Score Preference
+        HideScoresCheck.IsChecked = prefs.HideSportsScores;
 
         // Load Video Processing
         EnableUpscalingCheck.IsChecked = prefs.EnableUpscaling;
@@ -142,6 +150,24 @@ public partial class SettingsView : UserControl
         FilterSelectionList.SelectedItem = CommercialSkipBtn.Content.ToString()?.Replace(" ▼", "");
         OpenFilterOverlay();
     }
+	
+	private void SkipForwardBtn_Click(object sender, RoutedEventArgs e)
+{
+    _currentFilterMode = FilterMode.SkipForward;
+    FilterOverlayTitle.Text = "Skip Forward";
+    FilterSelectionList.ItemsSource = new[] { "10 Seconds", "15 Seconds", "30 Seconds", "60 Seconds" };
+    FilterSelectionList.SelectedItem = SkipForwardBtn.Content.ToString()?.Replace(" ▼", "");
+    OpenFilterOverlay();
+}
+
+private void SkipBackwardBtn_Click(object sender, RoutedEventArgs e)
+{
+    _currentFilterMode = FilterMode.SkipBackward;
+    FilterOverlayTitle.Text = "Skip Backward";
+    FilterSelectionList.ItemsSource = new[] { "10 Seconds", "15 Seconds", "30 Seconds", "60 Seconds" };
+    FilterSelectionList.SelectedItem = SkipBackwardBtn.Content.ToString()?.Replace(" ▼", "");
+    OpenFilterOverlay();
+}
 
     private void UpscalerPresetBtn_Click(object sender, RoutedEventArgs e)
     {
@@ -151,6 +177,15 @@ public partial class SettingsView : UserControl
         FilterSelectionList.SelectedItem = UpscalerPresetBtn.Content.ToString()?.Replace(" ▼", "");
         OpenFilterOverlay();
     }
+	
+	private void HideScoresCheck_Changed(object sender, RoutedEventArgs e)
+{
+    if (!_isInitialized) return;
+    
+    var prefs = PreferencesManager.Load();
+    prefs.HideSportsScores = HideScoresCheck.IsChecked == true;
+    PreferencesManager.Save(prefs);
+}
 
     private void OpenFilterOverlay()
     {
@@ -210,6 +245,16 @@ public partial class SettingsView : UserControl
                 UpscalerPresetBtn.Content = $"{selection} ▼";
                 prefs.UpscalerPreset = selection.StartsWith("ArtCNN") ? "ArtCNN" : "RAVU";
             }
+			else if (_currentFilterMode == FilterMode.SkipForward)
+{
+    SkipForwardBtn.Content = $"{selection} ▼";
+    prefs.SkipForwardSeconds = int.Parse(selection.Split(' ')[0]);
+}
+else if (_currentFilterMode == FilterMode.SkipBackward)
+{
+    SkipBackwardBtn.Content = $"{selection} ▼";
+    prefs.SkipBackwardSeconds = int.Parse(selection.Split(' ')[0]);
+}
 
             PreferencesManager.Save(prefs);
             CloseFilterOverlay();
@@ -653,6 +698,7 @@ public partial class SettingsView : UserControl
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
+	private void Sports_Click(object sender, RoutedEventArgs e) => OnSportsRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);

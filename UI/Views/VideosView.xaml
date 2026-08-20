@@ -76,6 +76,7 @@
                 <Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+				<Button Content="Sports" Click="Sports_Click" Style="{StaticResource NavPillStyle}"/>
                 <Button Content="Videos" Style="{StaticResource NavPillActiveStyle}"/>
                 <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
                 

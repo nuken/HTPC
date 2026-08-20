@@ -21,6 +21,7 @@ public partial class DashboardView : UserControl
     public event EventHandler? OnMoviesRequested;
     public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
+	public event EventHandler? OnSportsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnMultiviewRequested;
     public event EventHandler? OnCollectionsRequested;
@@ -273,6 +274,7 @@ public partial class DashboardView : UserControl
     private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
+	private void Sports_Click(object sender, RoutedEventArgs e) => OnSportsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);
 

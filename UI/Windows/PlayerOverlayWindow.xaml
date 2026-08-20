@@ -238,7 +238,7 @@
                         <Grid Grid.Column="1" VerticalAlignment="Center">
     <Canvas x:Name="CommercialMarkersCanvas" Height="10" Margin="5,0,5,0" IsHitTestVisible="False" VerticalAlignment="Center" ClipToBounds="True" SizeChanged="CommercialMarkersCanvas_SizeChanged"/>
     
-    <Slider x:Name="TimelineSlider" Style="{StaticResource SliderFocusGlowStyle}" Cursor="Hand" Minimum="0" Maximum="100" Value="0" IsMoveToPointEnabled="True" Thumb.DragStarted="Timeline_DragStarted" Thumb.DragCompleted="Timeline_DragCompleted"/>
+<Slider x:Name="TimelineSlider" Style="{StaticResource SliderFocusGlowStyle}" Cursor="Hand" Minimum="0" Maximum="100" Value="0" IsMoveToPointEnabled="True" Thumb.DragStarted="Timeline_DragStarted" Thumb.DragCompleted="Timeline_DragCompleted" Thumb.DragDelta="Timeline_DragDelta"/>
 </Grid>
                         
                         <TextBlock x:Name="RemainingTimeText" Grid.Column="2" Text="-00:00:00" Foreground="#AAAAAA" FontSize="14" Margin="15,0,0,0" VerticalAlignment="Center"/>

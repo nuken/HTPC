@@ -666,6 +666,22 @@ public partial class PlayerOverlayWindow : Window
         _isDragging = false;
     }
 	
+	private void Timeline_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+{
+    // Convert the live slider position into readable time
+    double position = TimelineSlider.Value;
+    double duration = _mpvService.GetDuration();
+
+    TimeSpan posTime = TimeSpan.FromSeconds(position);
+    TimeSpan remTime = TimeSpan.FromSeconds(Math.Max(0, duration - position));
+
+    // Update the UI text blocks instantly while scrubbing
+    CurrentTimeText.Text = posTime.ToString(posTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
+    RemainingTimeText.Text = "-" + remTime.ToString(remTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
+    
+    WakeUpUi();
+}
+	
 	// --- THE NEW SCRUB & SKIP ENGINE ---
     
     private void Restart_Click(object sender, RoutedEventArgs e)
@@ -685,34 +701,38 @@ public partial class PlayerOverlayWindow : Window
     }
 
     private void EndSkipAction()
+{
+    if (_scrubDirection == 0) return;
+
+    _holdTimer.Stop();
+
+    if (_isScrubbing)
     {
-        if (_scrubDirection == 0) return;
-
-        _holdTimer.Stop();
-
-        if (_isScrubbing)
+        // We are done scrubbing, turn the video back on!
+        _scrubTimer.Stop();
+        _isScrubbing = false;
+        
+        if (_wasPlayingBeforeScrub) 
         {
-            // We are done scrubbing, turn the video back on!
-            _scrubTimer.Stop();
-            _isScrubbing = false;
-            
-            if (_wasPlayingBeforeScrub) 
-            {
-                _mpvService.Resume();
-                _isPlaying = true;
-            }
+            _mpvService.Resume();
+            _isPlaying = true;
         }
-        else
-        {
-            // The timer never fired. It was just a quick tap!
-            if (_scrubDirection == 1) _mpvService.SeekRelative(30);
-            else _mpvService.SeekRelative(-10);
-        }
-
-        _scrubDirection = 0;
-        WakeUpUi();
-        SyncTimer_Tick(null, EventArgs.Empty);
     }
+    else
+    {
+        // The timer never fired. It was just a quick tap!
+        var prefs = PreferencesManager.Load();
+        
+        if (_scrubDirection == 1) 
+            _mpvService.SeekRelative(prefs.SkipForwardSeconds);
+        else 
+            _mpvService.SeekRelative(-prefs.SkipBackwardSeconds);
+    }
+
+    _scrubDirection = 0;
+    WakeUpUi();
+    SyncTimer_Tick(null, EventArgs.Empty);
+}
 
     private void HoldTimer_Tick(object? sender, EventArgs e)
     {

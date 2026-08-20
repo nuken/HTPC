@@ -114,30 +114,16 @@
                     <Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+					<Button Content="Sports" Click="Sports_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
 
                     <Button x:Name="SettingsNavBtn" Content="Settings" Style="{StaticResource NavPillActiveStyle}"/>
 
                     <!-- NEW THEME TOGGLE BUTTON -->
                     <Button x:Name="ThemeToggleBtn" FontFamily="Segoe MDL2 Assets" Content="&#xE708;" FontSize="20" Click="ThemeToggleBtn_Click" Style="{StaticResource NavPillStyle}"/>
-
-                    <TextBlock Text="Server Actions" FontSize="26" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                    <Button Content="⚡" FontSize="24" Background="Transparent" Foreground="#FFD700" BorderThickness="0" Cursor="Hand" Margin="20,0,0,0" Click="AdminMenu_Click" ToolTip="Server Admin Actions">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="Scan Personal Media" Click="AdminAction_Click" Tag="/dvr/scanner/scan"/>
-                                <MenuItem Header="Prune Removed Media" Click="AdminAction_Click" Tag="/dvr/scanner/imports/prune"/>
-                                <MenuItem Header="Refresh Virtual Channels" Click="AdminAction_Click" Tag="/dvr/lineups/X-VIRTUAL"/>
-                                <MenuItem Header="Clear Streaming Cache" Click="AdminAction_Click" Tag="/dvr/cache"/>
-                                <MenuItem Header="Fetch Guide Updates" Click="AdminAction_Click" Tag="/dvr/guide?force="/>
-                                <MenuItem Header="Re-Download Entire Guide" Click="AdminAction_Click" Tag="/dvr/guide?force=true"/>
-                                <MenuItem Header="Empty Trash" Click="AdminAction_Click" Tag="/dvr/trash/empty"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
+                    
                 </StackPanel>
 
-                <Button Content="⏻ Exit HTPC" HorizontalAlignment="Right" Style="{StaticResource NavPillStyle}" Foreground="#FF4444" Margin="0" Click="ExitApp_Click"/>
             </Grid>
 
             <TextBlock x:Name="VersionText" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="14" FontWeight="SemiBold" Margin="5,10,0,0"/>
@@ -207,6 +193,24 @@
                             <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
                         </Button>
                     </StackPanel>
+					
+					<StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+    <TextBlock Text="Skip Forward Amount:" Foreground="{DynamicResource MutedTextBrush}" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
+    <Button x:Name="SkipForwardBtn" Width="280" Height="45" Content="30 Seconds ▼"
+            Background="{DynamicResource PanelBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" FontSize="16" FontWeight="SemiBold"
+            Click="SkipForwardBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+    </Button>
+</StackPanel>
+
+<StackPanel Orientation="Horizontal" Margin="0,0,0,30">
+    <TextBlock Text="Skip Backward Amount:" Foreground="{DynamicResource MutedTextBrush}" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
+    <Button x:Name="SkipBackwardBtn" Width="280" Height="45" Content="15 Seconds ▼"
+            Background="{DynamicResource PanelBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" FontSize="16" FontWeight="SemiBold"
+            Click="SkipBackwardBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+    </Button>
+</StackPanel>
 
 					<TextBlock Text="Dashboard Layout" FontSize="26" FontWeight="Bold" Margin="0,40,0,20" Foreground="{DynamicResource PrimaryTextBrush}"/>
                     <Grid Margin="0,0,0,40">
@@ -282,6 +286,18 @@
                                 FocusVisualStyle="{StaticResource StandardFocusStyle}"/>
                         <TextBlock x:Name="UiScaleTextText" Text="100%" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold" FontSize="18" VerticalAlignment="Center" Margin="20,0,0,0"/>
                     </StackPanel>
+					
+					<StackPanel Orientation="Horizontal" Margin="0,0,0,30">
+    <TextBlock Text="Sports Spoilers:" Foreground="{DynamicResource MutedTextBrush}" FontSize="16" VerticalAlignment="Center" Margin="0,0,15,0" Width="180"/>
+    <CheckBox x:Name="HideScoresCheck" PreviewKeyDown="CheckBox_PreviewKeyDown" Content="Hide Live Scores on Airing Now Tiles"
+              Foreground="{DynamicResource PrimaryTextBrush}" FontSize="14" VerticalAlignment="Center" Cursor="Hand"
+              Checked="HideScoresCheck_Changed" Unchecked="HideScoresCheck_Changed"
+              FocusVisualStyle="{StaticResource StandardFocusStyle}">
+        <CheckBox.LayoutTransform>
+            <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+        </CheckBox.LayoutTransform>
+    </CheckBox>
+</StackPanel>
 
 					<TextBlock Text="Video Processing" FontSize="26" FontWeight="Bold" Margin="0,40,0,20" Foreground="{DynamicResource PrimaryTextBrush}"/>
 
@@ -306,10 +322,32 @@
                             <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
                         </Button>
                     </StackPanel>
-                </StackPanel>
+                <TextBlock Text="System" FontSize="26" FontWeight="Bold" Margin="0,20,0,20" Foreground="{DynamicResource PrimaryTextBrush}"/>
+        <Button Content="⏻ Exit Application" Width="280" Height="45" HorizontalAlignment="Left" Background="#8B0000" Foreground="White" BorderThickness="0" FontSize="16" FontWeight="Bold" Cursor="Hand" Click="ExitApp_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+        </Button>
+
+    </StackPanel>
 
                 <StackPanel Grid.Column="1" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <TextBlock Text="Saved Connections" FontSize="26" FontWeight="Bold" Margin="0,0,0,30" Foreground="{DynamicResource PrimaryTextBrush}"/>
+    <Grid Margin="0,0,0,30">
+        <TextBlock Text="Saved Connections" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+        
+        <Button Content="Server Actions ⚡" HorizontalAlignment="Right" Background="{DynamicResource NavBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0" Padding="15,8" FontSize="16" FontWeight="Bold" Cursor="Hand" Click="AdminMenu_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+            <Button.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Scan Personal Media" Click="AdminAction_Click" Tag="/dvr/scanner/scan"/>
+                    <MenuItem Header="Prune Removed Media" Click="AdminAction_Click" Tag="/dvr/scanner/imports/prune"/>
+                    <MenuItem Header="Refresh Virtual Channels" Click="AdminAction_Click" Tag="/dvr/lineups/X-VIRTUAL"/>
+                    <MenuItem Header="Clear Streaming Cache" Click="AdminAction_Click" Tag="/dvr/cache"/>
+                    <MenuItem Header="Fetch Guide Updates" Click="AdminAction_Click" Tag="/dvr/guide?force="/>
+                    <MenuItem Header="Re-Download Entire Guide" Click="AdminAction_Click" Tag="/dvr/guide?force=true"/>
+                    <MenuItem Header="Empty Trash" Click="AdminAction_Click" Tag="/dvr/trash/empty"/>
+                </ContextMenu>
+            </Button.ContextMenu>
+        </Button>
+    </Grid>
 
                     <ListBox x:Name="SavedServersList" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" KeyboardNavigation.DirectionalNavigation="Continue">
                         <ListBox.ItemContainerStyle>

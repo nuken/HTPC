@@ -22,6 +22,7 @@ public partial class CollectionsView : UserControl
     public event EventHandler? OnShowsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
+	public event EventHandler? OnSportsRequested;
     public event EventHandler? OnExitRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
     public event EventHandler<(System.Collections.Generic.List<MediaItem> Queue, int StartIndex)>? OnPlayQueueRequested;
@@ -85,6 +86,7 @@ public partial class CollectionsView : UserControl
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
+	private void Sports_Click(object sender, RoutedEventArgs e) => OnSportsRequested?.Invoke(this, EventArgs.Empty);
     private void ExitApp_Click(object sender, RoutedEventArgs e) => OnExitRequested?.Invoke(this, EventArgs.Empty);
     
     // --- COLLECTION SELECTION ---

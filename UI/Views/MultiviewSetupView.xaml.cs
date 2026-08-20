@@ -20,6 +20,7 @@ public partial class MultiviewSetupView : UserControl
     public event EventHandler? OnMoviesRequested;
     public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
+	public event EventHandler? OnSportsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnCollectionsRequested;
@@ -384,6 +385,7 @@ public partial class MultiviewSetupView : UserControl
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
+	private void Sports_Click(object sender, RoutedEventArgs e) => OnSportsRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
     private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);

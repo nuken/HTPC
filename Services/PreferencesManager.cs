@@ -33,6 +33,10 @@ public class AppPreferences
     public string LastIgnoredVersion { get; set; } = string.Empty;
     public DateTime IgnoreUntilDate { get; set; } = DateTime.MinValue;
     public string AppTheme { get; set; } = "Dark";
+	public List<string> ActiveSportFilters { get; set; } = new List<string>();
+	public int SkipForwardSeconds { get; set; } = 30;
+    public int SkipBackwardSeconds { get; set; } = 15;
+	public bool HideSportsScores { get; set; } = false;
     
     // --- NEW: COLLECTION SORTING ---
     public string CollectionSort { get; set; } = "Alphabetical";

@@ -84,6 +84,8 @@ public class MediaItem : INotifyPropertyChanged
     public bool IsScheduled { get; set; }
     public string DisplayTime { get; set; } = string.Empty;
 	
+	public string? LiveScore { get; set; }
+    public string? GamePeriod { get; set; }
 
 	public double StartOffset { get; set; }
     public int StartOffsetSeconds { get; set; }

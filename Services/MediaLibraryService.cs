@@ -10,13 +10,31 @@ using System.Linq;
 
 namespace HTPC.Services;
 
+// --- NEW: ESPN SCOREBOARD DATA MODEL ---
+// It MUST be outside and above MediaLibraryService!
+public class LiveScoreData
+{
+    public string HomeSchool { get; set; } = "";
+    public string HomeMascot { get; set; } = "";
+    public string HomeAbbreviation { get; set; } = "";
+    public string HomeDisplayName { get; set; } = "";
+
+    public string AwaySchool { get; set; } = "";
+    public string AwayMascot { get; set; } = "";
+    public string AwayAbbreviation { get; set; } = "";
+    public string AwayDisplayName { get; set; } = "";
+
+    public string Score { get; set; } = "";
+    public string Period { get; set; } = "";
+}
+
 public class MediaLibraryService
 {
     private readonly ServerManagerService _serverManager;
     private readonly HttpClient _httpClient;
     private readonly ILogger<MediaLibraryService> _logger;
     private List<MediaItem>? _masterMoviesCache = null;
-	private List<MediaItem>? _masterDiscoveryCache = null;
+    private List<MediaItem>? _masterDiscoveryCache = null;
     private DateTime _discoveryCacheTime = DateTime.MinValue;
     private string? _lastDiscoveryCollectionId = null;
 
@@ -276,6 +294,137 @@ public class MediaLibraryService
         return filtered.OrderBy(m => m.CreatedAt).Skip(offset).Take(limit).ToList();
     }
 	
+	
+// --- NEW: ESPN HIDDEN API FETCHER (STEALTH PARALLEL VERSION) ---
+public async Task<List<LiveScoreData>> GetLiveScoresAsync()
+{
+    // Create a rolling 3-day window to catch DVR replays of yesterday's games
+    string startDate = DateTime.Now.AddDays(-2).ToString("yyyyMMdd");
+    string endDate = DateTime.Now.AddDays(1).ToString("yyyyMMdd");
+    string dateParam = $"?dates={startDate}-{endDate}&limit=200";
+
+    string[] endpoints = {
+        $"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard{dateParam}",
+        $"https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard{dateParam}",
+        $"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard{dateParam}",
+        $"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard{dateParam}",
+        $"https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard{dateParam}",
+        $"https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard{dateParam}" 
+    };
+
+    var handler = new HttpClientHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+    };
+
+    using var espnClient = new HttpClient(handler);
+    
+    // --- THE MAGIC BULLET: Force HTTP/2 and mimic Chrome exactly ---
+    espnClient.DefaultRequestVersion = new Version(2, 0);
+    espnClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36");
+    espnClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
+    espnClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
+    espnClient.DefaultRequestHeaders.Add("Sec-Ch-Ua", "\"Not)A;Brand\";v=\"99\", \"Google Chrome\";v=\"127\", \"Chromium\";v=\"127\"");
+    espnClient.DefaultRequestHeaders.Add("Sec-Ch-Ua-Mobile", "?0");
+    espnClient.DefaultRequestHeaders.Add("Sec-Ch-Ua-Platform", "\"Windows\"");
+    espnClient.DefaultRequestHeaders.Add("Sec-Fetch-Dest", "empty");
+    espnClient.DefaultRequestHeaders.Add("Sec-Fetch-Mode", "cors");
+    espnClient.DefaultRequestHeaders.Add("Sec-Fetch-Site", "cross-site");
+    espnClient.DefaultRequestHeaders.Add("Origin", "https://www.espn.com");
+    espnClient.DefaultRequestHeaders.Add("Referer", "https://www.espn.com/");
+
+    // Launch all ESPN requests at the exact same time
+    var fetchTasks = endpoints.Select(async url =>
+    {
+        var localScores = new List<LiveScoreData>();
+        try
+        {
+            var response = await espnClient.GetAsync(url);
+            if (!response.IsSuccessStatusCode) return localScores;
+            
+            string json = await response.Content.ReadAsStringAsync();
+            using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(json);
+            
+            if (doc.RootElement.TryGetProperty("events", out var eventsElement) && eventsElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var ev in eventsElement.EnumerateArray())
+                {
+                    if (ev.TryGetProperty("competitions", out var comps) && comps.ValueKind == System.Text.Json.JsonValueKind.Array && comps.GetArrayLength() > 0)
+                    {
+                        var comp = comps[0];
+                        
+                        string periodDetail = "";
+                        bool isLiveOrFinished = false;
+                        
+                        if (comp.TryGetProperty("status", out var status) && status.TryGetProperty("type", out var typeNode))
+                        {
+                            periodDetail = GetStringOrNumber(typeNode, "detail", "shortDetail");
+                            string state = GetStringOrNumber(typeNode, "state");
+                            isLiveOrFinished = state == "in" || state == "post";
+                        }
+
+                        if (!isLiveOrFinished) continue; 
+
+                        string hSchool = "", hMascot = "", hAbbr = "", hDisp = "", aSchool = "", aMascot = "", aAbbr = "", aDisp = "", homeScore = "0", awayScore = "0";
+                        
+                        if (comp.TryGetProperty("competitors", out var competitors) && competitors.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var competitorNode in competitors.EnumerateArray())
+                            {
+                                string location = "", name = "", abbr = "", disp = "";
+                                
+                                // Extract team details from inside the "team" block
+                                if (competitorNode.TryGetProperty("team", out var tNode))
+                                {
+                                    location = GetStringOrNumber(tNode, "location");
+                                    name = GetStringOrNumber(tNode, "name");
+                                    abbr = GetStringOrNumber(tNode, "abbreviation");
+                                    disp = GetStringOrNumber(tNode, "displayName");
+                                }
+                                
+                                // Extract the score from the ROOT of the competitor node
+                                string score = GetStringOrNumber(competitorNode, "score");
+                                if (string.IsNullOrEmpty(score)) score = "0";
+
+                                string homeAway = GetStringOrNumber(competitorNode, "homeAway");
+
+                                if (homeAway == "home") 
+                                { 
+                                    hSchool = location; hMascot = name; hAbbr = abbr; hDisp = disp; homeScore = score; 
+                                }
+                                else 
+                                { 
+                                    aSchool = location; aMascot = name; aAbbr = abbr; aDisp = disp; awayScore = score; 
+                                }
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(hMascot) && !string.IsNullOrEmpty(aMascot))
+                        {
+                            localScores.Add(new LiveScoreData
+                            {
+                                HomeSchool = hSchool, HomeMascot = hMascot, HomeAbbreviation = hAbbr, HomeDisplayName = hDisp,
+                                AwaySchool = aSchool, AwayMascot = aMascot, AwayAbbreviation = aAbbr, AwayDisplayName = aDisp,
+                                Score = $"{awayScore} - {homeScore}",
+                                Period = periodDetail
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Failed to fetch ESPN scores from {url}: {ex.Message}");
+        }
+        return localScores;
+    });
+
+    // Wait for all HTTP requests to finish concurrently, then combine the arrays
+    var results = await Task.WhenAll(fetchTasks);
+    return results.SelectMany(s => s).ToList();
+}
+	
 	private MediaItem MapAiringToMediaItem(string baseUrl, JsonElement airing, string channelNumber)
     {
         long time = airing.TryGetProperty("Time", out var tProp) && tProp.ValueKind == JsonValueKind.Number ? tProp.GetInt64() : 0;
@@ -283,7 +432,7 @@ public class MediaLibraryService
         DateTime airDate = DateTimeOffset.FromUnixTimeSeconds(time).LocalDateTime;
         
         string title = GetStringOrNumber(airing, "Title");
-        string episodeTitle = GetStringOrNumber(airing, "EpisodeTitle");
+        string episodeTitle = GetStringOrNumber(airing, "EpisodeTitle", "EventTitle");
         string summary = GetStringOrNumber(airing, "Summary");
         string seriesId = GetStringOrNumber(airing, "SeriesID");
         string programId = GetStringOrNumber(airing, "ProgramID");
@@ -856,8 +1005,8 @@ public class MediaLibraryService
                                             {
                                                 ChannelNumber = channelNumber,
                                                 Title = GetStringOrNumber(a, "Title"),
-                                                EpisodeTitle = GetStringOrNumber(a, "EpisodeTitle"),
-                                                DisplaySummary = GetStringOrNumber(a, "Summary"),
+                                                EpisodeTitle = GetStringOrNumber(a, "EpisodeTitle", "EventTitle"),
+                                                DisplaySummary = GetStringOrNumber(a, "Summary", "Description", "full_summary"),
                                                 ImageUrl = finalAiringImage,
                                                 StartTime = startTime,
                                                 Duration = duration,
@@ -1463,7 +1612,112 @@ public class MediaLibraryService
         }
     }
 	
-    public async Task<List<MediaItem>> GetAllRecordingsAsync()
+	public async Task<(List<MediaItem> Events, List<string> AvailableGenres)> GetSportsEventsAsync(int durationHours = 24)
+{
+    var activeServer = _serverManager.GetActiveServer();
+    if (activeServer == null) return (new List<MediaItem>(), new List<string>());
+
+    string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+    var sportsEvents = new List<MediaItem>();
+    var discoveredGenres = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    try
+    {
+        // 1. Fetch stacked channels and guide airings for the designated window
+        var channels = await GetGuideChannelsAsync(null, durationHours);
+        var now = DateTime.Now;
+
+        foreach (var channel in channels)
+        {
+            if (channel.Hidden || channel.CurrentAirings == null) continue;
+
+            foreach (var airing in channel.CurrentAirings)
+            {
+                if (string.IsNullOrWhiteSpace(airing.Title) || airing.Title == "To Be Announced") continue;
+
+                // 2. Filter strictly for sports classifications
+                bool isSport = airing.Categories.Any(c => 
+                                   c.Equals("Sports event", StringComparison.OrdinalIgnoreCase) ||
+                                   c.Equals("Sports", StringComparison.OrdinalIgnoreCase) ||
+                                   c.Equals("Team event", StringComparison.OrdinalIgnoreCase)) ||
+                               airing.Genres.Any(g => g.Equals("Sports", StringComparison.OrdinalIgnoreCase));
+
+                if (!isSport) continue;
+
+                DateTime startTime = airing.StartTime;
+                double durationSec = airing.Duration ?? 3600;
+                DateTime endTime = startTime.AddSeconds(durationSec);
+
+                // Ignore games that have already concluded
+                if (endTime <= now) continue;
+
+                bool isLiveNow = now >= startTime && now < endTime;
+
+                // 3. Extract specific sub-genres (e.g. Football, Basketball, Baseball, Hockey)
+                var specificGenres = airing.Genres
+                    .Where(g => !g.Equals("Sports", StringComparison.OrdinalIgnoreCase) && 
+                                !g.Equals("Sports event", StringComparison.OrdinalIgnoreCase) &&
+                                !g.Equals("Team event", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                foreach (var genre in specificGenres)
+                {
+                    discoveredGenres.Add(genre);
+                }
+
+                // 4. Resolve Stream URL using Channels DVR's tuner priority
+                string streamUrl = $"{baseUrl}/devices/ANY/channels/{channel.Number}/stream.mpg";
+
+                // 5. Build MediaItem representing the sporting event
+                long createdEpoch = new DateTimeOffset(startTime).ToUnixTimeSeconds();
+                string displayTime = isLiveNow 
+                    ? "LIVE NOW" 
+                    : startTime.Date == now.Date 
+                        ? $"Today at {startTime:h:mm tt}" 
+                        : startTime.ToString("ddd, MMM d 'at' h:mm tt");
+
+                sportsEvents.Add(new MediaItem
+                {
+                    Id = airing.ProgramId ?? airing.SeriesId ?? $"{channel.Number}_{createdEpoch}",
+                    Title = airing.DisplayTitle,
+                    CurrentShowTitle = airing.EpisodeTitle ?? "",
+                    Summary = airing.DisplaySummary ?? "No event summary available.",
+                    PosterUrl = airing.ImageUrl ?? channel.ImageUrl ?? "",
+                    ChannelName = channel.Name,
+                    ChannelNumber = channel.Number,
+                    StreamUrl = streamUrl,
+                    IsLiveTv = true,
+                    CreatedAt = createdEpoch,
+                    StartTime = startTime,
+                    EndTime = endTime,
+                    Duration = durationSec,
+                    DisplayTime = displayTime,
+                    SeriesId = airing.SeriesId ?? "",
+                    Genres = specificGenres,
+                    Categories = airing.Categories
+                });
+            }
+        }
+
+        // Sort: Live games first (by start time), then upcoming games chronologically
+        var sortedEvents = sportsEvents
+            .GroupBy(e => e.Id) // Deduplicate across multi-channel mirrors
+            .Select(g => g.First())
+            .OrderBy(e => e.StartTime)
+            .ToList();
+
+        var sortedGenres = discoveredGenres.OrderBy(g => g).ToList();
+
+        return (sortedEvents, sortedGenres);
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Failed to load sports events: {ex.Message}");
+        return (new List<MediaItem>(), new List<string>());
+    }
+}
+    
+	public async Task<List<MediaItem>> GetAllRecordingsAsync()
     {
         var activeServer = _serverManager.GetActiveServer();
         if (activeServer == null) return new List<MediaItem>();

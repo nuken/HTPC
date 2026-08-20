@@ -16,6 +16,7 @@ public partial class RecordingsView : UserControl
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnMoviesRequested;
     public event EventHandler? OnShowsRequested;
+	public event EventHandler? OnSportsRequested;
     public event EventHandler? OnVideosRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnMultiviewRequested;
@@ -763,6 +764,7 @@ public partial class RecordingsView : UserControl
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
+	private void Sports_Click(object sender, RoutedEventArgs e) => OnSportsRequested?.Invoke(this, EventArgs.Empty);
     private void Videos_Click(object sender, RoutedEventArgs e) => OnVideosRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
     private void Collections_Click(object sender, RoutedEventArgs e) => OnCollectionsRequested?.Invoke(this, EventArgs.Empty);

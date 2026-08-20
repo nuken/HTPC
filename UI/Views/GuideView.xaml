@@ -89,6 +89,7 @@
             <Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+			<Button Content="Sports" Click="Sports_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
             <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
 
@@ -297,9 +298,9 @@
                                                                 <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="EpgBorder" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger>
                                                                 <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="EpgBorder" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger>
                                                                 <DataTrigger Binding="{Binding IsAiringNow}" Value="True">
-                                                                    <Setter TargetName="EpgBorder" Property="Background" Value="{DynamicResource ActiveNavBackgroundBrush}"/>
+                                                                    <Setter TargetName="EpgBorder" Property="Background" Value="{DynamicResource GuideLiveBackgroundBrush}"/>
                                                                     <Setter TargetName="EpgBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                                                    <Setter TargetName="TitleText" Property="Foreground" Value="{DynamicResource ActiveNavTextBrush}"/>
+                                                                    <Setter TargetName="TitleText" Property="Foreground" Value="{DynamicResource GuideLiveTextBrush}"/>
                                                                 </DataTrigger>
                                                             </ControlTemplate.Triggers>
                                                         </ControlTemplate>

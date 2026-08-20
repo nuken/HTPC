@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private readonly DashboardView _dashboardView;
     private readonly PlayerView _playerView;
     private readonly SettingsView _settingsView;
+	private readonly SportsView _sportsView;
     private readonly GuideView _guideView;
     private readonly MoviesView _moviesView;
     private readonly ShowsView _showsView;
@@ -28,13 +29,14 @@ public partial class MainWindow : Window
     private bool _isFullscreen = true;
     private Point _lastMousePosition;
 
-    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, RecordingsView recordingsView, MultiviewSetupView multiviewSetupView, CollectionsView collectionsView, ServerManagerService serverManager)
+    public MainWindow(DashboardView dashboardView, PlayerView playerView, SettingsView settingsView, SportsView sportsView, GuideView guideView, MoviesView moviesView, ShowsView showsView, VideosView videosView, RecordingsView recordingsView, MultiviewSetupView multiviewSetupView, CollectionsView collectionsView, ServerManagerService serverManager)
 {
     InitializeComponent();
         
         _dashboardView = dashboardView;
         _playerView = playerView;
         _settingsView = settingsView;
+		_sportsView = sportsView;
         _guideView = guideView;
         _moviesView = moviesView; 
         _showsView = showsView;
@@ -61,6 +63,7 @@ public partial class MainWindow : Window
         _settingsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _settingsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         _settingsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+		_settingsView.OnSportsRequested += NavigateToSports;
         
         _dashboardView.OnPlayRequested += PlayMedia;
         _dashboardView.OnExitRequested += Dashboard_ExitRequested;
@@ -71,6 +74,7 @@ public partial class MainWindow : Window
         _dashboardView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _dashboardView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         _dashboardView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+		_dashboardView.OnSportsRequested += NavigateToSports;
         
         _guideView.OnHomeRequested += NavigateToDashboard;
         _guideView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
@@ -80,6 +84,7 @@ public partial class MainWindow : Window
         _guideView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
         _guideView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         _guideView.OnPlayRequested += PlayMedia;
+		_guideView.OnSportsRequested += NavigateToSports;
         
         _moviesView.OnHomeRequested += NavigateToDashboard;
         _moviesView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -89,6 +94,7 @@ public partial class MainWindow : Window
         _moviesView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _moviesView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         _moviesView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+		_moviesView.OnSportsRequested += NavigateToSports;
         
         _showsView.OnHomeRequested += NavigateToDashboard;
         _showsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -99,6 +105,7 @@ public partial class MainWindow : Window
         _showsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
         _showsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         _showsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+		_showsView.OnSportsRequested += NavigateToSports;
         
         _videosView.OnHomeRequested += NavigateToDashboard;
         _videosView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -106,8 +113,9 @@ public partial class MainWindow : Window
         _videosView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
         _videosView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _videosView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
-         _videosView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+        _videosView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         _videosView.OnPlayRequested += PlayMedia;
+		_videosView.OnSportsRequested += NavigateToSports;
         
         // --- NEW: RECORDINGS VIEW OUTBOUND NAVIGATION ---
         _recordingsView.OnHomeRequested += NavigateToDashboard;
@@ -119,6 +127,7 @@ public partial class MainWindow : Window
         _recordingsView.OnPlayRequested += PlayMedia;
         _recordingsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         _recordingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
+		_recordingsView.OnSportsRequested += NavigateToSports;
         
         _dashboardView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _settingsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
@@ -135,6 +144,18 @@ public partial class MainWindow : Window
         _multiviewSetupView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
         _multiviewSetupView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
         _multiviewSetupView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _multiviewSetupView.OnSportsRequested += NavigateToSports;
+		
+		_sportsView.OnHomeRequested += NavigateToDashboard;
+        _sportsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
+        _sportsView.OnMoviesRequested += (s, e) => MainShellContainer.Content = _moviesView;
+        _sportsView.OnShowsRequested += (s, e) => MainShellContainer.Content = _showsView;
+        _sportsView.OnCollectionsRequested += (s, e) => MainShellContainer.Content = _collectionsView;
+        _sportsView.OnRecordingsRequested += (s, e) => MainShellContainer.Content = _recordingsView;
+        _sportsView.OnVideosRequested += (s, e) => MainShellContainer.Content = _videosView;
+        _sportsView.OnSettingsRequested += (s, e) => MainShellContainer.Content = _settingsView;
+        _sportsView.OnPlayRequested += PlayMedia;
+        _sportsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         
         _collectionsView.OnHomeRequested += NavigateToDashboard;
         _collectionsView.OnGuideRequested += (s, e) => MainShellContainer.Content = _guideView;
@@ -146,6 +167,7 @@ public partial class MainWindow : Window
         _collectionsView.OnMultiviewRequested += (s, e) => MainShellContainer.Content = _multiviewSetupView;
         _collectionsView.OnPlayRequested += PlayMedia;
         _collectionsView.OnPlayQueueRequested += (s, e) => PlayMediaQueue(e.Queue, e.StartIndex);
+		_collectionsView.OnSportsRequested += NavigateToSports;
         
         _playerView.OnBackRequested += (s, e) => MainShellContainer.Content = _previousView ?? _dashboardView;
 
@@ -155,6 +177,7 @@ public partial class MainWindow : Window
         InitializeWindowState();
         ApplyGlobalUiScale();
         this.PreviewMouseMove += Window_PreviewMouseMove;
+		this.KeyDown += Window_KeyDown;
     }
     
     // ==========================================
@@ -310,7 +333,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 2. UNIVERSAL BACK / ESCAPE HANDLER
+        // 2. UNIVERSAL ESCAPE HANDLER (Player & Exit Only)
         if (e.Key == Key.Escape)
         {
             if (MainShellContainer.Content == _playerView)
@@ -318,17 +341,13 @@ public partial class MainWindow : Window
                 _playerView.StopPlayback();
                 MainShellContainer.Content = _previousView ?? _dashboardView;
                 e.Handled = true;
+                return;
             }
-            else if (MainShellContainer.Content == _settingsView || MainShellContainer.Content == _guideView || MainShellContainer.Content == _multiviewSetupView) 
-        {
-            MainShellContainer.Content = _dashboardView;
-            e.Handled = true;
-        }
             else if (MainShellContainer.Content == _dashboardView)
             {
                 Application.Current.Shutdown();
+                return;
             }
-            return;
         }
 
         // 3. IGNORE OTHER HOTKEYS IF WATCHING VIDEO
@@ -354,17 +373,22 @@ public partial class MainWindow : Window
             NavigateToDashboard(this, EventArgs.Empty);
             e.Handled = true;
             return;
-        }
+        }        
+    }
+	
+	private void Window_KeyDown(object sender, KeyEventArgs e)
+    {
+        var command = Core.Input.InputMapper.GetCommand(e.Key);
 
-        // 5. STANDARD NAVIGATION (REMOTE BACK/HOME)
+        // Global Catch-All: If the active view didn't use the Back/Escape key to close a modal, return to Dashboard
         if (command == Core.Input.HtpcCommand.Home)
         {
             NavigateToDashboard(this, EventArgs.Empty);
             e.Handled = true;
         }
-        else if (command == Core.Input.HtpcCommand.Back)
+        else if (command == Core.Input.HtpcCommand.Back || e.Key == Key.Escape)
         {
-            if (MainShellContainer.Content != _dashboardView)
+            if (MainShellContainer.Content != _dashboardView && MainShellContainer.Content != _playerView)
             {
                 NavigateToDashboard(this, EventArgs.Empty);
                 e.Handled = true;
@@ -447,6 +471,11 @@ public partial class MainWindow : Window
         // Hook into the Windows message loop
         var source = System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle);
         source?.AddHook(WndProc);
+    }
+	
+	private void NavigateToSports(object? sender, EventArgs e)
+    {
+        MainShellContainer.Content = _sportsView;
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

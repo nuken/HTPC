@@ -59,6 +59,8 @@ public class Program
                 services.AddTransient<HTPC.UI.Views.RecordingsView>();
                 services.AddTransient<HTPC.UI.ViewModels.CollectionsViewModel>();
                 services.AddTransient<HTPC.UI.Views.CollectionsView>();
+				services.AddTransient<HTPC.UI.ViewModels.SportsViewModel>();
+                services.AddTransient<HTPC.UI.Views.SportsView>();
             });
 
         using var host = hostBuilder.Build();
