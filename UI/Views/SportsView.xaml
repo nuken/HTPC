@@ -285,7 +285,7 @@
                                 </Style>
                             </StackPanel.Style>
                             
-                            <TextBlock Text="{Binding LiveScore}" Foreground="White" FontWeight="Bold" FontSize="18" HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding LiveScore}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold" FontSize="18" HorizontalAlignment="Right"/>
                             <TextBlock Text="{Binding GamePeriod}" Foreground="#E63946" FontWeight="Bold" FontSize="12" HorizontalAlignment="Right" Margin="0,2,0,0"/>
                         </StackPanel>
                     </Grid>

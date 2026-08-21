@@ -73,34 +73,42 @@
 
         <!-- FLOATING FULLSCREEN CLOSE BUTTON -->
         <Button x:Name="FullscreenCloseBtn" 
-		        Grid.RowSpan="2"
+                Grid.RowSpan="2"
                 Content="EXIT" 
                 FontSize="16" FontWeight="Bold"
                 Width="45" Height="45"
                 HorizontalAlignment="Right" VerticalAlignment="Top" 
-                Background="#D32F2F" Foreground="White" 
-                BorderThickness="2" BorderBrush="Transparent" Margin="0,15,15,0"
+                Background="{DynamicResource NavBackgroundBrush}" Foreground="{DynamicResource MutedTextBrush}" 
+                BorderThickness="2" BorderBrush="Transparent" Margin="0,40,40,0"
                 Cursor="Hand" Click="AppExit_Click"
                 Panel.ZIndex="9999" Visibility="Collapsed" Focusable="True">
             <Button.Template>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="22">
+                            <Border.Effect>
+                            <DropShadowEffect ShadowDepth="3" BlurRadius="5" Opacity="0.7" Direction="315" Color="{DynamicResource ShadowColor}"/>
+                        </Border.Effect>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <!-- Mouse Hover -->
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#FF0000"/>
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                            <!-- Remove shadow on hover -->
+                            <Setter TargetName="bg" Property="Effect" Value="{x:Null}"/>
                         </Trigger>
                         <!-- Remote Control Focus State -->
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#FF0000"/>
-                            <Setter TargetName="bg" Property="BorderBrush" Value="White"/>
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            <Setter TargetName="bg" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                            <!-- Remove shadow on focus -->
+                            <Setter TargetName="bg" Property="Effect" Value="{x:Null}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Button.Template>
         </Button>
-
    </Grid>
 </Window>

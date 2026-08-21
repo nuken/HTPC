@@ -21,6 +21,7 @@
     <!-- Borders & Overlays -->
     <SolidColorBrush x:Key="BorderBrush" Color="#D1D5DB"/>
     <SolidColorBrush x:Key="OverlayBackgroundBrush" Color="#E6FFFFFF"/> <!-- Translucent White -->
+	<Color x:Key="ShadowColor">Black</Color>
 	
 	<!-- NEW: Dedicated Guide Live Brushes -->
     <SolidColorBrush x:Key="GuideLiveBackgroundBrush" Color="#0078D4"/> <!-- Professional Blue -->
