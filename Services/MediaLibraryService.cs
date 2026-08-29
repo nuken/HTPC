@@ -2375,7 +2375,8 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
         }
         else
         {
-            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/devices/ANY/channels/{channel.Number}/hls/master.m3u8";
+            // Forces an unbroken raw stream so MPV's backward RAM cache actually works
+            media.StreamUrl = $"{baseUrl.TrimEnd('/')}/devices/ANY/channels/{channel.Number}/stream.mpg?format=ts";
         }
 
         return media;

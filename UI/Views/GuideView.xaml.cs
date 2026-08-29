@@ -37,6 +37,9 @@ public partial class GuideView : UserControl
     private Button? _lastFocusedAiringButton;
     private DateTime _lastTimeFocus = DateTime.MinValue;
     private readonly DispatcherTimer _autoRefreshTimer;
+	
+	private readonly System.Windows.Threading.DispatcherTimer _channelEntryTimer;
+    private string _channelEntryBuffer = "";
     
     // --- Overlay Filter Variables ---
     private string _activeCollectionName = "All Channels";
@@ -49,6 +52,9 @@ public partial class GuideView : UserControl
         InitializeComponent();
         _libraryService = libraryService;
         _serverManager = serverManager;
+		
+		_channelEntryTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        _channelEntryTimer.Tick += ChannelEntryTimer_Tick;
         
         ChannelItemsControl.ItemsSource = DisplayedChannels;
         GuideItemsControl.ItemsSource = DisplayedChannels;
@@ -301,108 +307,190 @@ public partial class GuideView : UserControl
     // --- MAIN GRID NAVIGATION ---
 
     private void GuideView_PreviewKeyDown(object sender, KeyEventArgs e)
+{
+    var command = InputMapper.GetCommand(e.Key);
+
+    if (ModalOverlay.Visibility == Visibility.Visible)
     {
-        var command = InputMapper.GetCommand(e.Key);
-
-        if (ModalOverlay.Visibility == Visibility.Visible)
+        if (command == HtpcCommand.Back || e.Key == Key.Escape)
         {
-            if (command == HtpcCommand.Back || e.Key == Key.Escape)
-            {
-                CloseModal_Click(null!, null!);
-                _lastFocusedAiringButton?.Focus();
-                e.Handled = true;
-            }
-            return;
-        }
-        
-        if (FilterOverlay.Visibility == Visibility.Visible)
-        {
-            if (command == HtpcCommand.Back || e.Key == Key.Escape)
-            {
-                CloseFilterOverlay();
-                e.Handled = true;
-            }
-            return;
-        }
-
-        bool isArrowKey = command == HtpcCommand.Left || command == HtpcCommand.Right || command == HtpcCommand.Up || command == HtpcCommand.Down;
-        if (!isArrowKey) return;
-
-        if (command == HtpcCommand.Down && Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null && topBtn != CollectionFilterBtn)
-        {
-            string? btnText = topBtn.Content?.ToString();
-            if (btnText == "Home" || btnText == "Guide" || btnText == "Multiview" || btnText == "Movies" || btnText == "Shows" || btnText == "Videos" || btnText == "Settings")
-            {
-                CollectionFilterBtn.Focus();
-                e.Handled = true;
-                return;
-            }
-        }
-
-        if (Keyboard.FocusedElement is Button btn && btn.Tag is Airing currentAiring)
-        {
+            CloseModal_Click(null!, null!);
+            _lastFocusedAiringButton?.Focus();
             e.Handled = true;
+        }
+        return;
+    }
+    
+    if (FilterOverlay.Visibility == Visibility.Visible)
+    {
+        if (command == HtpcCommand.Back || e.Key == Key.Escape)
+        {
+            CloseFilterOverlay();
+            e.Handled = true;
+        }
+        return;
+    }
 
-            if (command == HtpcCommand.Left || command == HtpcCommand.Right)
+    // ========================================================
+    // --- NEW: DIRECT CHANNEL NUMBER ENTRY LOGIC GOES HERE ---
+    // ========================================================
+    if ((e.Key >= Key.D0 && e.Key <= Key.D9) || (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9) || e.Key == Key.Decimal || e.Key == Key.OemPeriod)
+    {
+        string digit = "";
+        if (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9) digit = ((int)e.Key - (int)Key.NumPad0).ToString();
+        else if (e.Key >= Key.D0 && e.Key <= Key.D9) digit = ((int)e.Key - (int)Key.D0).ToString();
+        else if ((e.Key == Key.Decimal || e.Key == Key.OemPeriod) && !_channelEntryBuffer.Contains(".")) digit = ".";
+
+        _channelEntryBuffer += digit;
+        ChannelEntryText.Text = _channelEntryBuffer;
+        ChannelEntryOverlay.Visibility = Visibility.Visible;
+
+        _channelEntryTimer.Stop();
+        _channelEntryTimer.Start();
+        
+        e.Handled = true;
+        return;
+    }
+
+    // Allow "Select/Enter" to instantly jump without waiting for the timer
+    if ((command == HtpcCommand.Select || e.Key == Key.Enter) && !string.IsNullOrEmpty(_channelEntryBuffer))
+    {
+        ChannelEntryTimer_Tick(null, EventArgs.Empty);
+        e.Handled = true;
+        return;
+    }
+    // ========================================================
+
+
+    // --- YOUR EXISTING ARROW KEY LOGIC CONTINUES BELOW ---
+    bool isArrowKey = command == HtpcCommand.Left || command == HtpcCommand.Right || command == HtpcCommand.Up || command == HtpcCommand.Down;
+    if (!isArrowKey) return;
+
+    if (command == HtpcCommand.Down && Keyboard.FocusedElement is Button topBtn && topBtn.Tag == null && topBtn != CollectionFilterBtn)
+    {
+        string? btnText = topBtn.Content?.ToString();
+        if (btnText == "Home" || btnText == "Guide" || btnText == "Multiview" || btnText == "Movies" || btnText == "Shows" || btnText == "Videos" || btnText == "Settings")
+        {
+            CollectionFilterBtn.Focus();
+            e.Handled = true;
+            return;
+        }
+    }
+
+    if (Keyboard.FocusedElement is Button btn && btn.Tag is Airing currentAiring)
+    {
+        e.Handled = true;
+
+        if (command == HtpcCommand.Left || command == HtpcCommand.Right)
+        {
+            var channel = DisplayedChannels.FirstOrDefault(c => c.Number == currentAiring.ChannelNumber);
+            if (channel != null)
             {
-                var channel = DisplayedChannels.FirstOrDefault(c => c.Number == currentAiring.ChannelNumber);
-                if (channel != null)
+                var airings = channel.CurrentAirings ?? new List<Airing>();
+                int currentIndex = airings.IndexOf(currentAiring);
+                int nextIndex = command == HtpcCommand.Right ? currentIndex + 1 : currentIndex - 1;
+
+                if (nextIndex >= 0 && nextIndex < airings.Count)
                 {
-                    var airings = channel.CurrentAirings ?? new List<Airing>();
-                    int currentIndex = airings.IndexOf(currentAiring);
-                    int nextIndex = command == HtpcCommand.Right ? currentIndex + 1 : currentIndex - 1;
-
-                    if (nextIndex >= 0 && nextIndex < airings.Count)
-                    {
-                        var targetAiring = airings[nextIndex];
-                        FocusAiringSafely(channel, targetAiring);
-                    }
-                    else if (nextIndex < 0 && command == HtpcCommand.Left)
-                    {
-                        CollectionFilterBtn.Focus();
-                    }
+                    var targetAiring = airings[nextIndex];
+                    FocusAiringSafely(channel, targetAiring);
                 }
-            }
-            else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
-            {
-                int currentChannelIndex = DisplayedChannels.IndexOf(DisplayedChannels.First(c => c.Number == currentAiring.ChannelNumber));
-                int nextIndex = command == HtpcCommand.Down ? currentChannelIndex + 1 : currentChannelIndex - 1;
-
-                if (nextIndex >= 0 && nextIndex < DisplayedChannels.Count)
-                {
-                    var nextChannel = DisplayedChannels[nextIndex];
-                    var safeAirings = nextChannel.CurrentAirings ?? new List<Airing>();
-
-                    var targetAiring = safeAirings.FirstOrDefault(a => 
-                        a.StartTime <= _lastTimeFocus && 
-                        a.StartTime.AddSeconds(a.Duration ?? 0) > _lastTimeFocus) ?? safeAirings.FirstOrDefault();
-
-                    if (targetAiring != null)
-                    {
-                        FocusAiringSafely(nextChannel, targetAiring);
-                    }
-                }
-                else if (nextIndex < 0 && command == HtpcCommand.Up)
+                else if (nextIndex < 0 && command == HtpcCommand.Left)
                 {
                     CollectionFilterBtn.Focus();
                 }
             }
-            return; 
         }
-
-        bool isFocusedOnTopMenu = Keyboard.FocusedElement == CollectionFilterBtn || Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is CheckBox ||
-                                  (Keyboard.FocusedElement is Button tb && tb.Tag == null) ||
-                                  (Keyboard.FocusedElement is RepeatButton);
-
-        if (!isFocusedOnTopMenu)
+        else if (command == HtpcCommand.Up || command == HtpcCommand.Down)
         {
-            if (Keyboard.FocusedElement == null || Keyboard.FocusedElement == this || Keyboard.FocusedElement == GuideItemsControl)
+            int currentChannelIndex = DisplayedChannels.IndexOf(DisplayedChannels.First(c => c.Number == currentAiring.ChannelNumber));
+            int nextIndex = command == HtpcCommand.Down ? currentChannelIndex + 1 : currentChannelIndex - 1;
+
+            if (nextIndex >= 0 && nextIndex < DisplayedChannels.Count)
             {
-                GuideNavBtn.Focus(); 
-                e.Handled = true;
+                var nextChannel = DisplayedChannels[nextIndex];
+                var safeAirings = nextChannel.CurrentAirings ?? new List<Airing>();
+
+                var targetAiring = safeAirings.FirstOrDefault(a => 
+                    a.StartTime <= _lastTimeFocus && 
+                    a.StartTime.AddSeconds(a.Duration ?? 0) > _lastTimeFocus) ?? safeAirings.FirstOrDefault();
+
+                if (targetAiring != null)
+                {
+                    FocusAiringSafely(nextChannel, targetAiring);
+                }
+            }
+            else if (nextIndex < 0 && command == HtpcCommand.Up)
+            {
+                CollectionFilterBtn.Focus();
             }
         }
+        return; 
     }
+
+    bool isFocusedOnTopMenu = Keyboard.FocusedElement == CollectionFilterBtn || Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is CheckBox ||
+                              (Keyboard.FocusedElement is Button tb && tb.Tag == null) ||
+                              (Keyboard.FocusedElement is RepeatButton);
+
+    if (!isFocusedOnTopMenu)
+    {
+        if (Keyboard.FocusedElement == null || Keyboard.FocusedElement == this || Keyboard.FocusedElement == GuideItemsControl)
+        {
+            GuideNavBtn.Focus(); 
+            e.Handled = true;
+        }
+    }
+}
+	
+	private void ChannelEntryTimer_Tick(object? sender, EventArgs e)
+{
+    _channelEntryTimer.Stop();
+    ChannelEntryOverlay.Visibility = Visibility.Collapsed;
+    
+    string requestedChannel = _channelEntryBuffer;
+    _channelEntryBuffer = "";
+
+    if (string.IsNullOrWhiteSpace(requestedChannel)) return;
+
+    // Grab the current list of channels populated in the Guide
+    var channels = ChannelItemsControl.ItemsSource as System.Collections.Generic.IEnumerable<HTPC.Core.Models.Channel>;
+    
+    if (channels != null)
+    {
+        // Find the channel that matches the user's typed number
+        var targetChannel = channels.FirstOrDefault(c => c.Number == requestedChannel);
+        
+        if (targetChannel != null)
+        {
+            // Sync both the left-hand logos and the right-hand EPG grid
+            ChannelItemsControl.ScrollIntoView(targetChannel);
+            GuideItemsControl.ScrollIntoView(targetChannel);
+            
+            // Wait for WPF to physically render the scroll, then snap focus
+            Dispatcher.BeginInvoke(new Action(() => 
+            {
+                // Find the currently airing program (or the first available one if none are marked live)
+                var targetAiring = targetChannel.CurrentAirings?.FirstOrDefault(a => a.IsAiringNow) ?? targetChannel.CurrentAirings?.FirstOrDefault();
+                
+                if (targetAiring != null)
+                {
+                    // Use your existing helper to dive into the DataTemplate and focus the specific button
+                    FocusAiringSafely(targetChannel, targetAiring);
+                }
+                else
+                {
+                    // Fallback to the row if the channel is empty for some reason
+                    var row = GuideItemsControl.ItemContainerGenerator.ContainerFromItem(targetChannel) as UIElement;
+                    if (row != null)
+                    {
+                        row.Focus();
+                        Keyboard.Focus(row);
+                    }
+                }
+            }), System.Windows.Threading.DispatcherPriority.ContextIdle);
+        }
+    }
+}
     
     private void GuideView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {

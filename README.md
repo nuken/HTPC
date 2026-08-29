@@ -47,3 +47,52 @@ Nucleus HTPC acts as a direct client to your Channels DVR server. All actions ta
 * **Series Passes**: Creates automated recording passes for entire TV series.
 * **Channel Management**: Updates your server-side preferences when you favorite or hide specific live TV channels.
 * **Server Maintenance**: Triggers backend server actions like scanning for newly added files, pruning deleted media, fetching guide updates, and clearing the streaming cache.
+
+
+## Keyboard Commands
+
+**Playback & Timeline Control**
+
+* **Spacebar or P:** Play / Pause.
+* **Left Arrow (Single Tap):** Skip backward.
+* **Left Arrow (Hold):** Scrub fast-backward through the timeline.
+* **Left Arrow (Double-Tap):** Trigger Instant Replay (jumps back and plays in slow motion).
+* **Right Arrow (Single Tap):** Skip forward.
+* **Right Arrow (Hold):** Scrub fast-forward through the timeline.
+* **Right Arrow (Double-Tap):** Jump to the live edge of a broadcast.
+* **I:** Trigger Instant Replay.
+
+**Navigation & Menus**
+
+* **Up Arrow (Single Tap):** Navigate UI up (e.g., move focus to the timeline slider).
+* **Up Arrow (Double-Tap):** Open the Live TV Mini Guide.
+* **Down Arrow:** Navigate UI down / Close the Mini Guide.
+* **Enter / Return:** Select a focused UI item / Tune a typed channel number / Play & Pause (if no button is focused).
+* **Escape / Backspace:** Go back to the previous screen / Close the overlay.
+* **0-9 and Period (.):** Direct channel number entry (brings up the channel jump overlay).
+
+**Audio & Visual Toggles**
+
+* **C:** Toggle Subtitles (Closed Captions).
+* **A:** Toggle Anime Mode (Video Upscaler).
+* **M:** Mute audio.
+* **S:** Toggle "Stats for Nerds" overlay.
+* **F:** Toggle Fullscreen.
+* **Plus (+):** Volume Up.
+* **Minus (-):** Volume Down.
+
+## Remote Control Commands
+
+**Navigation**
+
+* **D-Pad (Up/Down/Left/Right):** Functions exactly like the keyboard arrow keys for skipping, scrubbing, and UI navigation (including the double-tap to open the guide).
+* **OK / Select:** Functions like the Enter key to click buttons, confirm channel entry, or toggle Play/Pause.
+* **Back Button:** Closes menus or goes back to the main guide.
+* **Number Pad (0-9, .):** Enters a channel number to jump directly to it.
+
+**Dedicated Media Keys**
+
+* **Play/Pause:** Toggles video playback or jumps to the live edge.
+* **Previous Track:** Skips backward by your configured skip amount.
+* **Next Track:** Skips forward by your configured skip amount.
+* **Volume Up / Down:** Adjusts the player volume in 5% increments.

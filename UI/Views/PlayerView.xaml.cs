@@ -23,10 +23,14 @@ public partial class PlayerView : UserControl
     private bool _isMpvAttached = false;
 	private Point _lastMousePosition;
 	private DateTime _playbackStartTime = DateTime.MinValue;
+	private DateTime _lastLeftPress = DateTime.MinValue;
+    private DateTime _lastRightPress = DateTime.MinValue;
+    private readonly TimeSpan _doubleTapThreshold = TimeSpan.FromMilliseconds(400);
 	// --- BINGE WATCH QUEUE STATE ---
     private System.Collections.Generic.List<MediaItem> _playbackQueue = new();
     private int _currentQueueIndex = 0;
     private bool _isTransitioning = false;
+
 
     public PlayerView(MpvPlaybackService mpvService, MediaLibraryService libraryService, ServerManagerService serverManager)
     {
@@ -48,6 +52,21 @@ public partial class PlayerView : UserControl
 		this.PreviewKeyDown += PlayerView_PreviewKeyDown;
         this.PreviewMouseMove += PlayerView_PreviewMouseMove;
     }
+	
+	public void TriggerInstantReplay(int? seconds = null) 
+{
+    // Ensure this command only goes through if the video is actually playing
+    if (this.Visibility != Visibility.Visible) return;
+    
+    _mpvService.TriggerInstantReplay(seconds);
+}
+
+public void JumpToLiveEdge()
+{
+    if (this.Visibility != Visibility.Visible) return;
+
+    _mpvService.JumpToLiveEdge();
+}
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -136,10 +155,53 @@ public partial class PlayerView : UserControl
     }
 	
 	private void PlayerView_PreviewKeyDown(object sender, KeyEventArgs e)
+{
+    Mouse.OverrideCursor = Cursors.None;
+    var command = HTPC.Core.Input.InputMapper.GetCommand(e.Key);
+    var now = DateTime.UtcNow;
+
+    if (e.Key == Key.I)
     {
-        // Instantly hide the cursor on any remote/keyboard input
-        Mouse.OverrideCursor = Cursors.None;
+        TriggerInstantReplay(20); 
+        e.Handled = true;
+        return;
     }
+
+    if (command == HTPC.Core.Input.HtpcCommand.Left || command == HTPC.Core.Input.HtpcCommand.SkipBackward)
+    {
+        if ((now - _lastLeftPress) < _doubleTapThreshold)
+        {
+            TriggerInstantReplay(20);
+            _lastLeftPress = DateTime.MinValue; 
+        }
+        else
+        {
+            _mpvService.SeekRelative(-15); 
+            _lastLeftPress = now;
+        }
+        e.Handled = true;
+        return;
+    }
+    else if (command == HTPC.Core.Input.HtpcCommand.Right || command == HTPC.Core.Input.HtpcCommand.SkipForward)
+    {
+        if ((now - _lastRightPress) < _doubleTapThreshold)
+        {
+            JumpToLiveEdge();
+            _lastRightPress = DateTime.MinValue;
+        }
+        else
+        {
+            _mpvService.SeekRelative(15);
+            _lastRightPress = now;
+        }
+        e.Handled = true;
+        return;
+    }
+    else if (command == HTPC.Core.Input.HtpcCommand.PlayPause)
+    {
+        JumpToLiveEdge();
+    }
+}
 
     private void PlayerView_PreviewMouseMove(object sender, MouseEventArgs e)
     {

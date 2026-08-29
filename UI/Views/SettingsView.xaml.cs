@@ -111,6 +111,8 @@ public partial class SettingsView : UserControl
         
         string preset = prefs.UpscalerPreset == "ArtCNN" ? "ArtCNN (High-End GPUs)" : "RAVU (Mid-Range GPUs)";
         UpscalerPresetBtn.Content = $"{preset} ▼";
+		
+		LoadReplayPreferences();
 
         _isInitialized = true;
         LoadServers();
@@ -691,6 +693,36 @@ else if (_currentFilterMode == FilterMode.SkipBackward)
     {
         Application.Current.Shutdown();
     }
+	
+	private readonly int[] _replayOptions = new[] { 10, 15, 20, 30, 45, 60 };
+
+private void LoadReplayPreferences()
+{
+    var prefs = PreferencesManager.Load();
+    ReplayDurationBtn.Content = $"{prefs.InstantReplaySeconds} Seconds";
+    ReplaySlowMoBtn.Content = prefs.InstantReplaySlowMotion ? "Enabled (0.5x)" : "Disabled (1.0x)";
+}
+
+private void ReplayDurationBtn_Click(object sender, RoutedEventArgs e)
+{
+    var prefs = PreferencesManager.Load();
+    int currentIndex = Array.IndexOf(_replayOptions, prefs.InstantReplaySeconds);
+    int nextIndex = (currentIndex + 1) % _replayOptions.Length;
+
+    prefs.InstantReplaySeconds = _replayOptions[nextIndex];
+    PreferencesManager.Save(prefs);
+
+    ReplayDurationBtn.Content = $"{prefs.InstantReplaySeconds} Seconds";
+}
+
+private void ReplaySlowMoBtn_Click(object sender, RoutedEventArgs e)
+{
+    var prefs = PreferencesManager.Load();
+    prefs.InstantReplaySlowMotion = !prefs.InstantReplaySlowMotion;
+    PreferencesManager.Save(prefs);
+
+    ReplaySlowMoBtn.Content = prefs.InstantReplaySlowMotion ? "Enabled (0.5x)" : "Disabled (1.0x)";
+}
     
     // --- NAVIGATION SIGNATURES ---
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);

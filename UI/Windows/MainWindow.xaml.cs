@@ -20,6 +20,9 @@ public partial class MainWindow : Window
     private readonly VideosView _videosView;
     private readonly RecordingsView _recordingsView;
     private readonly CollectionsView _collectionsView;
+	private DateTime _lastLeftPress = DateTime.MinValue;
+    private DateTime _lastRightPress = DateTime.MinValue;
+    private readonly TimeSpan _doubleTapThreshold = TimeSpan.FromMilliseconds(400);
     
     // --- THE MULTIVIEW VARIABLES ---
     private readonly MultiviewSetupView _multiviewSetupView;
@@ -321,6 +324,7 @@ public partial class MainWindow : Window
         Mouse.OverrideCursor = Cursors.None;
         
         var command = Core.Input.InputMapper.GetCommand(e.Key);
+		var now = DateTime.UtcNow;
 
         // --- GLOBAL TEXT BOX TRAP ---
         // If the user is typing, we must not steal the Backspace key for navigation
@@ -329,6 +333,49 @@ public partial class MainWindow : Window
             if (e.Key == Key.Back || command == Core.Input.HtpcCommand.Back)
             {
                 return; // Let the TextBox handle the backspace natively
+            }
+        }
+		
+		if (MainShellContainer.Content == _playerView)
+        {
+            // 1. Keyboard 'I' Key -> Instant Replay
+            if (e.Key == Key.I)
+            {
+                _playerView.TriggerInstantReplay(20); 
+                e.Handled = true;
+                return;
+            }
+
+            // 2. Double Tap Left -> Instant Replay
+            if (command == Core.Input.HtpcCommand.Left)
+            {
+                if ((now - _lastLeftPress) < _doubleTapThreshold)
+                {
+                    _playerView.TriggerInstantReplay(20);
+                    _lastLeftPress = DateTime.MinValue; 
+                    e.Handled = true;
+                    return;
+                }
+                _lastLeftPress = now;
+            }
+            
+            // 3. Double Tap Right -> Catch up to Live TV
+            else if (command == Core.Input.HtpcCommand.Right)
+            {
+                if ((now - _lastRightPress) < _doubleTapThreshold)
+                {
+                    _playerView.JumpToLiveEdge();
+                    _lastRightPress = DateTime.MinValue;
+                    e.Handled = true;
+                    return;
+                }
+                _lastRightPress = now;
+            }
+
+            // 4. Play Button -> Return to Live TV
+            else if (command == Core.Input.HtpcCommand.PlayPause)
+            {
+                _playerView.JumpToLiveEdge();
             }
         }
 

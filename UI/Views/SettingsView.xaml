@@ -211,6 +211,17 @@
         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
     </Button>
 </StackPanel>
+                    <!-- Instant Replay Duration -->
+<StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+    <TextBlock Text="Instant Replay Time" Width="250" VerticalAlignment="Center" FontSize="18" Foreground="{DynamicResource PrimaryTextBrush}"/>
+    <Button x:Name="ReplayDurationBtn" Width="180" Height="45" Content="20 Seconds" Click="ReplayDurationBtn_Click" Style="{StaticResource NavPillStyle}"/>
+</StackPanel>
+
+<!-- Slow Motion Toggle -->
+<StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+    <TextBlock Text="Replay Slow Motion" Width="250" VerticalAlignment="Center" FontSize="18" Foreground="{DynamicResource PrimaryTextBrush}"/>
+    <Button x:Name="ReplaySlowMoBtn" Width="180" Height="45" Content="Enabled (0.5x)" Click="ReplaySlowMoBtn_Click" Style="{StaticResource NavPillStyle}"/>
+</StackPanel>
 
 					<TextBlock Text="Dashboard Layout" FontSize="26" FontWeight="Bold" Margin="0,40,0,20" Foreground="{DynamicResource PrimaryTextBrush}"/>
                     <Grid Margin="0,0,0,40">

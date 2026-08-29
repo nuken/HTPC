@@ -25,6 +25,14 @@ public partial class PlayerOverlayWindow : Window
     
     private readonly DispatcherTimer _syncTimer; 
     private DispatcherTimer _idleTimer;
+	
+	private readonly DispatcherTimer _channelEntryTimer;
+    private string _channelEntryBuffer = "";
+	
+	private DateTime _lastLeftPress = DateTime.MinValue;
+    private DateTime _lastRightPress = DateTime.MinValue;
+	private DateTime _lastUpPress = DateTime.MinValue;
+    private readonly TimeSpan _doubleTapThreshold = TimeSpan.FromMilliseconds(400);
     
     private bool _isPlaying = true;
     private bool _isDragging = false;
@@ -42,6 +50,7 @@ public partial class PlayerOverlayWindow : Window
     private int _scrubDirection = 0;
     private bool _isScrubbing = false;
     private bool _wasPlayingBeforeScrub = false;
+	private DateTime _tuneTime = DateTime.MinValue;
     
     private MediaItem? _nextEpisodeToPlay;
     private bool _upNextPromptShown = false;
@@ -79,6 +88,9 @@ public partial class PlayerOverlayWindow : Window
 
         _scrubTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _scrubTimer.Tick += ScrubTimer_Tick;
+		
+		_channelEntryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _channelEntryTimer.Tick += ChannelEntryTimer_Tick;
         
         // Listen for when the user lets go of a button on the hardware remote
         this.PreviewKeyUp += Window_PreviewKeyUp;
@@ -118,6 +130,7 @@ public partial class PlayerOverlayWindow : Window
         _syncTimer?.Stop();
         _skipAdTimer?.Stop();
         _statsTimer?.Stop();
+		_channelEntryTimer?.Stop();
         Mouse.OverrideCursor = null; 
     }
 	
@@ -143,6 +156,7 @@ public partial class PlayerOverlayWindow : Window
         MediaTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? media.Title : media.CurrentShowTitle;
         
         _isLiveTv = media.IsLiveTv; 
+		_tuneTime = DateTime.Now;
         
         _upNextPromptShown = false;
         UpNextPromptContainer.Visibility = Visibility.Collapsed;
@@ -165,7 +179,7 @@ public partial class PlayerOverlayWindow : Window
         else BufferingOverlay.Visibility = Visibility.Collapsed;
 
         TimelineGrid.Visibility = Visibility.Visible;
-        TimelineSlider.IsHitTestVisible = !_isLiveTv;
+        TimelineSlider.IsHitTestVisible = true;
         
         _markersDrawn = false;
         CommercialMarkersCanvas.Children.Clear();
@@ -203,7 +217,84 @@ public partial class PlayerOverlayWindow : Window
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         Mouse.OverrideCursor = Cursors.None;
-		WakeUpUi(); 
+		WakeUpUi();
+		var command = HTPC.Core.Input.InputMapper.GetCommand(e.Key);
+		var now = DateTime.UtcNow;
+		
+		// 1. Direct Channel Number Entry
+        if ((e.Key >= Key.D0 && e.Key <= Key.D9) || (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9) || e.Key == Key.Decimal || e.Key == Key.OemPeriod)
+        {
+            string digit = "";
+            if (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9) digit = (e.Key - Key.NumPad0).ToString();
+            else if (e.Key >= Key.D0 && e.Key <= Key.D9) digit = (e.Key - Key.D0).ToString();
+            else if ((e.Key == Key.Decimal || e.Key == Key.OemPeriod) && !_channelEntryBuffer.Contains(".")) digit = ".";
+
+            _channelEntryBuffer += digit;
+            ChannelEntryText.Text = _channelEntryBuffer;
+            ChannelEntryOverlay.Visibility = Visibility.Visible;
+
+            _channelEntryTimer.Stop();
+            _channelEntryTimer.Start();
+            
+            e.Handled = true;
+            return;
+        }
+
+        // 2. Allow "Select/Enter" to instantly tune without waiting for the 2-second timer
+        if ((command == HtpcCommand.Select || e.Key == Key.Enter) && !string.IsNullOrEmpty(_channelEntryBuffer))
+        {
+            ChannelEntryTimer_Tick(null, EventArgs.Empty);
+            e.Handled = true;
+            return;
+        }
+		
+		// 1. Keyboard 'I' Key -> Instant Replay
+        if (e.Key == Key.I)
+        {
+            _mpvService.TriggerInstantReplay();
+            e.Handled = true;
+            return;
+        }
+
+// 2. Double-Tap Left Arrow -> Instant Replay
+        if (command == HTPC.Core.Input.HtpcCommand.Left || e.Key == Key.Left)
+        {
+            // Only evaluate double-taps on the initial keydown press, not while holding
+            if (MiniGuideContainer.Visibility != Visibility.Visible && !e.IsRepeat)
+            {
+                if ((now - _lastLeftPress) < _doubleTapThreshold)
+                {
+                    _mpvService.TriggerInstantReplay();
+                    _lastLeftPress = DateTime.MinValue;
+                    e.Handled = true;
+                    return;
+                }
+                _lastLeftPress = now;
+            }
+        }
+
+        // 3. Double-Tap Right Arrow -> Catch Up to Live TV
+        else if (command == HTPC.Core.Input.HtpcCommand.Right || e.Key == Key.Right)
+        {
+            if (MiniGuideContainer.Visibility != Visibility.Visible && !e.IsRepeat)
+            {
+                if ((now - _lastRightPress) < _doubleTapThreshold)
+                {
+                    _mpvService.JumpToLiveEdge();
+                    _lastRightPress = DateTime.MinValue;
+                    e.Handled = true;
+                    return;
+                }
+                _lastRightPress = now;
+            }
+        }
+
+        // 4. Play/Pause Button -> Reset Speed & Catch Up
+        else if (command == HTPC.Core.Input.HtpcCommand.PlayPause || e.Key == Key.MediaPlayPause)
+        {
+            _mpvService.JumpToLiveEdge();
+            // Let the event continue so standard play/pause toggling runs
+        }
 
         if (e.Key == Key.F)
         {
@@ -264,7 +355,7 @@ public partial class PlayerOverlayWindow : Window
             e.Handled = true; return;
         }
 
-        var command = InputMapper.GetCommand(e.Key);
+       
 
         if (command == HtpcCommand.None) return;
 		
@@ -288,12 +379,21 @@ public partial class PlayerOverlayWindow : Window
                 break;
 
             case HtpcCommand.Up:
-                if (_isLiveTv && MiniGuideContainer.Visibility == Visibility.Collapsed)
+                if (MiniGuideContainer.Visibility == Visibility.Collapsed)
                 {
-                    await OpenMiniGuideAsync();
-                }
-                else if (MiniGuideContainer.Visibility == Visibility.Collapsed)
-                {
+                    // 1. Check for Double-Tap on Live TV to open the Guide
+                    if (_isLiveTv)
+                    {
+                        if ((now - _lastUpPress) < _doubleTapThreshold)
+                        {
+                            _lastUpPress = DateTime.MinValue;
+                            await OpenMiniGuideAsync();
+                            break; // Stop here so it opens the guide without moving focus
+                        }
+                        _lastUpPress = now;
+                    }
+
+                    // 2. Single-Tap (or VOD playback) moves UI focus up normally
                     // FOCUS BRIDGE: Explicitly escape Volume Slider UP to the Timeline
                     if (Keyboard.FocusedElement is Slider s && s.Name == "VolumeSlider")
                         TimelineSlider.Focus();
@@ -362,7 +462,7 @@ public partial class PlayerOverlayWindow : Window
                 }
 
                 // If focus is on the Timeline, scrub!
-                if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
+                if (MiniGuideContainer.Visibility == Visibility.Collapsed) 
                 {
                     if (!e.IsRepeat) BeginSkipAction(-1); 
                 }
@@ -386,8 +486,8 @@ public partial class PlayerOverlayWindow : Window
                     }
                 }
 
-                // If focus is on the Timeline, scrub!
-                if (MiniGuideContainer.Visibility == Visibility.Collapsed && !_isLiveTv) 
+                // Scrub forward on both VOD and Live TV timeshift buffers
+                if (MiniGuideContainer.Visibility == Visibility.Collapsed) 
                 {
                     if (!e.IsRepeat) BeginSkipAction(1); 
                 }
@@ -423,87 +523,75 @@ public partial class PlayerOverlayWindow : Window
     }
 
    private async Task OpenMiniGuideAsync()
+{
+    BottomBar.Visibility = Visibility.Collapsed; 
+    MiniGuideContainer.Visibility = Visibility.Visible;
+
+    // --- FIX: Always fetch fresh guide data so programs update across half-hour boundaries ---
+    var prefs = PreferencesManager.Load();
+    string savedSelection = string.IsNullOrEmpty(prefs.LastGuideCollection) ? "All Channels" : prefs.LastGuideCollection;
+
+    var activeServer = _serverManager.GetActiveServer();
+    var collections = await _libraryService.GetCollectionsAsync();
+    
+    var targetCollection = collections.FirstOrDefault(c => c.Name == savedSelection);
+
+    var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 1);
+    
+    if (savedSelection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
+    else if (savedSelection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
+    else if (savedSelection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
+
+    MiniGuideList.ItemsSource = channels;
+
+    if (MiniGuideList.Items.Count > 0)
     {
-        BottomBar.Visibility = Visibility.Collapsed; 
-        MiniGuideContainer.Visibility = Visibility.Visible;
-
-        if (MiniGuideList.Items.Count == 0)
+        _ = Dispatcher.BeginInvoke(new Action(() => 
         {
-            // --- FIX: Read the user's actual current selection from Preferences ---
-            var prefs = PreferencesManager.Load();
-            string savedSelection = string.IsNullOrEmpty(prefs.LastGuideCollection) ? "All Channels" : prefs.LastGuideCollection;
+            MiniGuideList.UpdateLayout(); 
+            int targetIndex = 0; 
 
-            var activeServer = _serverManager.GetActiveServer();
-            var collections = await _libraryService.GetCollectionsAsync();
-            
-            // Find the collection that matches their saved dropdown selection
-            var targetCollection = collections.FirstOrDefault(c => c.Name == savedSelection);
-
-            // Fetch the channels based on that exact collection
-            var channels = await _libraryService.GetGuideChannelsAsync(targetCollection, 1);
-            
-            // Apply Secondary Static Filters exactly like the GuideView does
-            if (savedSelection == "Favorites") channels = channels.Where(c => c.Favorite).ToList();
-            else if (savedSelection == "HD Channels") channels = channels.Where(c => c.IsHD).ToList();
-            else if (savedSelection == "SD Channels") channels = channels.Where(c => !c.IsHD).ToList();
-
-            MiniGuideList.ItemsSource = channels;
-        }
-
-        if (MiniGuideList.Items.Count > 0)
-        {
-            // STEP 1: Process the logical match and physical scroll immediately
-            _ = Dispatcher.BeginInvoke(new Action(() => 
+            if (_isLiveTv && _currentMedia != null)
             {
-                MiniGuideList.UpdateLayout(); 
-                int targetIndex = 0; 
-
-                if (_isLiveTv && _currentMedia != null)
+                var channelList = MiniGuideList.ItemsSource as System.Collections.Generic.IEnumerable<Channel>;
+                if (channelList != null)
                 {
-                    var channels = MiniGuideList.ItemsSource as System.Collections.Generic.IEnumerable<Channel>;
-                    if (channels != null)
+                    var currentChannel = channelList.FirstOrDefault(c => 
+                        c.Id == _currentMedia.Id || 
+                        c.Number == _currentMedia.Id || 
+                        c.Name == _currentMedia.Title);
+                    
+                    if (currentChannel != null)
                     {
-                        // AGGRESSIVE MATCHING: Check ID, then Number, then Title
-                        var currentChannel = channels.FirstOrDefault(c => 
-                            c.Id == _currentMedia.Id || 
-                            c.Number == _currentMedia.Id || 
-                            c.Name == _currentMedia.Title);
-                        
-                        if (currentChannel != null)
-                        {
-                            targetIndex = MiniGuideList.Items.IndexOf(currentChannel);
-                            MiniGuideList.SelectedItem = currentChannel;
-                            
-                            // Force the scroll
-                            MiniGuideList.ScrollIntoView(currentChannel);
-                        }
+                        targetIndex = MiniGuideList.Items.IndexOf(currentChannel);
+                        MiniGuideList.SelectedItem = currentChannel;
+                        MiniGuideList.ScrollIntoView(currentChannel);
                     }
+                }
+            }
+            else
+            {
+                MiniGuideList.SelectedIndex = -1; 
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
+                if (item != null)
+                {
+                    item.Focus();
+                    Keyboard.Focus(item);
                 }
                 else
                 {
-                    MiniGuideList.SelectedIndex = -1; 
+                    MiniGuideList.Focus();
+                    Keyboard.Focus(MiniGuideList);
                 }
+            }), DispatcherPriority.ContextIdle);
 
-                // STEP 2: Wait for WPF to finish drawing the scroll, THEN grab the focus.
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    var item = MiniGuideList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
-                    
-                    if (item != null)
-                    {
-                        item.Focus();
-                        Keyboard.Focus(item);
-                    }
-                    else
-                    {
-                        MiniGuideList.Focus();
-                        Keyboard.Focus(MiniGuideList);
-                    }
-                }), DispatcherPriority.ContextIdle);
-
-            }), DispatcherPriority.Input); 
-        }
+        }), DispatcherPriority.Input); 
     }
+}
 	
 	private void CloseMiniGuide()
     {
@@ -543,10 +631,10 @@ public partial class PlayerOverlayWindow : Window
 
     private void SyncTimer_Tick(object? sender, EventArgs e)
     {
-        if (!_isPlaying || _isDragging) return;
+        if ((!_isPlaying && !_isScrubbing) || _isDragging) return;
 
-        if (!_isLiveTv)
-        {
+    if (!_isLiveTv)
+    {
             double duration = _mpvService.GetDuration();
             double position = _mpvService.GetPosition();
 
@@ -587,27 +675,37 @@ public partial class PlayerOverlayWindow : Window
             }
         }
         else
-        {
-            if (_currentMedia != null && _currentMedia.EndTime > _currentMedia.StartTime)
-            {
-                double duration = (_currentMedia.EndTime - _currentMedia.StartTime).TotalSeconds;
-                double position = (DateTime.Now - _currentMedia.StartTime).TotalSeconds;
+{
+    if (_currentMedia != null && _currentMedia.EndTime > _currentMedia.StartTime)
+    {
+        double duration = (_currentMedia.EndTime - _currentMedia.StartTime).TotalSeconds;
+        
+        // 1. Calculate how far behind live TV the cache playhead is
+        double absoluteMpvPosition = _mpvService.GetPosition(); 
+        double totalTimeSinceTuning = (DateTime.Now - _tuneTime).TotalSeconds; 
+        
+        double timeshiftDelay = absoluteMpvPosition - totalTimeSinceTuning;
+        if (timeshiftDelay > 0) timeshiftDelay = 0; // Cap at the live edge
 
-                if (position < 0) position = 0;
-                if (position > duration) position = duration;
+        // 2. Apply that delay to the real-world EPG timeline
+        double realTimeEpgPosition = (DateTime.Now - _currentMedia.StartTime).TotalSeconds;
+        double uiPosition = realTimeEpgPosition + timeshiftDelay;
 
-                TimelineSlider.Maximum = duration;
-                TimelineSlider.Value = position;
+        if (uiPosition < 0) uiPosition = 0;
+        if (uiPosition > duration) uiPosition = duration;
 
-                TimeSpan posTime = TimeSpan.FromSeconds(position);
-                TimeSpan remTime = TimeSpan.FromSeconds(duration - position);
+        TimelineSlider.Maximum = duration;
+        TimelineSlider.Value = uiPosition;
 
-                CurrentTimeText.Text = posTime.ToString(posTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
-                RemainingTimeText.Text = "-" + remTime.ToString(remTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
-            }
-        }
+        TimeSpan posTime = TimeSpan.FromSeconds(uiPosition);
+        TimeSpan remTime = TimeSpan.FromSeconds(duration - uiPosition);
+
+        CurrentTimeText.Text = posTime.ToString(posTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
+        RemainingTimeText.Text = "-" + remTime.ToString(remTime.Hours > 0 ? @"hh\:mm\:ss" : @"mm\:ss");
     }
-    
+}
+}
+   
     private void ShowUpNextPrompt()
     {
         _upNextPromptShown = true;
@@ -658,13 +756,31 @@ public partial class PlayerOverlayWindow : Window
     }
 
     private async void Timeline_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+{
+    if (_isLiveTv && _currentMedia != null)
+    {
+        double targetEpgPosition = TimelineSlider.Value;
+        double realTimeEpgPosition = (DateTime.Now - _currentMedia.StartTime).TotalSeconds;
+        
+        // Determine how many seconds behind live the user dragged the slider
+        double desiredTimeshiftDelay = targetEpgPosition - realTimeEpgPosition;
+        if (desiredTimeshiftDelay > 0) desiredTimeshiftDelay = 0;
+        
+        // Translate that delay back to MPV's internal cache timeline
+        double totalTimeSinceTuning = (DateTime.Now - _tuneTime).TotalSeconds;
+        double targetAbsoluteMpvPosition = totalTimeSinceTuning + desiredTimeshiftDelay;
+        
+        _mpvService.SeekAbsolute(targetAbsoluteMpvPosition);
+    }
+    else
     {
         _mpvService.SeekAbsolute(TimelineSlider.Value);
-        WakeUpUi(); 
-        
-        await Task.Delay(300);
-        _isDragging = false;
     }
+    
+    WakeUpUi(); 
+    await Task.Delay(300);
+    _isDragging = false;
+}
 	
 	private void Timeline_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
 {
@@ -693,7 +809,7 @@ public partial class PlayerOverlayWindow : Window
 
     private void BeginSkipAction(int direction)
     {
-        if (_isLiveTv || _scrubDirection != 0) return; 
+        if (_scrubDirection != 0) return; 
         
         _scrubDirection = direction;
         _isScrubbing = false;
@@ -751,12 +867,22 @@ public partial class PlayerOverlayWindow : Window
     }
 
     private void ScrubTimer_Tick(object? sender, EventArgs e)
+{
+    // --- FIX: Prevent forward scrubbing past the live edge on Live TV ---
+    if (_isLiveTv && _scrubDirection == 1)
     {
-        // Jump 5 seconds every 100ms (Roughly 50x scan speed)
-        _mpvService.SeekRelative(5 * _scrubDirection);
-        WakeUpUi();
-        SyncTimer_Tick(null, EventArgs.Empty);
+        double duration = _mpvService.GetDuration();
+        double position = _mpvService.GetPosition();
+        
+        // Stop scanning if the playhead gets within 5 seconds of the live edge
+        if (position >= duration - 5) return; 
     }
+
+    // Jump 5 seconds every 100ms (Roughly 50x scan speed)
+    _mpvService.SeekRelative(5 * _scrubDirection);
+    WakeUpUi();
+    SyncTimer_Tick(null, EventArgs.Empty);
+}
 
     // --- MOUSE & TOUCH BINDINGS ---
     private void SkipBackward_MouseDown(object sender, MouseButtonEventArgs e) { BeginSkipAction(-1); e.Handled = true; }
@@ -812,6 +938,43 @@ public partial class PlayerOverlayWindow : Window
             PlayPauseButton.Content = "⏸";
         }
         WakeUpUi();
+    }
+	
+	private async void ChannelEntryTimer_Tick(object? sender, EventArgs e)
+    {
+        _channelEntryTimer.Stop();
+        ChannelEntryOverlay.Visibility = Visibility.Collapsed;
+        
+        string requestedChannel = _channelEntryBuffer;
+        _channelEntryBuffer = "";
+
+        if (string.IsNullOrWhiteSpace(requestedChannel)) return;
+
+        BufferingOverlay.Visibility = Visibility.Visible;
+
+        // Fetch the currently active guide channels to cross-reference the number
+        var channels = await _libraryService.GetGuideChannelsAsync(null, 1);
+        var channel = channels.FirstOrDefault(c => c.Number == requestedChannel);
+
+        if (channel != null)
+        {
+            var activeServer = _serverManager.GetActiveServer();
+            if (activeServer != null)
+            {
+                string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
+                var currentAiring = channel.CurrentAirings?.FirstOrDefault(a => a.IsAiringNow) ?? channel.CurrentAirings?.FirstOrDefault();
+                
+                var media = _libraryService.CreateLiveMediaItem(baseUrl, channel, currentAiring);
+                
+                _mpvService.PlayMedia(media);
+                InitializeMedia(media); 
+            }
+        }
+        else
+        {
+            BufferingOverlay.Visibility = Visibility.Collapsed;
+            ShowPlaybackError($"Channel {requestedChannel} was not found.");
+        }
     }
     
     private void ShowSkipAdPrompt(double targetTime)

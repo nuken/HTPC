@@ -302,8 +302,16 @@
                     </StackPanel>
                 </Button>
             </Border>
-
-        </Grid>
+			
+			 </Grid>
+			<!-- NEW: Direct Channel Entry Overlay -->
+        <Border x:Name="ChannelEntryOverlay" Background="#E60A0A0A" CornerRadius="12" Padding="30,15" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,40,40,0" Visibility="Collapsed" Panel.ZIndex="2000">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="CH " Foreground="#00A4EF" FontSize="28" FontWeight="Bold" Margin="0,0,10,0"/>
+                <TextBlock x:Name="ChannelEntryText" Text="" Foreground="White" FontSize="28" FontWeight="Bold"/>
+            </StackPanel>
+        </Border>
+       
         <Border x:Name="BufferingOverlay" Background="#0F0F0F" Panel.ZIndex="2000" Visibility="Collapsed">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock Text="📡" FontSize="60"  Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,20"/>

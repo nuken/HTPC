@@ -25,6 +25,7 @@ public class MpvPlaybackService : IDisposable
     
     private IntPtr _mpvContext;    
     private Timer? _positionTimer;
+	private Timer? _replayTimer;
     private MediaItem? _currentMedia;
     private Thread? _eventLoopThread;
     private bool _isDisposed = false;
@@ -105,6 +106,8 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "osd-bar", "no");
         
         Libmpv.mpv_set_option_string(_mpvContext, "osd-level", "0"); 
+		Libmpv.mpv_set_option_string(_mpvContext, "osd-align-y", "top");
+		Libmpv.mpv_set_option_string(_mpvContext, "osd-margin-y", "100");
         Libmpv.mpv_set_option_string(_mpvContext, "terminal", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "msg-level", "all=info"); 
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
@@ -112,16 +115,21 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
         
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "150000000"); 
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "10");
         
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "yes");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-initial", "yes");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-secs", "1.5");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-wait", "1.5");
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "60");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-secs", "300"); // Allow 5+ minutes of cache
+                       
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "no");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-initial", "no");
+        
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-wait", "1.0");
+		Libmpv.mpv_set_option_string(_mpvContext, "cache-on-disk", "no");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-dir", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "htpc_cache"));
 
         // The lavf fastseek command ensures HLS playlists probe instantly without stalling
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+fastseek");
+		// Force MPV to render the video after only 0.5 seconds of probing, instead of the default 5 seconds
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-analyzeduration", "1.5");
 
         // --- NEW: Aggressive Network Timeout Settings for HLS ---
         // Force the network connection to drop if the server takes longer than 5 seconds to reply
@@ -129,10 +137,13 @@ public class MpvPlaybackService : IDisposable
         // Force HLS playlist parsing to timeout if the playlist stalls
         Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=10000000"); 
         // Stop MPV from hanging infinitely if the demuxer gets confused by broken timestamps
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "50M");
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "500M"); // Increased to 500MB
+        Libmpv.mpv_set_option_string(_mpvContext, "force-seekable", "yes");         // Force seek on Live TV
+		Libmpv.mpv_set_option_string(_mpvContext, "demuxer-seekable-cache", "yes");
+        Libmpv.mpv_set_option_string(_mpvContext, "hr-seek", "yes");                 // Enable precise seeking
 
-        Libmpv.mpv_set_option_string(_mpvContext, "video-sync", "display-resample");
-        Libmpv.mpv_set_option_string(_mpvContext, "autosync", "30");
+        var prefs = PreferencesManager.Load();
+        Libmpv.mpv_set_option_string(_mpvContext, "video-sync", prefs.VideoSync ?? "audio");
         Libmpv.mpv_set_option_string(_mpvContext, "deinterlace", "auto");
 
         Libmpv.mpv_set_option_string(_mpvContext, "slang", "eng,en,en-US");
@@ -274,6 +285,57 @@ public class MpvPlaybackService : IDisposable
         _ = StartLoadingWatchdogAsync(_loadingWatchdogCts.Token, media);
         _positionTimer?.Change(5000, 5000);
     }
+	
+	public void TriggerInstantReplay(int? overrideSeconds = null)
+{
+    if (_mpvContext == IntPtr.Zero) return;
+
+    var prefs = PreferencesManager.Load();
+    int seconds = overrideSeconds ?? (prefs.InstantReplaySeconds > 0 ? prefs.InstantReplaySeconds : 20);
+    bool enableSlowMo = prefs.InstantReplaySlowMotion;
+
+    // 1. Relative seek backwards into demuxer cache
+    Libmpv.mpv_command_string(_mpvContext, $"seek -{seconds}");
+
+    _replayTimer?.Dispose();
+
+    // 2. Apply slow motion if enabled; otherwise keep playback at 1.0x
+    if (enableSlowMo)
+    {
+        Libmpv.mpv_set_property_string(_mpvContext, "speed", "0.5");
+        Libmpv.mpv_command_string(_mpvContext, $"show-text \"Instant Replay ({seconds}s @ 0.5x)\"");
+
+        // Replay duration at half-speed is (seconds * 2)
+        _replayTimer = new Timer(_ =>
+        {
+            if (_mpvContext != IntPtr.Zero)
+            {
+                Libmpv.mpv_set_property_string(_mpvContext, "speed", "1.0");
+                Libmpv.mpv_command_string(_mpvContext, "show-text \"Normal Speed\"");
+            }
+        }, null, TimeSpan.FromSeconds(seconds * 2), Timeout.InfiniteTimeSpan);
+    }
+    else
+    {
+        Libmpv.mpv_set_property_string(_mpvContext, "speed", "1.0");
+        Libmpv.mpv_command_string(_mpvContext, $"show-text \"Instant Replay (-{seconds}s)\"");
+    }
+}
+
+    public void JumpToLiveEdge()
+    {
+        if (_mpvContext == IntPtr.Zero) return;
+        
+        _replayTimer?.Dispose();
+        Libmpv.mpv_set_property_string(_mpvContext, "speed", "1.0");
+
+        if (_currentMedia != null && _currentMedia.IsLiveTv)
+        {
+            // Jump to the front edge of the buffered live stream
+            Libmpv.mpv_command_string(_mpvContext, "seek 100 absolute-percent");
+            Libmpv.mpv_command_string(_mpvContext, "show-text \"Live\"");
+        }
+    }
     
     private void EventLoop()
     {
@@ -292,6 +354,13 @@ public class MpvPlaybackService : IDisposable
                 LogTuner("MPV_EVENT_FILE_LOADED triggered! Video is successfully buffering/playing.");
                 _logger.LogInformation("Stream loaded successfully in MPV. Cancelling watchdog.");
                 _loadingWatchdogCts?.Cancel();
+
+                // --- NEW: Automatically step back from the bleeding edge to build a safe buffer ---
+                if (_currentMedia != null && _currentMedia.IsLiveTv)
+                {
+                    Libmpv.mpv_command_string(_mpvContext, "seek -1.5 relative");
+                }
+
                 OnMediaLoaded?.Invoke(); 
             }
 
@@ -561,15 +630,18 @@ private void HandlePlaybackFailure(MediaItem media)
     }
 
     public void Resume()
-    {
-        _logger.LogInformation("Resuming playback...");
-        Libmpv.mpv_set_property_string(_mpvContext, "pause", "no");
-    }
+{
+    _logger.LogInformation("Resuming playback...");
+    _replayTimer?.Dispose();
+    Libmpv.mpv_set_property_string(_mpvContext, "speed", "1.0");
+    Libmpv.mpv_set_property_string(_mpvContext, "pause", "no");
+}
 
     public void Stop()
     {
         LogTuner("Stop() called. Cleaning up timers and saving position.");
         _positionTimer?.Change(Timeout.Infinite, Timeout.Infinite); 
+		_replayTimer?.Dispose();
         SaveCurrentPosition(null); 
 
         if (_currentMedia != null)

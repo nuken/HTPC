@@ -37,6 +37,8 @@ public class AppPreferences
 	public int SkipForwardSeconds { get; set; } = 30;
     public int SkipBackwardSeconds { get; set; } = 15;
 	public bool HideSportsScores { get; set; } = false;
+	public int InstantReplaySeconds { get; set; } = 20;
+	public bool InstantReplaySlowMotion { get; set; } = true;
     
     // --- NEW: COLLECTION SORTING ---
     public string CollectionSort { get; set; } = "Alphabetical";
