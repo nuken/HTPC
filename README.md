@@ -20,6 +20,7 @@ Nucleus HTPC is a native Windows desktop application designed to provide a premi
 * **Custom DVR Preferences:** Configure default start and end padding times for scheduled television recordings.
 * **Dynamic Display Scaling:** Includes built-in UI scale adjustments to ensure perfect visibility across 1080p and 4K televisions.
 * **Built-in Auto Updater:** Automatically checks GitHub for new releases on startup and displays a non-intrusive update banner.
+* **Pluto TV VOD Integration:** Seamlessly browse and launch Pluto TV's Video on Demand catalog directly from the HTPC interface using deep-link Android TV tuning and a native seamless pre-roll overlay.
 
 ## Installation
 
@@ -48,6 +49,25 @@ Nucleus HTPC acts as a direct client to your Channels DVR server. All actions ta
 * **Channel Management**: Updates your server-side preferences when you favorite or hide specific live TV channels.
 * **Server Maintenance**: Triggers backend server actions like scanning for newly added files, pruning deleted media, fetching guide updates, and clearing the streaming cache.
 
+## VOD Integration (Pluto TV)
+
+Nucleus HTPC now supports browsing and playing Pluto TV's Video on Demand (VOD) catalog natively. Instead of relying solely on Channels DVR, the HTPC commands a local Android TV or Fire TV device to seamlessly tune and stream the content via a capture card or network encoder.
+
+### Requirements & Setup
+To use the VOD features, you must configure the companion proxy tool to handle the tuning requests.
+
+1. **Android ADB Bridge (v5.1.9+):** You must be running Android ADB Bridge version 5.1.9 or newer.
+2. **Pluto TV App:** The Pluto TV app must be installed and logged in on your target Android TV / Fire OS streaming stick.
+3. **Provider Configuration:** In your ADB Bridge web dashboard, you must add Pluto TV as a Provider using the following exact application intents:
+   * **Package Name:** `tv.pluto.android`
+   * **Component (Activity):** `com.cbs.app.tv.ui.activity.HomeActivity`
+
+### How to Use
+Once the ADB Bridge is configured and running on your network:
+1. Open Nucleus HTPC and navigate to the **VOD** tab. (The app will automatically sync and cache the latest movie catalog directly from Pluto TV's API on startup).
+2. Select a movie to view its details and press **Play**.
+3. The HTPC will immediately display a seamless pre-roll movie poster while simultaneously commanding your Android device to deep-link directly into the requested movie. 
+4. The moment the video begins decoding, the pre-roll overlay will vanish, allowing you to watch the VOD with full MPV playback and upscaling support.
 
 ## Keyboard Commands
 
