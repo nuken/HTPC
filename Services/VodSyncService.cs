@@ -131,7 +131,8 @@ public class VodSyncService
 
                 foreach (var plutoItem in category.Items)
                 {
-                    if (plutoItem.Type != "movie" || string.IsNullOrWhiteSpace(plutoItem.Slug) || string.IsNullOrWhiteSpace(plutoItem.Id)) continue;
+                    // ADDED: plutoItem == null check to prevent crashes on empty catalog items
+                    if (plutoItem == null || plutoItem.Type != "movie" || string.IsNullOrWhiteSpace(plutoItem.Slug) || string.IsNullOrWhiteSpace(plutoItem.Id)) continue;
                     if (!processedIds.Add(plutoItem.Id)) continue; 
 
                     string deepLink = $"https://pluto.tv/en/ondemand/movies/{plutoItem.Slug}/details";
@@ -194,7 +195,8 @@ public class VodSyncService
     {
         if (item.Covers != null)
         {
-            var verticalCover = item.Covers.FirstOrDefault(c => c.AspectRatio == "347:500");
+            // ADDED: c?.AspectRatio to safely skip null cover objects in the JSON array
+            var verticalCover = item.Covers.FirstOrDefault(c => c?.AspectRatio == "347:500");
             if (verticalCover != null && !string.IsNullOrWhiteSpace(verticalCover.Url))
             {
                 return verticalCover.Url;
