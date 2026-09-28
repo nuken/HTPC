@@ -213,6 +213,7 @@ public class VodSyncService
                 });
             }
         }
+	}	
 
     private string ExtractBestPoster(PlutoItem item)
     {
