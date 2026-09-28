@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
 {
     public DbSet<ServerConfig> ServerConfigs { get; set; }
     public DbSet<PlaybackState> PlaybackStates { get; set; }
+	public DbSet<VODCatalogItem> VodCatalog { get; set; }
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -19,11 +20,10 @@ public class AppDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        if (!optionsBuilder.IsConfigured)
-        {
-            // Save the database file directly in the app's running directory for portability
-            string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "htpc_data.db");
-            optionsBuilder.UseSqlite($"Data Source={dbPath}");
-        }
+        // Lock the database path to the compiled .exe location
+        string exeDir = System.IO.Path.GetDirectoryName(System.Environment.ProcessPath) ?? System.AppDomain.CurrentDomain.BaseDirectory;
+        string dbPath = System.IO.Path.Combine(exeDir, "htpc_data.db");
+        
+        optionsBuilder.UseSqlite($"Data Source={dbPath}");
     }
 }

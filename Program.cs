@@ -61,24 +61,28 @@ public class Program
                 services.AddTransient<HTPC.UI.Views.CollectionsView>();
 				services.AddTransient<HTPC.UI.ViewModels.SportsViewModel>();
                 services.AddTransient<HTPC.UI.Views.SportsView>();
+				services.AddSingleton<VodSyncService>();
+				services.AddTransient<HTPC.UI.Views.VodView>();
             });
 
         using var host = hostBuilder.Build();
         
-        // 2. Start the Background Host
+        // Start the Background Host
         host.Start();
 
-        // --- Force Database Initialization ---
         using (var scope = host.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<HTPC.Core.Data.AppDbContext>();
             db.Database.EnsureCreated();
         }
 
-        // 3. Force initialization of our player service
         var playerService = host.Services.GetRequiredService<MpvPlaybackService>();
 
-        // Start the WPF UI Thread and launch the SPA Shell
+        // --- FIX: Force the app to pause here until the sync is 100% finished ---
+        var vodSync = host.Services.GetRequiredService<VodSyncService>();
+        vodSync.SyncPlutoTvCatalogAsync().GetAwaiter().GetResult();
+
+        // Start the WPF UI Thread
         var wpfApp = host.Services.GetRequiredService<App>();
         var mainWindow = host.Services.GetRequiredService<HTPC.UI.Windows.MainWindow>();
         wpfApp.Run(mainWindow);

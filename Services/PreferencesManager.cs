@@ -39,8 +39,13 @@ public class AppPreferences
 	public bool HideSportsScores { get; set; } = false;
 	public int InstantReplaySeconds { get; set; } = 20;
 	public bool InstantReplaySlowMotion { get; set; } = true;
+	
+	// --- NEW: VOD BRIDGE SETTINGS ---
+    public bool EnableAdbVodBridge { get; set; } = false;
+    public string AdbTunerUrl { get; set; } = "http://127.0.0.1:8888";
+   	public DateTime LastVodSync { get; set; } = DateTime.MinValue;
     
-    // --- NEW: COLLECTION SORTING ---
+	// --- NEW: COLLECTION SORTING ---
     public string CollectionSort { get; set; } = "Alphabetical";
     public string CollectionOrder { get; set; } = "Forward";
 
@@ -86,8 +91,8 @@ public class AppPreferences
 
 public static class PreferencesManager
 {
-    private static readonly string SettingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "htpc_prefs.json");
-
+    //private static readonly string SettingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "htpc_prefs.json");
+    private static readonly string SettingsFile = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath) ?? AppDomain.CurrentDomain.BaseDirectory, "htpc_prefs.json");
     public static AppPreferences Load()
     {
         try
@@ -111,6 +116,23 @@ public static class PreferencesManager
         }
         catch { }
     }
+	
+	public static string NormalizeAdbUrl(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        
+        string trimmed = input.Trim().TrimEnd('/');
+        
+        // Prepend http:// if the user only entered IP and port (e.g. "192.168.86.64:8888")
+        if (!trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = "http://" + trimmed;
+        }
+
+        return trimmed;
+    }
+
 
     // Keeping your original method signatures so we don't break existing code
     public static string LoadMovieSort() => Load().MovieSort;

@@ -15,6 +15,7 @@ public partial class MoviesView : UserControl
 {
     public event EventHandler? OnHomeRequested;
     public event EventHandler? OnGuideRequested;
+	public event EventHandler? OnVodRequested;
     public event EventHandler? OnSettingsRequested;
     public event EventHandler<MediaItem>? OnPlayRequested;
     public event EventHandler? OnRecordingsRequested;
@@ -63,6 +64,10 @@ public partial class MoviesView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+		if (VodNavBtn != null)
+{
+    VodNavBtn.Visibility = PreferencesManager.Load().EnableAdbVodBridge ? Visibility.Visible : Visibility.Collapsed;
+}
         ThemeToggleBtn.Content = PreferencesManager.LoadTheme() == "Dark" ? "\xE708" : "\xE706";
 
         if (_isInitialized) 
@@ -819,6 +824,7 @@ public partial class MoviesView : UserControl
 
     private void Home_Click(object sender, RoutedEventArgs e) => OnHomeRequested?.Invoke(this, EventArgs.Empty);
     private void Guide_Click(object sender, RoutedEventArgs e) => OnGuideRequested?.Invoke(this, EventArgs.Empty);
+	private void Vod_Click(object sender, RoutedEventArgs e) => OnVodRequested?.Invoke(this, EventArgs.Empty);
 	private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
 	private void Sports_Click(object sender, RoutedEventArgs e) => OnSportsRequested?.Invoke(this, EventArgs.Empty);

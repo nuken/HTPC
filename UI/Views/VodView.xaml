@@ -1,0 +1,358 @@
+<UserControl x:Class="HTPC.UI.Views.VodView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource AppBackgroundBrush}" 
+             Foreground="{DynamicResource PrimaryTextBrush}"
+             PreviewKeyDown="UserControl_PreviewKeyDown">
+
+    <UserControl.Resources>
+        <!-- Nav Button Style -->
+        <Style x:Key="NavPillStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource NavBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Margin" Value="0,0,15,0"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="2" CornerRadius="20" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NavPillActiveStyle" TargetType="Button" BasedOn="{StaticResource NavPillStyle}">
+            <Setter Property="Background" Value="{DynamicResource ActiveNavBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ActiveNavTextBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Focusable" Value="False"/>
+        </Style>
+
+        <!-- Standard Focus Ring -->
+        <Style x:Key="StandardFocusStyle" TargetType="Control">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border BorderThickness="2" BorderBrush="{DynamicResource PrimaryTextBrush}" CornerRadius="8" Margin="-2">
+                            <Border.Effect>
+                                <DropShadowEffect Color="White" BlurRadius="10" ShadowDepth="0" Opacity="0.8" />
+                            </Border.Effect>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Genre Pill Radio Button Style -->
+        <Style x:Key="GenrePillStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="GroupName" Value="VodGenres"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="16" Padding="20,8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ActiveNavBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ActiveNavTextBrush}"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="0,40,0,0" FocusManager.IsFocusScope="True"
+          KeyboardNavigation.DirectionalNavigation="Continue"
+          KeyboardNavigation.TabNavigation="Cycle">
+        
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- TOP NAVIGATION BAR -->
+        <StackPanel x:Name="TopNavPanel" Grid.Row="0" Orientation="Horizontal" Margin="40,0,0,30" 
+                    KeyboardNavigation.DirectionalNavigation="Continue" 
+                    PreviewKeyDown="TopNavPanel_PreviewKeyDown">
+            <Button Content="Home" Click="Home_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="VOD" Style="{StaticResource NavPillActiveStyle}"/>
+            <Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Sports" Click="Sports_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Videos" Click="Videos_Click" Style="{StaticResource NavPillStyle}"/>
+            <Button Content="Settings" Click="Settings_Click" Style="{StaticResource NavPillStyle}"/>
+            
+            <Button x:Name="ThemeToggleBtn" FontFamily="Segoe MDL2 Assets" Content="&#xE708;" FontSize="20" Click="ThemeToggleBtn_Click" Style="{StaticResource NavPillStyle}"/>
+        </StackPanel>
+
+        <!-- MAIN SCROLLER / VIRTUALIZED CONTENT -->
+        <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" 
+                      ScrollChanged="MainScroll_ScrollChanged" Focusable="False" ScrollViewer.PanningMode="VerticalOnly">
+            <StackPanel Margin="0,0,0,60" KeyboardNavigation.DirectionalNavigation="Continue">
+                
+                <!-- SEARCH & FILTER ROW -->
+                <Grid Margin="40,0,40,25" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Search Box with Watermark -->
+                    <Border Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="8" Padding="15,10" Margin="0,0,20,0" 
+                            BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <Grid>
+                            <TextBlock Text="Search VOD movies, genres..." Foreground="{DynamicResource SecondaryTextBrush}" FontSize="16" IsHitTestVisible="False" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBox x:Name="SearchBox" Background="Transparent" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0" FontSize="16"
+                                     CaretBrush="{DynamicResource PrimaryTextBrush}" TextChanged="SearchBox_TextChanged" PreviewKeyDown="SearchBox_PreviewKeyDown"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Sort Button -->
+                    <Button x:Name="SortFilterBtn" Grid.Column="1" Width="170" Content="Release Year ▼"
+                            Background="{DynamicResource PanelBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" 
+                            BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" FontSize="16" FontWeight="SemiBold" Margin="0,0,10,0"
+                            Click="SortFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+
+                    <!-- Order Button -->
+                    <Button x:Name="OrderFilterBtn" Grid.Column="2" Width="130" Content="Reverse ▼"
+                            Background="{DynamicResource PanelBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}" 
+                            BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" FontSize="16" FontWeight="SemiBold"
+                            Click="OrderFilterBtn_Click" PreviewKeyDown="FilterBtn_PreviewKeyDown" FocusVisualStyle="{StaticResource StandardFocusStyle}">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+                </Grid>
+
+                <!-- GENRE PILLS -->
+                <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="40,0,0,25" Focusable="False">
+                    <StackPanel x:Name="GenrePanel" Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Continue">
+                        <RadioButton Content="All" Style="{StaticResource GenrePillStyle}" IsChecked="True" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Action" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Comedy" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Drama" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Horror" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Sci-Fi" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Thriller" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                        <RadioButton Content="Documentary" Style="{StaticResource GenrePillStyle}" Checked="Genre_Checked" PreviewKeyDown="GenrePill_PreviewKeyDown"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- MOVIE POSTERS WRAP GRID -->
+                <ListBox x:Name="VodGrid" ItemsSource="{Binding VodLibrary}" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         PreviewMouseWheel="VodGrid_PreviewMouseWheel" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" Margin="40,0,0,0" KeyboardNavigation.DirectionalNavigation="Continue"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,20,30"/>
+                            <EventSetter Event="MouseLeftButtonUp" Handler="MovieCard_Click"/>
+                            <EventSetter Event="PreviewKeyDown" Handler="ListBoxItem_PreviewKeyDown"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="FocusRing" BorderThickness="4" BorderBrush="Transparent" CornerRadius="16" Padding="2">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="200" Height="300" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Cursor="Hand" ClipToBounds="True">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
+                                </Border.Effect>
+                                <Grid>
+                                    <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True">
+    <Image.Clip>
+        <RectangleGeometry Rect="0,0,200,300" RadiusX="12" RadiusY="12"/>
+    </Image.Clip>
+</Image>
+                                    <Border VerticalAlignment="Bottom" Background="#CC0F0F0F" Padding="12" CornerRadius="0,0,12,12">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold" FontSize="14" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Year, StringFormat='{}{0}'}" Foreground="#AAAAAA" FontSize="12" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock x:Name="LoadingText" Text="Loading VOD catalog..." Foreground="{DynamicResource MutedTextBrush}" FontSize="16" 
+                           HorizontalAlignment="Center" Margin="0,20" Visibility="Collapsed"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- MOVIE DETAILS OVERLAY MODAL -->
+        <Border x:Name="VodDetailsOverlay" Grid.RowSpan="2" Background="{DynamicResource OverlayBackgroundBrush}" Visibility="Collapsed" Panel.ZIndex="250" KeyboardNavigation.DirectionalNavigation="Continue">
+            <Grid Margin="60" KeyboardNavigation.DirectionalNavigation="Continue">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Sidebar: Actions & Poster -->
+                <StackPanel Grid.Column="0" Margin="0,0,40,0" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <Button x:Name="DetailBackBtn" Content="← Back to VOD" Background="Transparent" Foreground="{DynamicResource PrimaryTextBrush}" 
+                            BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,20" 
+                            Click="CloseDetails_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="DetailButtons_PreviewKeyDown"/>
+
+                    <Border CornerRadius="12" ClipToBounds="True" Margin="0,0,0,20" Width="260" Height="390" Background="{DynamicResource CardBackgroundBrush}">
+                        <Image x:Name="DetailPoster" Stretch="UniformToFill">
+                            <Image.Clip><RectangleGeometry Rect="0,0,260,390" RadiusX="12" RadiusY="12"/></Image.Clip>
+                        </Image>
+                    </Border>
+
+                    <Button x:Name="DetailPlayBtn" Content="▶ Play Movie" Background="{DynamicResource AccentBrush}" Foreground="White" 
+                            BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Stretch" Padding="15,12" 
+                            Click="DetailPlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="DetailButtons_PreviewKeyDown">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+                </StackPanel>
+
+                <!-- Right Pane: Metadata & Overview -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="DetailTitle" Text="Movie Title" FontSize="42" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,25">
+                        <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" Padding="8,4" Margin="0,0,10,0">
+                            <TextBlock x:Name="DetailYear" Text="2024" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="16" FontWeight="SemiBold"/>
+                        </Border>
+                        <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" Padding="8,4" Margin="0,0,10,0">
+                            <TextBlock x:Name="DetailProvider" Text="PLUTO TV" Foreground="{DynamicResource AccentBrush}" FontSize="16" FontWeight="Bold"/>
+                        </Border>
+                        <TextBlock x:Name="DetailGenre" Text="Action" Foreground="{DynamicResource MutedTextBrush}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="DetailSummary" Text="Movie overview..." FontSize="18" Foreground="{DynamicResource SecondaryTextBrush}" 
+                               TextWrapping="Wrap" LineHeight="26" MaxHeight="250" TextTrimming="CharacterEllipsis" Margin="0,0,0,30"/>
+
+                    <Border Background="#1AFFFFFF" CornerRadius="8" Padding="15,10" HorizontalAlignment="Left">
+                        <TextBlock Text="Streamed directly via ADB Tuner Microservice" Foreground="{DynamicResource MutedTextBrush}" FontSize="14"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- SORT/ORDER POPUP OVERLAY -->
+        <Border x:Name="FilterOverlay" Grid.RowSpan="2" Background="{DynamicResource OverlayBackgroundBrush}" Visibility="Collapsed" Panel.ZIndex="600">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="FilterOverlayTitle" Text="Select Option" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="28" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center"/>
+                <ListBox x:Name="FilterSelectionList" Grid.Row="1" MaxHeight="500" MinWidth="350" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         PreviewKeyDown="FilterSelectionList_PreviewKeyDown" MouseLeftButtonUp="FilterSelectionList_MouseUp">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="20,15"/>
+                            <Setter Property="Margin" Value="0,0,0,10"/>
+                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                            <Setter Property="FontSize" Value="20"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="2">
+                                            <ContentPresenter HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource BorderBrush}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                                                <Setter TargetName="bg" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" HorizontalAlignment="Center"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

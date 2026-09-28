@@ -111,6 +111,7 @@
                     <Button Content="Guide" Click="Guide_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Multiview" Click="NavMultiview_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Movies" Click="Movies_Click" Style="{StaticResource NavPillStyle}"/>
+					<Button x:Name="VodNavBtn" Content="VOD" Click="Vod_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Collections" Click="Collections_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Recordings" Click="Recordings_Click" Style="{StaticResource NavPillStyle}"/>
                     <Button Content="Shows" Click="Shows_Click" Style="{StaticResource NavPillStyle}"/>
@@ -446,15 +447,44 @@
                                         </Button>
                                     </Grid>
                                 </Border>
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                    <Setter TargetName="ActiveBadge" Property="Visibility" Value="Visible"/>
-                                    <Setter TargetName="MakeActiveBtn" Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                        <Setter TargetName="ActiveBadge" Property="Visibility" Value="Visible"/>
+                                        <Setter TargetName="MakeActiveBtn" Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <!-- VOD ADB BRIDGE SETTINGS -->
+                    <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="12" Padding="25" Margin="0,25,0,25">
+                        <StackPanel>
+                            <TextBlock Text="VOD &amp; ADB Bridge" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,0,0,15"/>
+
+                            <!-- Activation Toggle -->
+                            <CheckBox x:Name="EnableVodCheckBox" Content="Enable VOD &amp; Pluto TV Integration" 
+                                      FontSize="16" Foreground="{DynamicResource PrimaryTextBrush}" 
+                                      FontWeight="SemiBold" Margin="0,0,0,20" 
+                                      Click="EnableVodCheckBox_Click"/>
+
+                            <!-- ADB Bridge URL & Port Input -->
+                        <StackPanel x:Name="VodConfigPanel">
+                            <TextBlock Text="ADB Tuner Bridge Endpoint (IP:Port)" FontSize="14" FontWeight="SemiBold" 
+                                       Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,8"/>
+                            <Border Background="{DynamicResource AppBackgroundBrush}" CornerRadius="8" Padding="15,10" 
+                                    BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" MaxWidth="500" HorizontalAlignment="Left">
+                                <TextBox x:Name="AdbBridgeUrlTextBox" Width="350" FontSize="16" Background="Transparent" 
+                                         Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0" 
+                                         CaretBrush="{DynamicResource PrimaryTextBrush}"
+                                         LostFocus="AdbBridgeUrlTextBox_LostFocus"/>
+                            </Border>
+                            <TextBlock Text="Accepts '127.0.0.1:8888' or 'http://127.0.0.1:8888'" 
+                                       FontSize="12" Foreground="{DynamicResource MutedTextBrush}" Margin="0,6,0,0"/>
+                        </StackPanel>
+                        </StackPanel>
+                    </Border>
+
                 </StackPanel>
 
             </Grid>

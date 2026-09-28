@@ -19,6 +19,7 @@ public partial class DashboardView : UserControl
     public event EventHandler? OnSettingsRequested;
     public event EventHandler? OnGuideRequested;
     public event EventHandler? OnMoviesRequested;
+	public event EventHandler? OnVodRequested;
     public event EventHandler? OnRecordingsRequested;
     public event EventHandler? OnShowsRequested;
 	public event EventHandler? OnSportsRequested;
@@ -88,6 +89,10 @@ public partial class DashboardView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+		if (VodNavBtn != null)
+{
+    VodNavBtn.Visibility = PreferencesManager.Load().EnableAdbVodBridge ? Visibility.Visible : Visibility.Collapsed;
+}
         ThemeToggleBtn.Content = PreferencesManager.LoadTheme() == "Dark" ? "\xE708" : "\xE706";
         var activeServer = _serverManager.GetActiveServer();
         
@@ -271,7 +276,8 @@ public partial class DashboardView : UserControl
     private void ExitApp_Click(object sender, RoutedEventArgs e) => OnExitRequested?.Invoke(this, EventArgs.Empty);
     private void Settings_Click(object sender, RoutedEventArgs e) => OnSettingsRequested?.Invoke(this, EventArgs.Empty);
     private void Movies_Click(object sender, RoutedEventArgs e) => OnMoviesRequested?.Invoke(this, EventArgs.Empty);
-    private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
+    private void Vod_Click(object sender, RoutedEventArgs e) => OnVodRequested?.Invoke(this, EventArgs.Empty);
+	private void Recordings_Click(object sender, RoutedEventArgs e) => OnRecordingsRequested?.Invoke(this, EventArgs.Empty);
     private void NavMultiview_Click(object sender, RoutedEventArgs e) => OnMultiviewRequested?.Invoke(this, EventArgs.Empty);
     private void Shows_Click(object sender, RoutedEventArgs e) => OnShowsRequested?.Invoke(this, EventArgs.Empty);
 	private void Sports_Click(object sender, RoutedEventArgs e) => OnSportsRequested?.Invoke(this, EventArgs.Empty);

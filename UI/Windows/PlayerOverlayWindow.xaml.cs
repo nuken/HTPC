@@ -139,12 +139,56 @@ public partial class PlayerOverlayWindow : Window
         Dispatcher.Invoke(() => 
         {
             BufferingOverlay.Visibility = Visibility.Collapsed;
-
-            // --- NEW: Reset the grace period when the video actually appears! ---
+            PrerollOverlay.Visibility = Visibility.Collapsed;
+            // --- Reset the grace period when the video actually appears! ---
             Mouse.OverrideCursor = Cursors.None;
             _lastMousePosition = Mouse.GetPosition(this);
             _initTime = DateTime.UtcNow;
         });
+    }
+	
+	private async void LoadOverlayImageAsync(string imageUrl, bool isLiveTv)
+    {
+        try
+        {
+            using var client = new System.Net.Http.HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            
+            byte[] imageBytes = await client.GetByteArrayAsync(imageUrl);
+
+            using var ms = new System.IO.MemoryStream(imageBytes);
+            var bmp = new System.Windows.Media.Imaging.BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bmp.StreamSource = ms;
+            bmp.EndInit();
+
+            if (isLiveTv)
+            {
+                LivePosterImage.Source = bmp;
+                LiveBackgroundPoster.Source = bmp;
+                LivePosterBorder.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                PrerollPosterImage.Source = bmp;
+                PrerollBackgroundPoster.Source = bmp;
+                PrerollPosterBorder.Visibility = Visibility.Visible;
+            }
+        }
+        catch
+        {
+            if (isLiveTv)
+            {
+                LivePosterBorder.Visibility = Visibility.Collapsed;
+                LiveBackgroundPoster.Source = null;
+            }
+            else
+            {
+                PrerollPosterBorder.Visibility = Visibility.Collapsed;
+                PrerollBackgroundPoster.Source = null;
+            }
+        }
     }
 
     public void InitializeMedia(MediaItem media, MediaItem? nextInQueue = null)
@@ -175,8 +219,60 @@ public partial class PlayerOverlayWindow : Window
             });
         }
        
-        if (_isLiveTv) BufferingOverlay.Visibility = Visibility.Visible;
-        else BufferingOverlay.Visibility = Visibility.Collapsed;
+        bool isVod = !_isLiveTv && (
+            (!string.IsNullOrEmpty(media.StreamUrl) && media.StreamUrl.Contains("/vod")) ||
+            (!string.IsNullOrEmpty(media.Path) && media.Path.Contains("/vod")) ||
+            (media.Categories != null && media.Categories.Contains("VOD", StringComparer.OrdinalIgnoreCase))
+        );
+		
+		if (isVod || (!_isLiveTv && !string.IsNullOrWhiteSpace(media.PosterUrl)))
+        {
+            BufferingOverlay.Visibility = Visibility.Collapsed;
+            PrerollTitleText.Text = string.IsNullOrEmpty(media.Title) ? "Loading Movie..." : media.Title;
+            PrerollStatusText.Text = isVod ? "Tuning stream..." : "Loading...";
+
+            if (!string.IsNullOrWhiteSpace(media.PosterUrl))
+            {
+                string cleanUrl = media.PosterUrl.Replace("\r", "").Replace("\n", "").Replace(" ", "").Trim();
+                LoadOverlayImageAsync(cleanUrl, false);
+            }
+            else
+            {
+                PrerollPosterBorder.Visibility = Visibility.Collapsed;
+                PrerollBackgroundPoster.Source = null;
+            }
+
+            PrerollOverlay.Visibility = Visibility.Visible;
+        }
+        else if (_isLiveTv)
+        {
+            PrerollOverlay.Visibility = Visibility.Collapsed;
+            BufferingOverlay.Visibility = Visibility.Visible;
+
+            // Prioritize the actual show title, fallback to channel title
+            LiveTitleText.Text = !string.IsNullOrEmpty(media.CurrentShowTitle) ? media.CurrentShowTitle : media.Title;
+
+            // --- FIX: Prioritize the Show Poster, fallback to Channel Logo ---
+            string liveImageUrl = !string.IsNullOrWhiteSpace(media.CurrentShowPosterUrl) 
+                                  ? media.CurrentShowPosterUrl 
+                                  : media.PosterUrl;
+
+            if (!string.IsNullOrWhiteSpace(liveImageUrl))
+            {
+                string cleanUrl = liveImageUrl.Replace("\r", "").Replace("\n", "").Replace(" ", "").Trim();
+                LoadOverlayImageAsync(cleanUrl, true);
+            }
+            else
+            {
+                LivePosterBorder.Visibility = Visibility.Collapsed;
+                LiveBackgroundPoster.Source = null;
+            }
+        }
+        else
+        {
+            PrerollOverlay.Visibility = Visibility.Collapsed;
+            BufferingOverlay.Visibility = Visibility.Collapsed;
+        }
 
         TimelineGrid.Visibility = Visibility.Visible;
         TimelineSlider.IsHitTestVisible = true;
@@ -633,8 +729,25 @@ public partial class PlayerOverlayWindow : Window
     {
         if ((!_isPlaying && !_isScrubbing) || _isDragging) return;
 
-    if (!_isLiveTv)
-    {
+        // --- NEW: BULLETPROOF OVERLAY FAILSAFE ---
+        // If MPV is actively decoding frames and the playhead is advancing, force-hide all loading screens.
+        // This catches edge cases where live HLS/TS streams fail to fire the standard "Loaded" event.
+        if (PrerollOverlay.Visibility == Visibility.Visible || BufferingOverlay.Visibility == Visibility.Visible)
+        {
+            if (_mpvService.GetPosition() > 0.1)
+            {
+                PrerollOverlay.Visibility = Visibility.Collapsed;
+                BufferingOverlay.Visibility = Visibility.Collapsed;
+                
+                // Reset the mouse hiding grace period
+                Mouse.OverrideCursor = Cursors.None;
+                _lastMousePosition = Mouse.GetPosition(this);
+                _initTime = DateTime.UtcNow;
+            }
+        }
+
+        if (!_isLiveTv)
+        {
             double duration = _mpvService.GetDuration();
             double position = _mpvService.GetPosition();
 
@@ -1164,19 +1277,14 @@ public partial class PlayerOverlayWindow : Window
 	
 	public void ShowPlaybackError(string reason)
     {
-        Dispatcher.Invoke(() =>
+        Dispatcher.Invoke(() => 
         {
-            // 1. Hide the spinning buffering screen if it is still up
             BufferingOverlay.Visibility = Visibility.Collapsed;
+            PrerollOverlay.Visibility = Visibility.Collapsed;
             
-            // 2. Set the custom error message and show the overlay
             ErrorReasonText.Text = reason;
             ErrorOverlay.Visibility = Visibility.Visible;
-            
-            // 3. Un-hide the mouse cursor so PC users can click the button
             Mouse.OverrideCursor = null;
-            
-            // 4. Force focus onto the button so 10-foot UI / Remote users can just hit "Select"
             ErrorReturnBtn.Focus();
             Keyboard.Focus(ErrorReturnBtn);
         });

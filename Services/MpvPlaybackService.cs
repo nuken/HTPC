@@ -116,15 +116,17 @@ public class MpvPlaybackService : IDisposable
         
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
         
-        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-readahead-secs", "60");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-secs", "300"); // Allow 5+ minutes of cache
+        // 1. Enable disk caching so RAM is not exhausted
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-on-disk", "yes");
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-dir", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "htpc_cache"));
+
+        // 2. Set forward and backward buffer limits (e.g., 2000 Megabytes = ~1 Hour of HD Video)
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "2000MiB");
+        Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "2000MiB");
                        
         Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "no");
         Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-initial", "no");
-        
         Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-wait", "1.0");
-		Libmpv.mpv_set_option_string(_mpvContext, "cache-on-disk", "no");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-dir", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "htpc_cache"));
 
         // The lavf fastseek command ensures HLS playlists probe instantly without stalling
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+fastseek");
@@ -133,9 +135,9 @@ public class MpvPlaybackService : IDisposable
 
         // --- NEW: Aggressive Network Timeout Settings for HLS ---
         // Force the network connection to drop if the server takes longer than 5 seconds to reply
-        Libmpv.mpv_set_option_string(_mpvContext, "network-timeout", "10"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "network-timeout", "20"); 
         // Force HLS playlist parsing to timeout if the playlist stalls
-        Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=10000000"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=20000000"); 
         // Stop MPV from hanging infinitely if the demuxer gets confused by broken timestamps
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "500M"); // Increased to 500MB
         Libmpv.mpv_set_option_string(_mpvContext, "force-seekable", "yes");         // Force seek on Live TV
@@ -185,6 +187,20 @@ public class MpvPlaybackService : IDisposable
         }
         return "N/A";
     }
+	
+	private async Task TeardownTunerSessionAsync(string tunerBaseUrl, string streamUrl)
+{
+    try
+    {
+        LogTuner("Sending VOD teardown command to ADB Tuner Bridge...");
+        // Releases the active VOD session regardless of which tuner/encoder was allocated
+        await _httpClient.PostAsync($"{tunerBaseUrl.TrimEnd('/')}/api/release/vod", null);
+    }
+    catch (Exception ex)
+    {
+        _logger.LogWarning($"Failed to reach Go VOD Tuner for teardown: {ex.Message}");
+    }
+}
 
     public void PlayMedia(MediaItem media, bool isRetry = false)
     {
@@ -245,6 +261,8 @@ public class MpvPlaybackService : IDisposable
 
         string streamUrl = media.StreamUrl ?? media.Path;
         
+        var prefs = PreferencesManager.Load();
+
         if (streamUrl.Contains(".m3u8"))
         {
             var server = _serverManager.GetActiveServer();
@@ -651,6 +669,14 @@ private void HandlePlaybackFailure(MediaItem media)
             
             _ = SyncProgressToServerAsync(_currentMedia.Id, duration, position);
             _ = StopServerSessionAsync(_currentMedia); 
+
+            // --- INSTANT VOD TEARDOWN ---
+            var prefs = PreferencesManager.Load();
+            string streamUrl = _currentMedia.StreamUrl ?? _currentMedia.Path;
+            if (prefs.EnableAdbVodBridge && !string.IsNullOrWhiteSpace(prefs.AdbTunerUrl) && streamUrl.Contains(prefs.AdbTunerUrl))
+            {
+                _ = TeardownTunerSessionAsync(prefs.AdbTunerUrl, streamUrl);
+            }
         }
 
         LogTuner("Dispatching native MPV stop command to background task...");
