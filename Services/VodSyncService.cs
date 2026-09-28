@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using HTPC.Core.Data;
 using HTPC.Core.Models;
 
@@ -116,6 +117,25 @@ public class VodSyncService
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            // --- AUTOMATIC UPGRADE PATCH ---
+            // Safely injects the new table for existing users updating from older versions.
+            // If the table already exists, SQLite simply ignores this command.
+            db.Database.ExecuteSqlRaw(@"
+                CREATE TABLE IF NOT EXISTS ""VodCatalog"" (
+                    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_VodCatalog"" PRIMARY KEY AUTOINCREMENT,
+                    ""TmdbId"" INTEGER NOT NULL,
+                    ""Title"" TEXT NULL,
+                    ""Year"" INTEGER NOT NULL,
+                    ""PosterUrl"" TEXT NULL,
+                    ""Overview"" TEXT NULL,
+                    ""Genre"" TEXT NULL,
+                    ""ProviderKey"" TEXT NULL,
+                    ""NativeDeepLink"" TEXT NULL,
+                    ""IsActive"" INTEGER NOT NULL,
+                    ""LastVerified"" TEXT NOT NULL
+                );
+            ");
+
             var existingItems = db.VodCatalog.Where(v => v.ProviderKey == "pluto").ToList();
             foreach (var item in existingItems) 
             {
@@ -184,12 +204,15 @@ public class VodSyncService
         {
             LogToFile($"FATAL EXCEPTION during Pluto sync: {ex.Message}");
             
-            Application.Current.Dispatcher.Invoke(() =>
+            // Check if the UI has booted before trying to show a popup
+            if (Application.Current != null)
             {
-                MessageBox.Show($"The Pluto VOD Sync failed to download.\n\nError: {ex.Message}\n\nCheck the log file on your Desktop for details.", "VOD Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            });
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show($"The Pluto VOD Sync failed to download.\n\nError: {ex.Message}\n\nCheck the log file on your Desktop for details.", "VOD Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            }
         }
-    }
 
     private string ExtractBestPoster(PlutoItem item)
     {
