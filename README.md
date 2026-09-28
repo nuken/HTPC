@@ -61,6 +61,7 @@ To use the VOD features, you must configure the companion proxy tool to handle t
 3. **Provider Configuration:** In your ADB Bridge web dashboard, you must add Pluto TV as a Provider using the following exact application intents:
    * **Package Name:** `tv.pluto.android`
    * **Component (Activity):** `com.cbs.app.tv.ui.activity.HomeActivity`
+4. **Enable in HTPC Settings:** Open Nucleus HTPC, navigate to the **Settings** menu, toggle **Enable ADB VOD Bridge** to ON, and enter the local IP address and port of your ADB Bridge server (e.g., `http://192.168.1.50:8888`).  
 
 ### How to Use
 Once the ADB Bridge is configured and running on your network:
