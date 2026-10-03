@@ -364,6 +364,16 @@ public partial class MoviesView : UserControl
     private void GenrePill_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var command = InputMapper.GetCommand(e.Key);
+		
+		if (command == HtpcCommand.Select || e.Key == Key.Enter)
+    {
+        if (sender is RadioButton rb)
+        {
+            rb.IsChecked = true;
+            e.Handled = true;
+            return;
+        }
+    }
         
         if (command == HtpcCommand.Down || command == HtpcCommand.Up)
         {

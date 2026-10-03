@@ -389,24 +389,36 @@ public partial class VodView : UserControl
     }
 
     private void GenrePill_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var command = InputMapper.GetCommand(e.Key);
+{
+    var command = InputMapper.GetCommand(e.Key);
 
-        if (command == HtpcCommand.Down)
+    // 1. Allow the OK / Select button on the remote to check the pill
+    if (command == HtpcCommand.Select || e.Key == Key.Enter)
+    {
+        if (sender is RadioButton rb)
         {
-            if (VodGrid.Items.Count > 0)
-            {
-                var rowElement = VodGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
-            }
+            rb.IsChecked = true;
             e.Handled = true;
-        }
-        else if (command == HtpcCommand.Up)
-        {
-            SearchBox.Focus();
-            e.Handled = true;
+            return;
         }
     }
+
+    // 2. Vertical navigation between SearchBox and the Poster Grid
+    if (command == HtpcCommand.Down)
+    {
+        if (VodGrid.Items.Count > 0)
+        {
+            var rowElement = VodGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+            rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        }
+        e.Handled = true;
+    }
+    else if (command == HtpcCommand.Up)
+    {
+        SearchBox.Focus();
+        e.Handled = true;
+    }
+}
 
     private void ListBoxItem_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -513,25 +525,48 @@ public partial class VodView : UserControl
     }
 
     private void DetailButtons_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        var command = InputMapper.GetCommand(e.Key);
+{
+    var command = InputMapper.GetCommand(e.Key);
 
-        if (command == HtpcCommand.Up && sender == DetailPlayBtn)
+    // 1. Trap Left and Right arrows completely so they do nothing
+    if (command == HtpcCommand.Left || command == HtpcCommand.Right)
+    {
+        e.Handled = true;
+        return;
+    }
+
+    // 2. Cycle vertically between the two buttons
+    if (command == HtpcCommand.Up)
+    {
+        if (sender == DetailPlayBtn)
         {
             DetailBackBtn.Focus();
-            e.Handled = true;
         }
-        else if (command == HtpcCommand.Down && sender == DetailBackBtn)
+        else if (sender == DetailBackBtn)
+        {
+            DetailPlayBtn.Focus(); // Wrap around
+        }
+        e.Handled = true;
+    }
+    else if (command == HtpcCommand.Down)
+    {
+        if (sender == DetailBackBtn)
         {
             DetailPlayBtn.Focus();
-            e.Handled = true;
         }
-        else if (command == HtpcCommand.Back || e.Key == Key.Escape)
+        else if (sender == DetailPlayBtn)
         {
-            CloseDetails_Click(null!, null!);
-            e.Handled = true;
+            DetailBackBtn.Focus(); // Wrap around
         }
+        e.Handled = true;
     }
+    // 3. Back / Escape button closes the overlay
+    else if (command == HtpcCommand.Back || e.Key == Key.Escape)
+    {
+        CloseDetails_Click(null!, null!);
+        e.Handled = true;
+    }
+}
 
     private void DetailPlay_Click(object sender, RoutedEventArgs e)
     {
