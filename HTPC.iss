@@ -1,11 +1,11 @@
 [Setup]
 ; --- Application Metadata ---
 AppName=Nucleus HTPC
-AppVersion=1.4.4
+AppVersion=1.4.5
 AppPublisher=Bobby Vaughn
 DefaultDirName={autopf}\NucleusHTPC
 DefaultGroupName=Nucleus HTPC
-OutputBaseFilename=NucleusHTPC_Installer_v1.4.4
+OutputBaseFilename=NucleusHTPC_Installer_v1.4.5
 WizardSmallImageFile=Assets\NucleusSmall.bmp
 WizardImageFile=Assets\NucleusBanner.bmp
 
@@ -52,9 +52,9 @@ end;
 ; Run the file locally from the temp directory
 Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; Flags: waituntilterminated; Check: not IsVCRedistInstalled
 
-; Add inbound and outbound firewall rules silently during installation
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""HTPC Media Center"" dir=in action=allow program=""{app}\HTPC.exe"" enable=yes profile=any"; Flags: runhidden; StatusMsg: "Configuring Windows Firewall..."
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""HTPC Media Center"" dir=out action=allow program=""{app}\HTPC.exe"" enable=yes profile=any"; Flags: runhidden
+; Wrap netsh in the command processor for reliable execution
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""HTPC Media Center"" dir=in action=allow program=""{app}\HTPC.exe"" enable=yes profile=any"; Flags: runhidden; StatusMsg: "Configuring Windows Firewall..."
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""HTPC Media Center"" dir=out action=allow program=""{app}\HTPC.exe"" enable=yes profile=any"; Flags: runhidden
 
 ; This launches your app after the installer finishes
 Filename: "{app}\HTPC.exe"; Description: "{cm:LaunchProgram,Nucleus HTPC}"; Flags: nowait postinstall skipifsilent
