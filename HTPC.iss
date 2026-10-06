@@ -1,11 +1,11 @@
 [Setup]
 ; --- Application Metadata ---
 AppName=Nucleus HTPC
-AppVersion=1.4.2
+AppVersion=1.4.3
 AppPublisher=Bobby Vaughn
 DefaultDirName={autopf}\NucleusHTPC
 DefaultGroupName=Nucleus HTPC
-OutputBaseFilename=NucleusHTPC_Installer_v1.4.2
+OutputBaseFilename=NucleusHTPC_Installer_v1.4.3
 WizardSmallImageFile=Assets\NucleusSmall.bmp
 WizardImageFile=Assets\NucleusBanner.bmp
 
@@ -19,6 +19,10 @@ PrivilegesRequired=admin
 ; --- Architecture Setup ---
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+
+[Dirs]
+; Grants standard users permission to write/modify the database in the Program Files folder
+Name: "{app}"; Permissions: users-modify
 
 [Files]
 ; --- Core Application Files ---
