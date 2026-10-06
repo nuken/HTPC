@@ -16,55 +16,19 @@ using HTPC.Core.Models;
 namespace HTPC.Services;
 
 // ==========================================
-// PLUTO TV API MODELS
+// PLUTO FOR CHANNELS - VOD PROXY MODEL
 // ==========================================
-public class PlutoApiResponse
+public class ProxyVodItem
 {
-    [JsonPropertyName("categories")] public List<PlutoCategory>? Categories { get; set; }
-}
-
-public class PlutoCategory
-{
-    [JsonPropertyName("name")] public string? Name { get; set; }
-    [JsonPropertyName("items")] public List<PlutoItem>? Items { get; set; }
-}
-
-public class PlutoItem
-{
-    [JsonPropertyName("_id")] public string? Id { get; set; }
-    [JsonPropertyName("name")] public string? Name { get; set; }
-    [JsonPropertyName("slug")] public string? Slug { get; set; }
-    [JsonPropertyName("type")] public string? Type { get; set; }
-    [JsonPropertyName("description")] public string? Description { get; set; }
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("title")] public string? Title { get; set; }
     [JsonPropertyName("summary")] public string? Summary { get; set; }
     [JsonPropertyName("genre")] public string? Genre { get; set; }
-    
-    // Perfectly mapped to the JSON sample
-    [JsonPropertyName("covers")] public List<PlutoCover>? Covers { get; set; } 
-    
-    [JsonPropertyName("featuredImage")] public PlutoImage? FeaturedImage { get; set; }
-    [JsonPropertyName("clip")] public PlutoClip? Clip { get; set; }
+    [JsonPropertyName("release_year")] public int ReleaseYear { get; set; }
+    [JsonPropertyName("image_url")] public string? ImageUrl { get; set; }
+    [JsonPropertyName("video_url")] public string? VideoUrl { get; set; }
 }
 
-public class PlutoCover
-{
-    [JsonPropertyName("aspectRatio")] public string? AspectRatio { get; set; }
-    [JsonPropertyName("url")] public string? Url { get; set; }
-}
-
-public class PlutoImage
-{
-    [JsonPropertyName("path")] public string? Path { get; set; }
-}
-
-public class PlutoClip
-{
-    [JsonPropertyName("originalReleaseDate")] public string? OriginalReleaseDate { get; set; }
-}
-
-// ==========================================
-// VOD SYNC SERVICE
-// ==========================================
 public class VodSyncService
 {
     private readonly HttpClient _httpClient;
@@ -80,7 +44,7 @@ public class VodSyncService
         
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
         {
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
         }
 
         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -99,27 +63,31 @@ public class VodSyncService
 
     public async Task SyncPlutoTvCatalogAsync()
     {
-        LogToFile("Starting direct Pluto TV VOD catalog sync...");
+        LogToFile("Starting direct PlutoForChannels VOD proxy sync...");
 
-        string apiUrl = "https://api.pluto.tv/v3/vod/categories?includeItems=true&deviceType=web";
+        var prefs = PreferencesManager.Load();
+        string apiUrl = prefs.AdbTunerUrl; // We are repurposing this setting to hold the vod.json link
+
+        if (string.IsNullOrWhiteSpace(apiUrl) || !apiUrl.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            LogToFile("Failed: The AdbTunerUrl setting must point to the vod.json file.");
+            return;
+        }
 
         try
         {
-            LogToFile("Downloading Pluto TV JSON payload...");
-            var apiResponse = await _httpClient.GetFromJsonAsync<PlutoApiResponse>(apiUrl);
+            LogToFile($"Downloading VOD catalog from {apiUrl}...");
+            var proxyItems = await _httpClient.GetFromJsonAsync<List<ProxyVodItem>>(apiUrl);
             
-            if (apiResponse?.Categories == null)
+            if (proxyItems == null || proxyItems.Count == 0)
             {
-                LogToFile("Failed: Pluto API returned null or missing categories array.");
+                LogToFile("Failed: Proxy API returned null or empty array.");
                 return;
             }
 
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            // --- AUTOMATIC UPGRADE PATCH ---
-            // Safely injects the new table for existing users updating from older versions.
-            // If the table already exists, SQLite simply ignores this command.
             db.Database.ExecuteSqlRaw(@"
                 CREATE TABLE IF NOT EXISTS ""VodCatalog"" (
                     ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_VodCatalog"" PRIMARY KEY AUTOINCREMENT,
@@ -145,98 +113,57 @@ public class VodSyncService
             int successCount = 0;
             var processedIds = new HashSet<string>();
 
-            foreach (var category in apiResponse.Categories)
+            foreach (var item in proxyItems)
             {
-                if (category.Items == null) continue;
+                if (string.IsNullOrWhiteSpace(item.Id) || string.IsNullOrWhiteSpace(item.VideoUrl)) continue;
+                if (!processedIds.Add(item.Id)) continue; 
 
-                foreach (var plutoItem in category.Items)
+                var cachedItem = existingItems.FirstOrDefault(v => v.NativeDeepLink == item.VideoUrl);
+
+                if (cachedItem != null)
                 {
-                    // ADDED: plutoItem == null check to prevent crashes on empty catalog items
-                    if (plutoItem == null || plutoItem.Type != "movie" || string.IsNullOrWhiteSpace(plutoItem.Slug) || string.IsNullOrWhiteSpace(plutoItem.Id)) continue;
-                    if (!processedIds.Add(plutoItem.Id)) continue; 
-
-                    string deepLink = $"https://pluto.tv/en/ondemand/movies/{plutoItem.Slug}/details";
-                    string poster = ExtractBestPoster(plutoItem);
-                    int releaseYear = ExtractReleaseYear(plutoItem);
-
-                    string title = plutoItem.Name ?? "Unknown";
-                    string overview = !string.IsNullOrWhiteSpace(plutoItem.Description) ? plutoItem.Description : (plutoItem.Summary ?? "");
-                    string genre = plutoItem.Genre ?? category.Name ?? "Movies";
-
-                    var cachedItem = existingItems.FirstOrDefault(v => v.NativeDeepLink == deepLink);
-
-                    if (cachedItem != null)
-                    {
-                        cachedItem.Title = title;
-                        cachedItem.Year = releaseYear;
-                        cachedItem.PosterUrl = poster;
-                        cachedItem.Overview = overview;
-                        cachedItem.Genre = genre;
-                        cachedItem.IsActive = true;
-                        cachedItem.LastVerified = DateTime.UtcNow;
-                    }
-                    else
-                    {
-                        db.VodCatalog.Add(new VODCatalogItem
-                        {
-                            TmdbId = 0, 
-                            Title = title,
-                            Year = releaseYear,
-                            PosterUrl = poster,
-                            Overview = overview,
-                            Genre = genre,
-                            ProviderKey = "pluto",
-                            NativeDeepLink = deepLink,
-                            IsActive = true,
-                            LastVerified = DateTime.UtcNow
-                        });
-                    }
-                    successCount++;
+                    cachedItem.Title = item.Title ?? "Unknown";
+                    cachedItem.Year = item.ReleaseYear;
+                    cachedItem.PosterUrl = item.ImageUrl ?? "";
+                    cachedItem.Overview = item.Summary ?? "";
+                    cachedItem.Genre = item.Genre ?? "Movies";
+                    cachedItem.IsActive = true;
+                    cachedItem.LastVerified = DateTime.UtcNow;
                 }
+                else
+                {
+                    db.VodCatalog.Add(new VODCatalogItem
+                    {
+                        TmdbId = 0, 
+                        Title = item.Title ?? "Unknown",
+                        Year = item.ReleaseYear,
+                        PosterUrl = item.ImageUrl ?? "",
+                        Overview = item.Summary ?? "",
+                        Genre = item.Genre ?? "Movies",
+                        ProviderKey = "pluto",
+                        NativeDeepLink = item.VideoUrl, // Store the direct proxy HLS URL here!
+                        IsActive = true,
+                        LastVerified = DateTime.UtcNow
+                    });
+                }
+                successCount++;
             }
 
             LogToFile($"Saving {successCount} movies to local SQLite database...");
             await db.SaveChangesAsync();
             
-            LogToFile($"Pluto TV sync complete. Successfully processed {successCount} unique movies directly from Pluto.");
+            LogToFile($"VOD Proxy sync complete. Successfully processed {successCount} unique movies.");
         }
         catch (Exception ex)
         {
-            LogToFile($"FATAL EXCEPTION during Pluto sync: {ex.Message}");
-            
-            // Check if the UI has booted before trying to show a popup
+            LogToFile($"FATAL EXCEPTION during proxy sync: {ex.Message}");
             if (Application.Current != null)
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    MessageBox.Show($"The Pluto VOD Sync failed to download.\n\nError: {ex.Message}\n\nCheck the log file on your Desktop for details.", "VOD Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"The VOD Sync failed to download.\n\nError: {ex.Message}\n\nCheck the log file on your Desktop for details.", "VOD Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
             }
         }
-	}	
-
-    private string ExtractBestPoster(PlutoItem item)
-    {
-        if (item.Covers != null)
-        {
-            // ADDED: c?.AspectRatio to safely skip null cover objects in the JSON array
-            var verticalCover = item.Covers.FirstOrDefault(c => c?.AspectRatio == "347:500");
-            if (verticalCover != null && !string.IsNullOrWhiteSpace(verticalCover.Url))
-            {
-                return verticalCover.Url;
-            }
-        }
-        
-        return item.FeaturedImage?.Path ?? "";
-    }
-
-    private int ExtractReleaseYear(PlutoItem item)
-    {
-        int year = DateTime.Now.Year; 
-        if (!string.IsNullOrWhiteSpace(item.Clip?.OriginalReleaseDate) && item.Clip.OriginalReleaseDate.Length >= 4)
-        {
-            int.TryParse(item.Clip.OriginalReleaseDate.Substring(0, 4), out year);
-        }
-        return year;
-    }
+    }   
 }

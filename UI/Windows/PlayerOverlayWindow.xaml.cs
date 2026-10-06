@@ -74,9 +74,9 @@ public partial class PlayerOverlayWindow : Window
         _idleTimer.Start();
         
         _skipAdTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-        _skipAdTimer.Tick += (s, e) => { SkipAdButton.Visibility = Visibility.Collapsed; _skipAdTimer.Stop(); };
-        
-        _mpvService.OnCommercialPrompt += ShowSkipAdPrompt;
+        _skipAdTimer.Tick += (s, e) => { SkipPromptButton.Visibility = Visibility.Collapsed; _skipAdTimer.Stop(); };
+
+        _mpvService.OnSkipPrompt += MpvService_OnSkipPrompt;
 		_mpvService.OnMediaLoaded += MpvService_OnMediaLoaded;
 		_mpvService.OnPlaybackFailed += MpvService_OnPlaybackFailed;
 
@@ -120,7 +120,6 @@ public partial class PlayerOverlayWindow : Window
             Application.Current.MainWindow.StateChanged -= MainWindow_StateChanged;
         }
         
-        _mpvService.OnCommercialPrompt -= ShowSkipAdPrompt; 
         _mpvService.OnMediaLoaded -= MpvService_OnMediaLoaded; 
         
         // --- NEW: Unhook the failure event ---
@@ -195,7 +194,7 @@ public partial class PlayerOverlayWindow : Window
     {
         _currentMedia = media;
         _autoAdvanceTriggered = false; // Reset for new video
-        
+        ErrorOverlay.Visibility = Visibility.Collapsed;
         ShowTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? "" : media.Title;
         MediaTitleText.Text = string.IsNullOrEmpty(media.CurrentShowTitle) ? media.Title : media.CurrentShowTitle;
         
@@ -279,7 +278,7 @@ public partial class PlayerOverlayWindow : Window
         
         _markersDrawn = false;
         CommercialMarkersCanvas.Children.Clear();
-        SkipAdButton.Visibility = Visibility.Collapsed;
+        SkipPromptButton.Visibility = Visibility.Collapsed;
 
         _isPlaying = true;
         PlayPauseButton.Content = "⏸";
@@ -311,11 +310,17 @@ public partial class PlayerOverlayWindow : Window
     }
     
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+{
+    Mouse.OverrideCursor = Cursors.None;
+    var command = HTPC.Core.Input.InputMapper.GetCommand(e.Key);
+    
+    // Only wake the UI if we aren't just clicking the floating skip button
+    if (!(command == HtpcCommand.Select && SkipPromptButton.IsFocused))
     {
-        Mouse.OverrideCursor = Cursors.None;
-		WakeUpUi();
-		var command = HTPC.Core.Input.InputMapper.GetCommand(e.Key);
-		var now = DateTime.UtcNow;
+        WakeUpUi();
+    }
+    
+    var now = DateTime.UtcNow;
 		
 		// 1. Direct Channel Number Entry
         if ((e.Key >= Key.D0 && e.Key <= Key.D9) || (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9) || e.Key == Key.Decimal || e.Key == Key.OemPeriod)
@@ -519,13 +524,13 @@ public partial class PlayerOverlayWindow : Window
                     if (MiniGuideList.SelectedItem is Channel selectedChannel) 
                         PlayChannelFromMiniGuide(selectedChannel);
                 }
-                else if (UpNextPromptContainer.Visibility == Visibility.Visible && UpNextButton.IsFocused)
+                else if (UpNextPromptContainer.Visibility == Visibility.Visible)
                 {
+                    // FORCE the transition. Do not rely on WPF's native button focus logic!
                     UpNextButton_Click(null!, null!);
                 }
                 else if (Keyboard.FocusedElement is Button)
                 {
-                    // Let WPF natively click whichever button is currently highlighted (CC, Stats, Skip, etc.)
                     return; 
                 }
                 else
@@ -770,22 +775,29 @@ public partial class PlayerOverlayWindow : Window
             }
             
             if (_nextEpisodeToPlay != null && !_autoAdvanceTriggered)
-            {
-                if (duration > 0 && (duration - position <= 120 || position / duration >= 0.95))
-                {
-                    if (!_upNextPromptShown) ShowUpNextPrompt();
-                }
-                
-                // NEW: Auto-advance automatically if the video hits the end (within 2 seconds)
-                if (duration > 0 && (duration - position <= 2))
-                {
-                    _autoAdvanceTriggered = true;
-                    if (OnPlayNextInQueue != null)
-                        OnPlayNextInQueue.Invoke(this, _nextEpisodeToPlay);
-                    else
-                        UpNextButton_Click(this, new RoutedEventArgs());
-                }
-            }
+{
+    double timeRemaining = duration - position;
+
+    // 1. Trigger the popup exactly 30 seconds before the episode ends
+    if (duration > 0 && timeRemaining <= 30)
+    {
+        if (!_upNextPromptShown) ShowUpNextPrompt();
+
+        // 2. Update the countdown text dynamically every tick (500ms)
+        int secondsLeft = (int)Math.Max(0, timeRemaining);
+        UpNextCountdownText.Text = $"Starting in {secondsLeft} seconds... (Press OK to play)";
+    }
+    
+    // 3. Auto-advance instantly when the video ends (within 2 seconds of the file's literal end)
+    if (duration > 0 && timeRemaining <= 2)
+    {
+        _autoAdvanceTriggered = true;
+        if (OnPlayNextInQueue != null)
+            OnPlayNextInQueue.Invoke(this, _nextEpisodeToPlay);
+        else
+            UpNextButton_Click(this, new RoutedEventArgs());
+    }
+}
         }
         else
 {
@@ -840,6 +852,7 @@ public partial class PlayerOverlayWindow : Window
         }
         else
         {
+            // --- FIX: Uncommented to ensure isolated playbacks clear the engine properly ---
             //_mpvService.Stop();
             _mpvService.PlayMedia(_nextEpisodeToPlay);
             InitializeMedia(_nextEpisodeToPlay);
@@ -1090,26 +1103,29 @@ public partial class PlayerOverlayWindow : Window
         }
     }
     
-    private void ShowSkipAdPrompt(double targetTime)
+    // 2. Replace ShowSkipAdPrompt and SkipAdButton_Click with these:
+private void MpvService_OnSkipPrompt(double targetTime, string promptType)
+{
+    Dispatcher.Invoke(() => 
     {
-        Dispatcher.Invoke(() => 
-        {
-            _skipTargetTime = targetTime;
-            SkipAdButton.Visibility = Visibility.Visible;
-            SkipAdButton.Focus(); 
-            _skipAdTimer.Stop();
-            _skipAdTimer.Start(); 
-            WakeUpUi();
-        });
-    }
-
-    private void SkipAdButton_Click(object sender, RoutedEventArgs e)
-    {
-        _mpvService.SeekAbsolute(_skipTargetTime);
-        SkipAdButton.Visibility = Visibility.Collapsed;
+        _skipTargetTime = targetTime;
+        SkipPromptButton.Content = $"Skip {promptType} ⏭"; // Dynamically says "Skip Intro ⏭" or "Skip Commercial ⏭"
+        SkipPromptButton.Visibility = Visibility.Visible;
+        SkipPromptButton.Focus(); 
+        
         _skipAdTimer.Stop();
-        WakeUpUi();
-    }
+        _skipAdTimer.Start(); 
+        
+    });
+}
+
+private void SkipPromptButton_Click(object sender, RoutedEventArgs e)
+{
+    _mpvService.SeekAbsolute(_skipTargetTime);
+    SkipPromptButton.Visibility = Visibility.Collapsed;
+    _skipAdTimer.Stop();
+    
+}
 
     private void CommercialMarkersCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -1301,9 +1317,20 @@ public partial class PlayerOverlayWindow : Window
         this.Close(); 
     }
 	
-	private void MpvService_OnPlaybackFailed(string reason)
+	private DateTime _ignoreErrorsUntil = DateTime.MinValue;
+
+    public void PrepareForTransition()
     {
-        // Pass the error message string directly into the UI update method
+        // Suppress background MPV errors for 2 seconds while the engine restarts
+        _ignoreErrorsUntil = DateTime.UtcNow.AddSeconds(2);
+        ErrorOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private void MpvService_OnPlaybackFailed(string reason)
+    {
+        // If we are actively transitioning episodes, swallow the fake crash event!
+        if (DateTime.UtcNow < _ignoreErrorsUntil) return; 
+        
         ShowPlaybackError(reason);
     }
 }

@@ -300,7 +300,7 @@
                                TextWrapping="Wrap" LineHeight="26" MaxHeight="250" TextTrimming="CharacterEllipsis" Margin="0,0,0,30"/>
 
                     <Border Background="#1AFFFFFF" CornerRadius="8" Padding="15,10" HorizontalAlignment="Left">
-                        <TextBlock Text="Streamed directly via ADB Tuner Microservice" Foreground="{DynamicResource MutedTextBrush}" FontSize="14"/>
+                    <TextBlock Text="Streamed directly via PlutoForChannels .NET Proxy" Foreground="{DynamicResource MutedTextBrush}" FontSize="14"/>
                     </Border>
                 </StackPanel>
             </Grid>

@@ -460,17 +460,18 @@
                     <!-- VOD ADB BRIDGE SETTINGS -->
                     <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="12" Padding="25" Margin="0,25,0,25">
                         <StackPanel>
-                            <TextBlock Text="VOD &amp; ADB Bridge" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,0,0,15"/>
-
+                            <TextBlock Text="VOD &amp; Pluto Bridge" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,0,0,15"/>
+                            <TextBlock Text="(Requires Pluto-Windows_4C v1.2.4 or higher)" FontSize="14" FontWeight="SemiBold" 
+                                       Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,8"/>
                             <!-- Activation Toggle -->
                             <CheckBox x:Name="EnableVodCheckBox" Content="Enable VOD &amp; Pluto TV Integration" 
                                       FontSize="16" Foreground="{DynamicResource PrimaryTextBrush}" 
                                       FontWeight="SemiBold" Margin="0,0,0,20" 
                                       Click="EnableVodCheckBox_Click"/>
-
+									  
                             <!-- ADB Bridge URL & Port Input -->
                         <StackPanel x:Name="VodConfigPanel">
-                            <TextBlock Text="ADB Tuner Bridge Endpoint (IP:Port)" FontSize="14" FontWeight="SemiBold" 
+                            <TextBlock Text="Pluto 4C VOD Feed" FontSize="14" FontWeight="SemiBold" 
                                        Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,8"/>
                             <Border Background="{DynamicResource AppBackgroundBrush}" CornerRadius="8" Padding="15,10" 
                                     BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" MaxWidth="500" HorizontalAlignment="Left">
@@ -479,7 +480,7 @@
                                          CaretBrush="{DynamicResource PrimaryTextBrush}"
                                          LostFocus="AdbBridgeUrlTextBox_LostFocus"/>
                             </Border>
-                            <TextBlock Text="Accepts '127.0.0.1:8888' or 'http://127.0.0.1:8888'" 
+                            <TextBlock Text="e.g.'http://192.168.xx.xx:7777/pluto/us_east/vod.json'" 
                                        FontSize="12" Foreground="{DynamicResource MutedTextBrush}" Margin="0,6,0,0"/>
                         </StackPanel>
                         </StackPanel>

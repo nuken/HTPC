@@ -198,6 +198,7 @@ public class MediaLibraryService
                     Path = path,
                     Summary = GetStringOrNumber(element, "summary", "full_summary"),
                     Commercials = ParseDoubleArray(element, "commercials"),
+					Intros = ParseIntros(element),
                     CreatedAt = createdAt,
                     LastWatchedAt = lastWatchedAt,
                     UpdatedAt = updatedAt,
@@ -676,6 +677,7 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                     IsWatched = isWatched,
                     IsFavorite = isFavorite,
                     Commercials = ParseDoubleArray(element, "commercials"),
+					Intros = ParseIntros(element),
                     LastWatchedAt = lastWatchedAt,
                     Duration = duration,
                     ContentRating = contentRating
@@ -734,7 +736,8 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                                 EpisodeNumber = epNum,
                                 StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                                 PosterUrl = posterUrl,
-                                Commercials = ParseDoubleArray(element, "commercials")
+                                Commercials = ParseDoubleArray(element, "commercials"),
+								Intros = ParseIntros(element)
                             });
                         }
                     }
@@ -1268,7 +1271,8 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                         Genres = ParseStringArray(element, "genres"),
                         IsWatched = isWatched,
                         IsFavorite = isFavorite,
-						Commercials = ParseDoubleArray(element, "commercials")
+						Commercials = ParseDoubleArray(element, "commercials"),
+						Intros = ParseIntros(element)
                     });
                 }
             }
@@ -1484,7 +1488,8 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                     StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                     IsWatched = isWatched,
                     IsFavorite = isFavorite, 
-                    Commercials = ParseDoubleArray(element, "commercials")
+                    Commercials = ParseDoubleArray(element, "commercials"),
+					Intros = ParseIntros(element)
                 });
             }
         }
@@ -1545,7 +1550,8 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                         PosterUrl = posterUrl,
                         StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         CreatedAt = createdAt,
-                        Commercials = ParseDoubleArray(element, "commercials")
+                        Commercials = ParseDoubleArray(element, "commercials"),
+						Intros = ParseIntros(element)
                     });
                 }
             }
@@ -1598,7 +1604,8 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                         PosterUrl = posterUrl,
                         StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         CreatedAt = createdAt,
-                        Commercials = ParseDoubleArray(element, "commercials")
+                        Commercials = ParseDoubleArray(element, "commercials"),
+						Intros = ParseIntros(element)
                     });
                 }
             }
@@ -1808,6 +1815,7 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                         StartOffset = playbackTime,
                         Commercials = ParseDoubleArray(element, "commercials"),
                         Categories = categories, // Passing the extracted categories here
+						Intros = ParseIntros(element),
                         IsImported = isImported
                     });
                 }
@@ -1888,6 +1896,29 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
             return new List<MediaItem>();
         }
     }
+	
+	private List<double> ParseIntros(System.Text.Json.JsonElement root)
+{
+    var list = new List<double>();
+    if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return list;
+
+    if (root.TryGetProperty("DetectedSegments", out var segments) && segments.ValueKind == System.Text.Json.JsonValueKind.Array)
+    {
+        foreach (var seg in segments.EnumerateArray())
+        {
+            string type = seg.TryGetProperty("Type", out var tProp) ? tProp.GetString() ?? "" : "";
+            if (type.Equals("intro", StringComparison.OrdinalIgnoreCase))
+            {
+                if (seg.TryGetProperty("Start", out var sProp) && seg.TryGetProperty("End", out var eProp))
+                {
+                    list.Add(sProp.GetDouble());
+                    list.Add(eProp.GetDouble());
+                }
+            }
+        }
+    }
+    return list;
+}
 	
     public async Task<List<MediaItem>> GetImportedMediaAsync()
     {
@@ -2064,6 +2095,7 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                         PosterUrl = posterUrl,
                         StreamUrl = !string.IsNullOrEmpty(videoUrl) ? videoUrl : $"{baseUrl}/dvr/files/{id}/stream.mpg?format=ts",
                         Commercials = ParseDoubleArray(element, "commercials"),
+						Intros = ParseIntros(element),
                         StartOffset = playbackTime 
                     });
                 }
@@ -2129,7 +2161,8 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                         CreatedAt = createdAt,
                         IsWatched = isWatched,
                         IsFavorite = isFavorite,
-                        Commercials = ParseDoubleArray(element, "commercials")
+                        Commercials = ParseDoubleArray(element, "commercials"),
+						Intros = ParseIntros(element)
                     });
                 }
             }

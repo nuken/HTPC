@@ -60,8 +60,6 @@ public class MpvPlaybackService : IDisposable
     private const int MPV_EVENT_END_FILE = 7;
     private const int MPV_EVENT_FILE_LOADED = 8;
 
-    public event Action<double>? OnCommercialPrompt;
-
     public MpvPlaybackService(ILogger<MpvPlaybackService> logger, IServiceScopeFactory scopeFactory, ServerManagerService serverManager)
     {
         _logger = logger;
@@ -113,7 +111,7 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "vo", "gpu-next");
         Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
         Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
-        
+        Libmpv.mpv_set_option_string(_mpvContext, "ytdl", "yes");
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
         
         // 1. Enable disk caching so RAM is not exhausted
@@ -124,14 +122,16 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-bytes", "2000MiB");
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "2000MiB");
                        
+        // --- NEW: LOW-LATENCY VOD/LIVE TUNING ---
         Libmpv.mpv_set_option_string(_mpvContext, "cache-pause", "no");
         Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-initial", "no");
-        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-wait", "1.0");
+        // Strip the initial cache wait time down to zero
+        Libmpv.mpv_set_option_string(_mpvContext, "cache-pause-wait", "0");
 
         // The lavf fastseek command ensures HLS playlists probe instantly without stalling
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+fastseek");
-		// Force MPV to render the video after only 0.5 seconds of probing, instead of the default 5 seconds
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-analyzeduration", "1.5");
+        Libmpv.mpv_set_option_string(_mpvContext, "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
         // --- NEW: Aggressive Network Timeout Settings for HLS ---
         // Force the network connection to drop if the server takes longer than 5 seconds to reply
@@ -262,7 +262,12 @@ public class MpvPlaybackService : IDisposable
         string streamUrl = media.StreamUrl ?? media.Path;
         
         var prefs = PreferencesManager.Load();
-
+		
+		
+            // Restore accurate timestamp parsing so scrubbing works perfectly on standard recordings
+            Libmpv.mpv_set_option_string(_mpvContext, "profile", "default");
+            Libmpv.mpv_set_option_string(_mpvContext, "untimed", "no");
+      
         if (streamUrl.Contains(".m3u8"))
         {
             var server = _serverManager.GetActiveServer();
@@ -368,19 +373,18 @@ public class MpvPlaybackService : IDisposable
             
             // 1. Stream loaded successfully
             if (ev.event_id == MPV_EVENT_FILE_LOADED)
-            {
-                LogTuner("MPV_EVENT_FILE_LOADED triggered! Video is successfully buffering/playing.");
-                _logger.LogInformation("Stream loaded successfully in MPV. Cancelling watchdog.");
-                _loadingWatchdogCts?.Cancel();
+{
+    LogTuner("MPV_EVENT_FILE_LOADED triggered! Video is successfully buffering/playing.");
+    _logger.LogInformation("Stream loaded successfully in MPV. Cancelling watchdog.");
+    _loadingWatchdogCts?.Cancel();
 
-                // --- NEW: Automatically step back from the bleeding edge to build a safe buffer ---
-                if (_currentMedia != null && _currentMedia.IsLiveTv)
-                {
-                    Libmpv.mpv_command_string(_mpvContext, "seek -1.5 relative");
-                }
+    if (_currentMedia != null && _currentMedia.IsLiveTv)
+    {
+        Libmpv.mpv_command_string(_mpvContext, "seek -1.5 relative");
+    }
 
-                OnMediaLoaded?.Invoke(); 
-            }
+    OnMediaLoaded?.Invoke(); 
+}
 
             // 2. Stream ended or failed to open
             if (ev.event_id == MPV_EVENT_END_FILE)
@@ -447,44 +451,65 @@ public class MpvPlaybackService : IDisposable
         }
     }
 		
-    private void EvaluateCommercialBoundaries(double currentSeconds)
+    public event Action<double, string>? OnSkipPrompt; // Merged event passing the target time and the prompt type ("Intro" or "Commercial")
+private HashSet<int> _disabledIntroBlocks = new HashSet<int>();
+
+private void EvaluateCommercialBoundaries(double currentSeconds)
+{
+    var media = _currentMedia;
+    if (media == null) return;
+    
+    var prefs = PreferencesManager.Load();
+
+    // 1. Evaluate Commercials (Existing Logic)
+    if (prefs.CommercialSkipMode > 0 && media.Commercials != null && media.Commercials.Count >= 2)
     {
-        var media = _currentMedia;
-        if (media?.Commercials == null || media.Commercials.Count < 2) return;
-
-        var prefs = PreferencesManager.Load();
-        if (prefs.CommercialSkipMode == 0) return;
-
-        var comms = media.Commercials;
-        
-        for (int i = 0; i < comms.Count - 1; i += 2)
+        for (int i = 0; i < media.Commercials.Count - 1; i += 2)
         {
-            double start = comms[i];
-            double end = comms[i + 1];
-
-            if (currentSeconds < start - 5)
-            {
-                _disabledCommercialBlocks.Remove(i);
-            }
-
+            double start = media.Commercials[i];
+            double end = media.Commercials[i + 1];
+            
+            if (currentSeconds < start - 5) _disabledCommercialBlocks.Remove(i);
+            
             if (currentSeconds >= start && currentSeconds < end)
             {
-                if (_disabledCommercialBlocks.Contains(i)) continue; 
-
-                if (prefs.CommercialSkipMode == 2) 
+                if (_disabledCommercialBlocks.Contains(i)) continue;
+                
+                if (prefs.CommercialSkipMode == 2)
                 {
-                    _logger.LogInformation($"Auto-skipping commercial block: {start}s to {end}s");
-                    _disabledCommercialBlocks.Add(i); 
-                    SeekAbsolute(end); 
+                    _logger.LogInformation($"Auto-skipping commercial: {start}s to {end}s");
+                    _disabledCommercialBlocks.Add(i);
+                    SeekAbsolute(end);
                 }
-                else if (prefs.CommercialSkipMode == 1) 
+                else if (prefs.CommercialSkipMode == 1)
                 {
-                    _disabledCommercialBlocks.Add(i); 
-                    OnCommercialPrompt?.Invoke(end);  
+                    _disabledCommercialBlocks.Add(i);
+                    OnSkipPrompt?.Invoke(end, "Commercial");
                 }
             }
         }
     }
+
+    // 2. Evaluate Intros (New Logic)
+    if (media.Intros != null && media.Intros.Count >= 2)
+    {
+        for (int i = 0; i < media.Intros.Count - 1; i += 2)
+        {
+            double start = media.Intros[i];
+            double end = media.Intros[i + 1];
+
+            if (currentSeconds < start - 5) _disabledIntroBlocks.Remove(i);
+
+            if (currentSeconds >= start && currentSeconds < end)
+            {
+                if (_disabledIntroBlocks.Contains(i)) continue;
+
+                _disabledIntroBlocks.Add(i);
+                OnSkipPrompt?.Invoke(end, "Intro");
+            }
+        }
+    }
+}
 	
 	private async Task StartLoadingWatchdogAsync(CancellationToken token, MediaItem media)
     {

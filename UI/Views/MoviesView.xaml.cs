@@ -11,9 +11,19 @@ using HTPC.Services;
 
 namespace HTPC.UI.Views;
 
+public class CastMember
+{
+    public string Name { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
+}
+
 public partial class MoviesView : UserControl
 {
-    public event EventHandler? OnHomeRequested;
+    private MediaItem? _activeMovieForDetails;
+	private string _activeTrailerUrl = "";
+    public ObservableCollection<CastMember> MovieCredits { get; set; } = new ObservableCollection<CastMember>();
+	public event EventHandler? OnHomeRequested;
     public event EventHandler? OnGuideRequested;
 	public event EventHandler? OnVodRequested;
     public event EventHandler? OnSettingsRequested;
@@ -60,6 +70,7 @@ public partial class MoviesView : UserControl
 
         Loaded += OnLoaded;
         this.PreviewKeyDown += MoviesView_PreviewKeyDown;
+		CastItemsControl.ItemsSource = MovieCredits;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -291,7 +302,18 @@ public partial class MoviesView : UserControl
         {
             if (sender == OrderFilterBtn) { SortFilterBtn.Focus(); e.Handled = true; }
             else if (sender == SortFilterBtn) { StatusFilterBtn.Focus(); e.Handled = true; }
-            else if (sender == StatusFilterBtn) { e.Handled = true; } // Trap left
+            else if (sender == StatusFilterBtn) 
+            { 
+                if (ClearSearchBtn.Visibility == Visibility.Visible)
+                {
+                    ClearSearchBtn.Focus();
+                }
+                else
+                {
+                    SearchBox.Focus();
+                }
+                e.Handled = true; 
+            }
         }
         else if (command == HtpcCommand.Right)
         {
@@ -334,19 +356,25 @@ public partial class MoviesView : UserControl
         var command = InputMapper.GetCommand(e.Key);
         var tb = sender as TextBox;
 
-        // FOCUS BRIDGE: Jump to the right if the caret is at the end of the text (or box is empty)
+        // FOCUS BRIDGE: Jump to ClearSearchBtn if visible, otherwise jump to StatusFilterBtn
         if (command == HtpcCommand.Right)
         {
             if (tb != null && tb.CaretIndex >= tb.Text.Length)
             {
-                tb.MoveFocus(new TraversalRequest(FocusNavigationDirection.Right));
+                if (ClearSearchBtn.Visibility == Visibility.Visible)
+                {
+                    ClearSearchBtn.Focus();
+                }
+                else
+                {
+                    StatusFilterBtn.Focus();
+                }
                 e.Handled = true;
                 return;
             }
         }
         else if (command == HtpcCommand.Down)
         {
-            // Keep your existing Down logic (jumping into the MoviesGrid)
             if (MoviesGrid.Items.Count > 0)
             {
                 var rowElement = MoviesGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
@@ -358,6 +386,46 @@ public partial class MoviesView : UserControl
         {
             FocusTopNav();
             e.Handled = true; 
+        }
+    }
+	
+	private void ClearSearchBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SearchBox.Text = "";
+        SearchBox.Focus();
+    }
+
+    private void ClearSearchBtn_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        
+        if (command == HtpcCommand.Left)
+        {
+            SearchBox.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Right)
+        {
+            StatusFilterBtn.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Up)
+        {
+            FocusTopNav();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Down)
+        {
+            if (GenrePanel.Children.Count > 0)
+            {
+                (GenrePanel.Children[0] as UIElement)?.Focus();
+            }
+            else if (MoviesGrid.Items.Count > 0)
+            {
+                var rowElement = MoviesGrid.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                rowElement?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            }
+            e.Handled = true;
         }
     }
     
@@ -446,11 +514,13 @@ public partial class MoviesView : UserControl
     }
     
     // --- MOVIE DETAILS ENGINE ---
-    private MediaItem? _activeMovieForDetails;
-
+    
     private async void OpenMovieDetails(MediaItem movie)
     {
         _activeMovieForDetails = movie;
+    _activeTrailerUrl = "";
+    DetailTrailerBtn.Visibility = Visibility.Collapsed;
+    MovieCredits.Clear();
 
         DetailTitle.Text = movie.Title;
         DetailSummary.Text = !string.IsNullOrEmpty(movie.Summary) ? movie.Summary : "No summary available.";
@@ -474,9 +544,7 @@ public partial class MoviesView : UserControl
         DetailRating.Text = "NR";
         DetailDuration.Text = "--m";
         DetailGenres.Text = "";
-        DetailDirectors.Text = "Loading...";
-        DetailCast.Text = "Loading...";
-
+        
         MovieDetailsOverlay.Visibility = Visibility.Visible;
 
         _ = Dispatcher.BeginInvoke(new Action(() =>
@@ -493,18 +561,14 @@ public partial class MoviesView : UserControl
                 string baseUrl = $"http://{activeServer.IpAddress}:{activeServer.Port}";
                 using var client = new System.Net.Http.HttpClient();
                 
-                var response = await client.GetStringAsync($"{baseUrl}/api/v1/movies/{movie.Id}");
+                // --- FIX 1: Fetch from the raw DVR endpoint instead of the stripped API endpoint ---
+                var response = await client.GetStringAsync($"{baseUrl}/dvr/files/{movie.Id}");
 
                 using var doc = System.Text.Json.JsonDocument.Parse(response);
                 var root = doc.RootElement;
                 
-                if (root.TryGetProperty("release_year", out var yr) && yr.ValueKind != System.Text.Json.JsonValueKind.Null) 
-                    DetailYear.Text = yr.ToString();
-                
-                if (root.TryGetProperty("content_rating", out var cr) && cr.ValueKind != System.Text.Json.JsonValueKind.Null) 
-                    DetailRating.Text = cr.ToString();
-
-                if (root.TryGetProperty("duration", out var dur) && dur.ValueKind != System.Text.Json.JsonValueKind.Null)
+                // --- FIX 2: Map the PascalCase properties correctly ---
+                if (root.TryGetProperty("Duration", out var dur) && dur.ValueKind != System.Text.Json.JsonValueKind.Null)
                 {
                     if (double.TryParse(dur.ToString(), out double seconds))
                     {
@@ -513,46 +577,100 @@ public partial class MoviesView : UserControl
                     }
                 }
 
-                if (root.TryGetProperty("genres", out var gen) && gen.ValueKind == System.Text.Json.JsonValueKind.Array)
+                // All rich metadata lives inside the "Airing" object
+                if (root.TryGetProperty("Airing", out var airing))
                 {
-                    var genresList = new System.Collections.Generic.List<string>();
-                    foreach (var g in gen.EnumerateArray()) genresList.Add(g.ToString());
-                    DetailGenres.Text = string.Join(" • ", genresList);
+                    if (airing.TryGetProperty("ReleaseYear", out var yr) && yr.ValueKind != System.Text.Json.JsonValueKind.Null) 
+                        DetailYear.Text = yr.ToString();
+                    
+                    if (airing.TryGetProperty("ContentRating", out var cr) && cr.ValueKind != System.Text.Json.JsonValueKind.Null) 
+                        DetailRating.Text = cr.ToString();
+
+                    if (airing.TryGetProperty("Genres", out var gen) && gen.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        var genresList = new System.Collections.Generic.List<string>();
+                        foreach (var g in gen.EnumerateArray()) genresList.Add(g.ToString());
+                        DetailGenres.Text = string.Join(" • ", genresList);
+                    }
+
+                    if (airing.TryGetProperty("FullSummary", out var fSum) && fSum.ValueKind != System.Text.Json.JsonValueKind.Null && !string.IsNullOrWhiteSpace(fSum.ToString()))
+                    {
+                         DetailSummary.Text = fSum.ToString();
+                    }
+                    else if (airing.TryGetProperty("Summary", out var sum) && sum.ValueKind != System.Text.Json.JsonValueKind.Null && !string.IsNullOrWhiteSpace(sum.ToString()))
+                    {
+                         DetailSummary.Text = sum.ToString();
+                    }
+
+                    // Map the TMDB rich cast/crew and primary trailer
+                    if (airing.TryGetProperty("MovieInfo", out var movieInfo) && movieInfo.TryGetProperty("TMDB", out var tmdb))
+                    {
+                        if (tmdb.TryGetProperty("TrailerURL", out var tUrl) && tUrl.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            _activeTrailerUrl = tUrl.GetString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(_activeTrailerUrl)) DetailTrailerBtn.Visibility = Visibility.Visible;
+                        }
+
+                        if (tmdb.TryGetProperty("Credits", out var credits) && credits.ValueKind == System.Text.Json.JsonValueKind.Array)
+{
+    int castCount = 0; // Add a counter
+    foreach (var credit in credits.EnumerateArray())
+    {
+        if (castCount >= 18) break; // Hard limit to 18 items for the UI grid
+
+        string name = credit.TryGetProperty("Name", out var n) ? n.GetString() ?? "" : "";
+        string character = credit.TryGetProperty("Character", out var c) ? c.GetString() ?? "" : "";
+        string job = credit.TryGetProperty("Job", out var j) ? j.GetString() ?? "" : "";
+        string image = credit.TryGetProperty("Image", out var img) ? img.GetString() ?? "" : "";
+        
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            MovieCredits.Add(new CastMember 
+            { 
+                Name = name, 
+                Role = !string.IsNullOrWhiteSpace(character) ? character : job,
+                ImageUrl = image 
+            });
+            castCount++; // Increment the counter
+        }
+    }
+}
+                    }
+
+                    // Fallback basic text Credits (if TMDB is missing)
+                    if (MovieCredits.Count == 0)
+                    {
+                        if (airing.TryGetProperty("Directors", out var dirs) && dirs.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var d in dirs.EnumerateArray()) MovieCredits.Add(new CastMember { Name = d.ToString(), Role = "Director" });
+                        }
+                        if (airing.TryGetProperty("Cast", out var cast) && cast.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var c in cast.EnumerateArray()) MovieCredits.Add(new CastMember { Name = c.ToString(), Role = "Actor" });
+                        }
+                    }
                 }
 
-                if (root.TryGetProperty("directors", out var dirs) && dirs.ValueKind == System.Text.Json.JsonValueKind.Array)
+                // Fallback Trailer Check (from Extras array at the root level)
+                if (string.IsNullOrWhiteSpace(_activeTrailerUrl) && root.TryGetProperty("Extras", out var extras) && extras.ValueKind == System.Text.Json.JsonValueKind.Array)
                 {
-                    var dirList = new System.Collections.Generic.List<string>();
-                    foreach (var d in dirs.EnumerateArray()) dirList.Add(d.ToString());
-                    DetailDirectors.Text = dirList.Count > 0 ? string.Join(", ", dirList) : "Unknown";
-                }
-                else DetailDirectors.Text = "Unknown";
-
-                if (root.TryGetProperty("cast", out var cast) && cast.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    var castList = new System.Collections.Generic.List<string>();
-                    foreach (var c in cast.EnumerateArray()) castList.Add(c.ToString());
-                    DetailCast.Text = castList.Count > 0 ? string.Join(", ", castList) : "Unknown";
-                }
-                else DetailCast.Text = "Unknown";
-
-                if (root.TryGetProperty("full_summary", out var fSum) && fSum.ValueKind != System.Text.Json.JsonValueKind.Null && !string.IsNullOrWhiteSpace(fSum.ToString()))
-                {
-                     DetailSummary.Text = fSum.ToString();
-                }
-                else if (root.TryGetProperty("summary", out var sum) && sum.ValueKind != System.Text.Json.JsonValueKind.Null && !string.IsNullOrWhiteSpace(sum.ToString()))
-                {
-                     DetailSummary.Text = sum.ToString();
+                    foreach (var extra in extras.EnumerateArray())
+                    {
+                        if (extra.TryGetProperty("Type", out var typeProp) && typeProp.GetString() == "trailer")
+                        {
+                            _activeTrailerUrl = extra.TryGetProperty("Link", out var linkProp) ? linkProp.GetString() ?? "" : "";
+                            if (!string.IsNullOrWhiteSpace(_activeTrailerUrl)) DetailTrailerBtn.Visibility = Visibility.Visible;
+                            break;
+                        }
+                    }
                 }
             }
         }
         catch (Exception ex)
         {
-            DetailDirectors.Text = "Unavailable";
-            DetailCast.Text = "Unavailable";
             DetailSummary.Text += $"\n\n(API Error: {ex.Message})"; 
         }
-    }
+}
 
     private void DetailPlay_Click(object sender, RoutedEventArgs e)
     {
@@ -566,40 +684,166 @@ public partial class MoviesView : UserControl
     {
         MovieDetailsOverlay.Visibility = Visibility.Collapsed;
     }
+	
+	private async void DetailTrailer_Click(object sender, RoutedEventArgs e)
+{
+    if (string.IsNullOrWhiteSpace(_activeTrailerUrl) || _activeMovieForDetails == null) return;
 
-    private void MovieDetailsButtons_PreviewKeyDown(object sender, KeyEventArgs e)
+    string originalText = DetailTrailerBtn.Content.ToString() ?? "";
+    DetailTrailerBtn.Content = "⏳ Resolving Trailer...";
+    DetailTrailerBtn.IsEnabled = false;
+
+    // Extract the raw direct MP4 stream URL using yt-dlp
+    string rawStreamUrl = await GetRawTrailerUrlAsync(_activeTrailerUrl);
+
+    DetailTrailerBtn.Content = originalText;
+    DetailTrailerBtn.IsEnabled = true;
+
+    // Check if we got a successful HTTP stream link back
+    if (!string.IsNullOrWhiteSpace(rawStreamUrl) && rawStreamUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
     {
-        var command = InputMapper.GetCommand(e.Key);
+        var trailerItem = new MediaItem
+        {
+            Id = $"trailer_{_activeMovieForDetails.Id}",
+            Title = $"{_activeMovieForDetails.Title} Trailer",
+            CurrentShowTitle = "YouTube",
+            StreamUrl = rawStreamUrl,
+            PosterUrl = _activeMovieForDetails.PosterUrl,
+            IsLiveTv = false,
+            Duration = 0
+        };
 
-        if (command == HtpcCommand.Right)
-        {
-            e.Handled = true; 
-        }
-        else if (command == HtpcCommand.Left || command == HtpcCommand.Back)
-        {
-            CloseMovieDetails_Click(null!, null!);
-            e.Handled = true;
-        }
-        else if (command == HtpcCommand.Up && sender == DetailBackBtn)
-        {
-            e.Handled = true; 
-        }
-        else if (command == HtpcCommand.Down && sender == DetailPlayBtn)
-        {
-            e.Handled = true; 
-        }
-        else if (command == HtpcCommand.Up && sender == DetailPlayBtn)
-        {
-            DetailBackBtn.Focus();
-            e.Handled = true;
-        }
-        else if (command == HtpcCommand.Down && sender == DetailBackBtn)
-        {
-            DetailPlayBtn.Focus();
-            e.Handled = true;
-        }
+        OnPlayRequested?.Invoke(this, trailerItem);
     }
-    
+    else
+    {
+        // If it failed, print the EXACT error returned by yt-dlp to the screen so we can debug it
+        DetailSummary.Text += $"\n\n[Trailer Error]: {rawStreamUrl}";
+    }
+}
+
+private void CastMember_Click(object sender, RoutedEventArgs e)
+{
+    if (sender is Button btn && btn.DataContext is CastMember person)
+    {
+        // 1. Close the movie details overlay
+        CloseMovieDetails_Click(null!, null!);
+
+        // 2. Reset the view to top and clear any active genre filters
+        MainScroll.ScrollToTop();
+        if (GenrePanel.Children.Count > 0 && GenrePanel.Children[0] is RadioButton allBtn)
+        {
+            allBtn.IsChecked = true;
+        }
+
+        // 3. Inject the actor/director name into the search box
+        // This will automatically trigger the _typingTimer and reload the grid!
+        SearchBox.Text = person.Name;
+        
+        // 4. Move focus to the search box so the user knows what happened
+        SearchBox.Focus();
+        SearchBox.CaretIndex = SearchBox.Text.Length;
+    }
+}
+
+private async Task<string> GetRawTrailerUrlAsync(string youtubeUrl)
+{
+    try
+    {
+        string cleanUrl = youtubeUrl.Replace("/embed/", "/watch?v=");
+        if (cleanUrl.Contains("?si=")) cleanUrl = cleanUrl.Substring(0, cleanUrl.IndexOf("?si="));
+
+        // Use the native .net extraction directory created by PublishSingleFile
+        string appDirectory = System.IO.Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory) ?? "";
+        string ytDlpPath = System.IO.Path.Combine(appDirectory, "yt-dlp.exe");
+
+        // If the exe hasn't been extracted to this temp folder yet, unpack it from the embedded resource!
+        if (!System.IO.File.Exists(ytDlpPath))
+        {
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            string? resourceName = assembly.GetManifestResourceNames().FirstOrDefault(n => n.EndsWith("yt-dlp.exe", StringComparison.OrdinalIgnoreCase));
+            
+            if (!string.IsNullOrEmpty(resourceName))
+            {
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+                if (stream != null)
+                {
+                    using var fileStream = new System.IO.FileStream(ytDlpPath, System.IO.FileMode.Create, System.IO.FileAccess.Write);
+                    await stream.CopyToAsync(fileStream);
+                }
+            }
+            else
+            {
+                return "yt-dlp.exe is missing from Embedded Resources.";
+            }
+        }
+
+        var process = new System.Diagnostics.Process
+        {
+            StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ytDlpPath,
+                Arguments = $"-g -f b --no-warnings --extractor-args \"youtube:player_client=android\" \"{cleanUrl}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true, 
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+        string output = await process.StandardOutput.ReadToEndAsync();
+        string error = await process.StandardError.ReadToEndAsync(); 
+        await process.WaitForExitAsync();
+
+        string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length > 0 && lines[0].StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            return lines[0];
+        }
+        
+        return string.IsNullOrWhiteSpace(error) ? "Unknown resolution failure." : error.Trim();
+    }
+    catch (Exception ex)
+    {
+        return ex.Message;
+    }
+}
+
+private void MovieDetailsButtons_PreviewKeyDown(object sender, KeyEventArgs e)
+{
+    var command = InputMapper.GetCommand(e.Key);
+
+    if (command == HtpcCommand.Right) { e.Handled = true; }
+    else if (command == HtpcCommand.Left || command == HtpcCommand.Back)
+    {
+        CloseMovieDetails_Click(null!, null!);
+        e.Handled = true;
+    }
+    else if (command == HtpcCommand.Up && sender == DetailBackBtn) { e.Handled = true; }
+    else if (command == HtpcCommand.Down && sender == DetailTrailerBtn) { e.Handled = true; }
+    else if (command == HtpcCommand.Down && sender == DetailPlayBtn)
+    {
+        if (DetailTrailerBtn.Visibility == Visibility.Visible) DetailTrailerBtn.Focus();
+        e.Handled = true; 
+    }
+    else if (command == HtpcCommand.Up && sender == DetailTrailerBtn)
+    {
+        DetailPlayBtn.Focus();
+        e.Handled = true;
+    }
+    else if (command == HtpcCommand.Up && sender == DetailPlayBtn)
+    {
+        DetailBackBtn.Focus();
+        e.Handled = true;
+    }
+    else if (command == HtpcCommand.Down && sender == DetailBackBtn)
+    {
+        DetailPlayBtn.Focus();
+        e.Handled = true;
+    }
+}
+
     // --- ADMIN COMMANDS & CONTEXT MENU ---
 
     private async void AdminCommand_Click(object sender, RoutedEventArgs e)

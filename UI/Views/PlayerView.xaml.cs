@@ -85,7 +85,7 @@ public void JumpToLiveEdge()
     }
 
     // Dynamic entry point for serial binge-watching
-    public void StartPlaybackQueue(System.Collections.Generic.List<MediaItem> queue, int startIndex)
+    public async void StartPlaybackQueue(System.Collections.Generic.List<MediaItem> queue, int startIndex)
     {
         _playbackQueue = queue ?? new System.Collections.Generic.List<MediaItem>();
         _currentQueueIndex = startIndex;
@@ -95,19 +95,34 @@ public void JumpToLiveEdge()
 
         MediaItem currentItem = _playbackQueue[_currentQueueIndex];
 
-        // --- NEW: TUNER LOGGING ---
-        System.Diagnostics.Debug.WriteLine($"\n[TUNER] {DateTime.Now:HH:mm:ss.fff} ======================================");
-        System.Diagnostics.Debug.WriteLine($"[TUNER] {DateTime.Now:HH:mm:ss.fff} UI requested tune for: {currentItem.Title}");
-
-        _mpvService.PlayMedia(currentItem);
-        
-        System.Diagnostics.Debug.WriteLine($"[TUNER] {DateTime.Now:HH:mm:ss.fff} Handoff to MPV Service complete.");
-
-        if (_overlayWindow != null)
+        // 1. Tell the existing overlay to suppress fake errors while we tear down the stream
+        if (_overlayWindow != null && _overlayWindow.IsLoaded)
         {
-            _overlayWindow.Close();
+            _overlayWindow.PrepareForTransition();
         }
 
+        // 2. Kill the active stream and give the wrapper time to flush its events
+        _mpvService.Stop();
+        await Task.Delay(200); 
+
+        // 3. Cleanly spin up the new episode
+        _mpvService.PlayMedia(currentItem);
+
+        MediaItem? nextItem = (_currentQueueIndex + 1 < _playbackQueue.Count) 
+            ? _playbackQueue[_currentQueueIndex + 1] 
+            : null;
+
+        if (_overlayWindow != null && _overlayWindow.IsLoaded)
+        {
+            _overlayWindow.InitializeMedia(currentItem, nextItem);
+            
+            Mouse.OverrideCursor = Cursors.None;
+            _lastMousePosition = Mouse.GetPosition(this);
+            _playbackStartTime = DateTime.UtcNow;
+            return;
+        }
+
+        // Only build a brand new window if one doesn't exist yet
         _overlayWindow = new PlayerOverlayWindow(_mpvService, _libraryService, _serverManager)
         {
             Owner = Application.Current.MainWindow,
@@ -120,19 +135,11 @@ public void JumpToLiveEdge()
             OnBackRequested?.Invoke(this, EventArgs.Empty);
         };
         
-        // NEW: Listen for the overlay telling us it's time to play the next item
         _overlayWindow.OnPlayNextInQueue += OverlayWindow_OnPlayNextInQueue;
 
-        // Determine if there is a next item in our queue
-        MediaItem? nextItem = (_currentQueueIndex + 1 < _playbackQueue.Count) 
-            ? _playbackQueue[_currentQueueIndex + 1] 
-            : null;
-
-        // Pass the current AND next item to the overlay
         _overlayWindow.InitializeMedia(currentItem, nextItem);
         _overlayWindow.Show();
         
-        // --- NEW: Instantly hide cursor and prime the anti-jitter tracker ---
         Mouse.OverrideCursor = Cursors.None;
         _lastMousePosition = Mouse.GetPosition(this);
         _playbackStartTime = DateTime.UtcNow;
@@ -146,9 +153,15 @@ public void JumpToLiveEdge()
     private void OverlayWindow_OnPlayNextInQueue(object? sender, MediaItem nextItem)
     {
         // Prevent double-firing if the user clicks "Play Next" right as the video ends
-        if (_isTransitioning) return;
+        if (_isTransitioning || nextItem == null) return;
         _isTransitioning = true;
         
+        // FIX: If the overlay dynamically fetched a next episode that wasn't in our original queue, append it!
+        if (_currentQueueIndex + 1 >= _playbackQueue.Count)
+        {
+            _playbackQueue.Add(nextItem);
+        }
+
         // Advance the queue and fire up the next video seamlessly!
         _currentQueueIndex++;
         StartPlaybackQueue(_playbackQueue, _currentQueueIndex);

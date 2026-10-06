@@ -574,25 +574,22 @@ public partial class VodView : UserControl
 
         VodDetailsOverlay.Visibility = Visibility.Collapsed;
 
-        var prefs = PreferencesManager.Load();
+        string directStreamUrl = _selectedItem.NativeDeepLink;
 
-        // 1. Build the Go ADB Tuner route
-        string encodedLink = Uri.EscapeDataString(_selectedItem.NativeDeepLink);
-        string tunerStreamUrl = $"{prefs.AdbTunerUrl.TrimEnd('/')}/vod?provider={_selectedItem.ProviderKey}&link={encodedLink}";
-
-        // 2. Map into a clean MediaItem for MpvPlaybackService
         var mediaItem = new MediaItem
         {
             Id = $"vod_{_selectedItem.Id}",
             Title = _selectedItem.Title,
             PosterUrl = _selectedItem.PosterUrl,
-            StreamUrl = tunerStreamUrl,
+            StreamUrl = directStreamUrl,
             Summary = _selectedItem.Overview,
             ReleaseYear = _selectedItem.Year,
-            Genres = !string.IsNullOrEmpty(_selectedItem.Genre) ? new() { _selectedItem.Genre } : new()
+            Genres = !string.IsNullOrEmpty(_selectedItem.Genre) ? new() { _selectedItem.Genre } : new(),
+            
+            // This is a native VOD stream with a real duration and timeline
+            IsLiveTv = false
         };
 
-        // 3. Hand off directly to MainWindow's playback engine
         OnPlayRequested?.Invoke(this, mediaItem);
     }
 

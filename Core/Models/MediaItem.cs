@@ -41,6 +41,7 @@ public class MediaItem : INotifyPropertyChanged
     public long LastRecordedAt { get; set; }
 	
 	public List<double>? Commercials { get; set; } = new List<double>();
+	public List<double>? Intros { get; set; } = new List<double>();
 	
 	public string Path { get; set; } = string.Empty;
     public bool RequiresBrowser { get; set; } = false;
