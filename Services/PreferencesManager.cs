@@ -42,7 +42,7 @@ public class AppPreferences
 	
 	// --- NEW: VOD BRIDGE SETTINGS ---
     public bool EnableAdbVodBridge { get; set; } = false;
-    public string AdbTunerUrl { get; set; } = "http://127.0.0.1:8888";
+    public string AdbTunerUrl { get; set; } = "";
    	public DateTime LastVodSync { get; set; } = DateTime.MinValue;
     
 	// --- NEW: COLLECTION SORTING ---
