@@ -1,11 +1,11 @@
 [Setup]
 ; --- Application Metadata ---
 AppName=Nucleus HTPC
-AppVersion=1.4.5
+AppVersion=1.4.6
 AppPublisher=Bobby Vaughn
 DefaultDirName={autopf}\NucleusHTPC
 DefaultGroupName=Nucleus HTPC
-OutputBaseFilename=NucleusHTPC_Installer_v1.4.5
+OutputBaseFilename=NucleusHTPC_Installer_v1.4.6
 WizardSmallImageFile=Assets\NucleusSmall.bmp
 WizardImageFile=Assets\NucleusBanner.bmp
 
@@ -14,15 +14,11 @@ SetupIconFile=Assets\favicon.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 
 ; --- Architecture Setup ---
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-
-[Dirs]
-; Grants standard users permission to write/modify the database in the Program Files folder
-Name: "{app}"; Permissions: users-modify
 
 [Files]
 ; --- Core Application Files ---
@@ -49,16 +45,8 @@ begin
 end;
 
 [Run]
-; Run the file locally from the temp directory
-Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; Flags: waituntilterminated; Check: not IsVCRedistInstalled
+// Run the file locally from the temp directory
+Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; Flags: runascurrentuser waituntilterminated; Check: not IsVCRedistInstalled
 
-; Wrap netsh in the command processor for reliable execution
-Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""HTPC Media Center"" dir=in action=allow program=""{app}\HTPC.exe"" enable=yes profile=any"; Flags: runhidden; StatusMsg: "Configuring Windows Firewall..."
-Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""HTPC Media Center"" dir=out action=allow program=""{app}\HTPC.exe"" enable=yes profile=any"; Flags: runhidden
-
-; This launches your app after the installer finishes
+// This launches your app after the installer finishes
 Filename: "{app}\HTPC.exe"; Description: "{cm:LaunchProgram,Nucleus HTPC}"; Flags: nowait postinstall skipifsilent
-
-[UninstallRun]
-; Clean up and remove the firewall rules during uninstallation
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""HTPC Media Center"""; Flags: runhidden
