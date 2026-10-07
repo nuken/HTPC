@@ -38,7 +38,7 @@ public partial class SettingsView : UserControl
     private IInputElement? _lastFocusedElement;
     private string[] _paddingOptions;
 
-    public SettingsView(ServerManagerService serverManager)
+    public SettingsView(ServerManagerService serverManager, VodSyncService vodSyncService)
     {
         InitializeComponent();
         LoadVersionNumber();
@@ -552,7 +552,7 @@ private void EnableVodCheckBox_Click(object sender, RoutedEventArgs e)
 private void AdbBridgeUrlTextBox_LostFocus(object sender, RoutedEventArgs e)
 {
     var prefs = PreferencesManager.Load();
-    string normalized = AdbBridgeUrlTextBox.Text(AdbBridgeUrlTextBox.Text);
+    string normalized = PreferencesManager.NormalizeAdbUrl(AdbBridgeUrlTextBox.Text);
 
     AdbBridgeUrlTextBox.Text = normalized;
     prefs.AdbTunerUrl = normalized;
