@@ -471,18 +471,30 @@
 									  
                             <!-- ADB Bridge URL & Port Input -->
                         <StackPanel x:Name="VodConfigPanel">
-                            <TextBlock Text="Pluto 4C VOD Feed" FontSize="14" FontWeight="SemiBold" 
-                                       Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,8"/>
-                            <Border Background="{DynamicResource AppBackgroundBrush}" CornerRadius="8" Padding="15,10" 
-                                    BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" MaxWidth="500" HorizontalAlignment="Left">
-                                <TextBox x:Name="AdbBridgeUrlTextBox" Width="350" FontSize="16" Background="Transparent" 
-                                         Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0" 
-                                         CaretBrush="{DynamicResource PrimaryTextBrush}"
-                                         LostFocus="AdbBridgeUrlTextBox_LostFocus"/>
-                            </Border>
-                            <TextBlock Text="e.g.'http://192.168.xx.xx:7777/pluto/us_east/vod.json'" 
-                                       FontSize="12" Foreground="{DynamicResource MutedTextBrush}" Margin="0,6,0,0"/>
-                        </StackPanel>
+    <TextBlock Text="Pluto 4C VOD Feed" FontSize="14" FontWeight="SemiBold" 
+               Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,8"/>
+    
+    <!-- Added Horizontal StackPanel to hold both the TextBox and the new Button -->
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+        <Border Background="{DynamicResource AppBackgroundBrush}" CornerRadius="8" Padding="15,10" 
+                BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" Width="380">
+            <TextBox x:Name="AdbBridgeUrlTextBox" Width="350" FontSize="16" Background="Transparent" 
+                     Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0" 
+                     CaretBrush="{DynamicResource PrimaryTextBrush}"
+                     LostFocus="AdbBridgeUrlTextBox_LostFocus"/>
+        </Border>
+        
+        <!-- The New Sync Button -->
+        <Button x:Name="SyncVodBtn" Content="Sync Now" Margin="15,0,0,0" Padding="20,10"
+                Background="{DynamicResource AccentBrush}" Foreground="White" FontWeight="Bold" FontSize="14"
+                BorderThickness="0" Cursor="Hand" Click="SyncVodBtn_Click">
+            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+        </Button>
+    </StackPanel>
+
+    <TextBlock Text="e.g.'http://192.168.xx.xx:7777/pluto/us_east/vod.json'" 
+               FontSize="12" Foreground="{DynamicResource MutedTextBrush}"/>
+</StackPanel>
                         </StackPanel>
                     </Border>
 

@@ -27,6 +27,7 @@ public partial class SettingsView : UserControl
     public event EventHandler? OnCollectionsRequested;
 
     private readonly ServerManagerService _serverManager;
+	private readonly VodSyncService _vodSyncService;
     private bool _isInitialized = false;
     private static readonly HttpClient _httpClient = new HttpClient();
     public System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig> DashboardRows { get; set; } = new System.Collections.ObjectModel.ObservableCollection<DashboardRowConfig>();
@@ -42,6 +43,7 @@ public partial class SettingsView : UserControl
         InitializeComponent();
         LoadVersionNumber();
         _serverManager = serverManager;
+		_vodSyncService = vodSyncService;
         
         _paddingOptions = new string[31];
         for (int i = 0; i <= 30; i++) _paddingOptions[i] = i == 0 ? "None" : $"{i} Min";
@@ -550,17 +552,42 @@ private void EnableVodCheckBox_Click(object sender, RoutedEventArgs e)
 private void AdbBridgeUrlTextBox_LostFocus(object sender, RoutedEventArgs e)
 {
     var prefs = PreferencesManager.Load();
-    string normalized = PreferencesManager.NormalizeAdbUrl(AdbBridgeUrlTextBox.Text);
+    string normalized = AdbBridgeUrlTextBox.Text(AdbBridgeUrlTextBox.Text);
 
     AdbBridgeUrlTextBox.Text = normalized;
     prefs.AdbTunerUrl = normalized;
     PreferencesManager.Save(prefs);
+}
+    
+	private async void SyncVodBtn_Click(object sender, RoutedEventArgs e)
+{
+    // 1. Force a save of whatever is currently in the text box
+    var prefs = PreferencesManager.Load();
+    string normalized = PreferencesManager.NormalizeAdbUrl(AdbBridgeUrlTextBox.Text);
+    
+    AdbBridgeUrlTextBox.Text = normalized;
+    prefs.AdbTunerUrl = normalized;
+    PreferencesManager.Save(prefs);
+
+    // 2. Update UI to show progress
+    SyncVodBtn.Content = "Syncing...";
+    SyncVodBtn.IsEnabled = false;
+
+    // 3. Trigger the background service to fetch the JSON and populate SQLite immediately
+    await _vodSyncService.SyncPlutoTvCatalogAsync();
+
+    // 4. Restore UI
+    SyncVodBtn.Content = "Sync Now";
+    SyncVodBtn.IsEnabled = true;
+    
+    MessageBox.Show("VOD Catalog has been successfully downloaded and synced!", "Sync Complete", MessageBoxButton.OK, MessageBoxImage.Information);
 }
 
     private void LoadServers()
     {
         SavedServersList.ItemsSource = _serverManager.GetAllServers();
     }
+	
 
     private void SaveServer_Click(object sender, RoutedEventArgs e)
     {
