@@ -34,7 +34,7 @@ public class VodSyncService
     private readonly HttpClient _httpClient;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<VodSyncService> _logger;
-    private readonly string _logFilePath;
+    
 
     public VodSyncService(HttpClient httpClient, IServiceScopeFactory scopeFactory, ILogger<VodSyncService> logger)
     {
@@ -47,19 +47,13 @@ public class VodSyncService
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
         }
 
-        string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-        _logFilePath = Path.Combine(desktopPath, "pluto_sync.log");
+        
     }
 
     private void LogToFile(string message)
-    {
-        try
-        {
-            File.AppendAllText(_logFilePath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
-            _logger.LogInformation(message);
-        }
-        catch { } 
-    }
+{
+    _logger.LogInformation(message);
+}
 
     public async Task SyncPlutoTvCatalogAsync()
     {
@@ -161,7 +155,7 @@ public class VodSyncService
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    MessageBox.Show($"The VOD Sync failed to download.\n\nError: {ex.Message}\n\nCheck the log file on your Desktop for details.", "VOD Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"The VOD Sync failed to download.\n\nError: {ex.Message}", "VOD Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
             }
         }
