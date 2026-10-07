@@ -102,7 +102,7 @@ public class MpvPlaybackService : IDisposable
         _mpvContext = Libmpv.mpv_create();
         if (_mpvContext == IntPtr.Zero) throw new Exception("Failed to create libmpv context.");
         Libmpv.mpv_set_option_string(_mpvContext, "osd-bar", "no");
-        
+        Libmpv.mpv_set_option_string(_mpvContext, "log-file", @"C:\Users\Bobby\Downloads\mpv_crash.log");
         Libmpv.mpv_set_option_string(_mpvContext, "osd-level", "0"); 
 		Libmpv.mpv_set_option_string(_mpvContext, "osd-align-y", "top");
 		Libmpv.mpv_set_option_string(_mpvContext, "osd-margin-y", "100");
