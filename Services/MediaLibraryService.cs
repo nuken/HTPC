@@ -296,21 +296,20 @@ public class MediaLibraryService
     }
 	
 	
-// --- NEW: ESPN HIDDEN API FETCHER (STEALTH PARALLEL VERSION) ---
 public async Task<List<LiveScoreData>> GetLiveScoresAsync()
 {
-    // Create a rolling 3-day window to catch DVR replays of yesterday's games
-    string startDate = DateTime.Now.AddDays(-2).ToString("yyyyMMdd");
-    string endDate = DateTime.Now.AddDays(1).ToString("yyyyMMdd");
-    string dateParam = $"?dates={startDate}-{endDate}&limit=200";
-
+    // FIX 1: ESPN's API no longer accepts date ranges. Removing the dates parameter 
+    // defaults to the current active scoreboard (today/this week).
+    
+    // FIX 2: Akamai WAF now blocks site.api.espn.com. Changing the subdomain 
+    // to site.web.api.espn.com bypasses the 403 Forbidden block.
     string[] endpoints = {
-        $"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard{dateParam}",
-        $"https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard{dateParam}",
-        $"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard{dateParam}",
-        $"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard{dateParam}",
-        $"https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard{dateParam}",
-        $"https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard{dateParam}" 
+        "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+        "https://site.web.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard",
+        "https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+        "https://site.web.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard",
+        "https://site.web.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard",
+        "https://site.web.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard" 
     };
 
     var handler = new HttpClientHandler
@@ -320,7 +319,6 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
 
     using var espnClient = new HttpClient(handler);
     
-    // --- THE MAGIC BULLET: Force HTTP/2 and mimic Chrome exactly ---
     espnClient.DefaultRequestVersion = new Version(2, 0);
     espnClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36");
     espnClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
@@ -330,7 +328,7 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
     espnClient.DefaultRequestHeaders.Add("Sec-Ch-Ua-Platform", "\"Windows\"");
     espnClient.DefaultRequestHeaders.Add("Sec-Fetch-Dest", "empty");
     espnClient.DefaultRequestHeaders.Add("Sec-Fetch-Mode", "cors");
-    espnClient.DefaultRequestHeaders.Add("Sec-Fetch-Site", "cross-site");
+    espnClient.DefaultRequestHeaders.Add("Sec-Fetch-Site", "same-site");
     espnClient.DefaultRequestHeaders.Add("Origin", "https://www.espn.com");
     espnClient.DefaultRequestHeaders.Add("Referer", "https://www.espn.com/");
 
@@ -374,7 +372,6 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                             {
                                 string location = "", name = "", abbr = "", disp = "";
                                 
-                                // Extract team details from inside the "team" block
                                 if (competitorNode.TryGetProperty("team", out var tNode))
                                 {
                                     location = GetStringOrNumber(tNode, "location");
@@ -383,7 +380,6 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
                                     disp = GetStringOrNumber(tNode, "displayName");
                                 }
                                 
-                                // Extract the score from the ROOT of the competitor node
                                 string score = GetStringOrNumber(competitorNode, "score");
                                 if (string.IsNullOrEmpty(score)) score = "0";
 
@@ -421,7 +417,6 @@ public async Task<List<LiveScoreData>> GetLiveScoresAsync()
         return localScores;
     });
 
-    // Wait for all HTTP requests to finish concurrently, then combine the arrays
     var results = await Task.WhenAll(fetchTasks);
     return results.SelectMany(s => s).ToList();
 }
