@@ -680,48 +680,34 @@ public partial class MoviesView : UserControl
         }
     }
 
+    private void DetailTrailer_Click(object sender, RoutedEventArgs e)
+{
+    if (string.IsNullOrWhiteSpace(_activeTrailerUrl) || _activeMovieForDetails == null) return;
+
+    // Clean up the URL format
+    string cleanUrl = _activeTrailerUrl.Replace("/embed/", "/watch?v=");
+    if (cleanUrl.Contains("?si=")) cleanUrl = cleanUrl.Substring(0, cleanUrl.IndexOf("?si="));
+
+    var trailerItem = new MediaItem
+    {
+        Id = $"trailer_{_activeMovieForDetails.Id}",
+        Title = $"{_activeMovieForDetails.Title} Trailer",
+        CurrentShowTitle = "YouTube",
+        StreamUrl = cleanUrl, // Pass the raw YouTube URL directly to MPV
+        PosterUrl = _activeMovieForDetails.PosterUrl,
+        IsLiveTv = false,
+        Duration = 0
+    };
+
+    OnPlayRequested?.Invoke(this, trailerItem);
+}
+
     private void CloseMovieDetails_Click(object sender, RoutedEventArgs e)
     {
         MovieDetailsOverlay.Visibility = Visibility.Collapsed;
     }
 	
-	private async void DetailTrailer_Click(object sender, RoutedEventArgs e)
-{
-    if (string.IsNullOrWhiteSpace(_activeTrailerUrl) || _activeMovieForDetails == null) return;
-
-    string originalText = DetailTrailerBtn.Content.ToString() ?? "";
-    DetailTrailerBtn.Content = "⏳ Resolving Trailer...";
-    DetailTrailerBtn.IsEnabled = false;
-
-    // Extract the raw direct MP4 stream URL using yt-dlp
-    string rawStreamUrl = await GetRawTrailerUrlAsync(_activeTrailerUrl);
-
-    DetailTrailerBtn.Content = originalText;
-    DetailTrailerBtn.IsEnabled = true;
-
-    // Check if we got a successful HTTP stream link back
-    if (!string.IsNullOrWhiteSpace(rawStreamUrl) && rawStreamUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-    {
-        var trailerItem = new MediaItem
-        {
-            Id = $"trailer_{_activeMovieForDetails.Id}",
-            Title = $"{_activeMovieForDetails.Title} Trailer",
-            CurrentShowTitle = "YouTube",
-            StreamUrl = rawStreamUrl,
-            PosterUrl = _activeMovieForDetails.PosterUrl,
-            IsLiveTv = false,
-            Duration = 0
-        };
-
-        OnPlayRequested?.Invoke(this, trailerItem);
-    }
-    else
-    {
-        // If it failed, print the EXACT error returned by yt-dlp to the screen so we can debug it
-        DetailSummary.Text += $"\n\n[Trailer Error]: {rawStreamUrl}";
-    }
-}
-
+	
 private void CastMember_Click(object sender, RoutedEventArgs e)
 {
     if (sender is Button btn && btn.DataContext is CastMember person)
@@ -743,70 +729,6 @@ private void CastMember_Click(object sender, RoutedEventArgs e)
         // 4. Move focus to the search box so the user knows what happened
         SearchBox.Focus();
         SearchBox.CaretIndex = SearchBox.Text.Length;
-    }
-}
-
-private async Task<string> GetRawTrailerUrlAsync(string youtubeUrl)
-{
-    try
-    {
-        string cleanUrl = youtubeUrl.Replace("/embed/", "/watch?v=");
-        if (cleanUrl.Contains("?si=")) cleanUrl = cleanUrl.Substring(0, cleanUrl.IndexOf("?si="));
-
-        // Use the native .net extraction directory created by PublishSingleFile
-        string appDirectory = System.IO.Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory) ?? "";
-        string ytDlpPath = System.IO.Path.Combine(appDirectory, "yt-dlp.exe");
-
-        // If the exe hasn't been extracted to this temp folder yet, unpack it from the embedded resource!
-        if (!System.IO.File.Exists(ytDlpPath))
-        {
-            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            string? resourceName = assembly.GetManifestResourceNames().FirstOrDefault(n => n.EndsWith("yt-dlp.exe", StringComparison.OrdinalIgnoreCase));
-            
-            if (!string.IsNullOrEmpty(resourceName))
-            {
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-                if (stream != null)
-                {
-                    using var fileStream = new System.IO.FileStream(ytDlpPath, System.IO.FileMode.Create, System.IO.FileAccess.Write);
-                    await stream.CopyToAsync(fileStream);
-                }
-            }
-            else
-            {
-                return "yt-dlp.exe is missing from Embedded Resources.";
-            }
-        }
-
-        var process = new System.Diagnostics.Process
-        {
-            StartInfo = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = ytDlpPath,
-                Arguments = $"-g -f b --no-warnings --extractor-args \"youtube:player_client=android\" \"{cleanUrl}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true, 
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-
-        process.Start();
-        string output = await process.StandardOutput.ReadToEndAsync();
-        string error = await process.StandardError.ReadToEndAsync(); 
-        await process.WaitForExitAsync();
-
-        string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        if (lines.Length > 0 && lines[0].StartsWith("http", StringComparison.OrdinalIgnoreCase))
-        {
-            return lines[0];
-        }
-        
-        return string.IsNullOrWhiteSpace(error) ? "Unknown resolution failure." : error.Trim();
-    }
-    catch (Exception ex)
-    {
-        return ex.Message;
     }
 }
 

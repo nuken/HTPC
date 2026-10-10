@@ -155,24 +155,27 @@
                             </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Width="200" Height="300" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Cursor="Hand">
-                                    <Border.Effect>
-                                        <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
-                                    </Border.Effect>
-                                    <Grid>
-                                        <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True">
-                                            <Image.Clip>
-                                                <RectangleGeometry Rect="0,0,200,300" RadiusX="12" RadiusY="12"/>
-                                            </Image.Clip>
-                                        </Image>
-                                        <Border VerticalAlignment="Bottom" Background="#CC0F0F0F" Padding="12" CornerRadius="0,0,12,12">
-                                            <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                        </Border>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
+    <DataTemplate>
+        <Border Width="320" Height="180" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Cursor="Hand">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.4"/>
+            </Border.Effect>
+            <Grid>
+                <!-- Image bounds updated to 16:9 aspect ratio -->
+                <Image Source="{Binding PosterUrl, IsAsync=True}" Stretch="UniformToFill" ClipToBounds="True">
+                    <Image.Clip>
+                        <RectangleGeometry Rect="0,0,320,180" RadiusX="12" RadiusY="12"/>
+                    </Image.Clip>
+                </Image>
+                
+                <Border VerticalAlignment="Bottom" Background="#E60F0F0F" Padding="12,8" CornerRadius="0,0,12,12">
+                    <!-- Added TextTrimming and MaxHeight so extremely long titles don't overflow the landscape box -->
+                    <TextBlock Text="{Binding Title}" Foreground="White" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" MaxHeight="45" TextTrimming="CharacterEllipsis"/>
+                </Border>
+            </Grid>
+        </Border>
+    </DataTemplate>
+</ListBox.ItemTemplate>
                     </ListBox>
                 </StackPanel>
             </ScrollViewer>
@@ -181,35 +184,93 @@
         <Border x:Name="EpisodesOverlay" Background="{DynamicResource OverlayBackgroundBrush}" Visibility="Collapsed" Margin="0,-40,0,0" KeyboardNavigation.DirectionalNavigation="Continue">
             <Grid Margin="40" KeyboardNavigation.DirectionalNavigation="Continue">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="300"/>
-                    <ColumnDefinition Width="200"/>
+                    <!-- Reclaimed width from Col 1 moved to Col 0 -->
+                    <ColumnDefinition Width="350"/>
+                    <ColumnDefinition Width="150"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
+
+                <!-- Left Column: Poster, Summary & Cast Strip -->
                 <StackPanel Grid.Column="0" Margin="0,0,30,0" KeyboardNavigation.DirectionalNavigation="Continue">
-            <Button x:Name="BackToLibraryBtn" Content="🔙 Back to Library" Background="Transparent" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,20" Click="CloseOverlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="OverlayButtons_PreviewKeyDown"/>
+                    <Button x:Name="BackToLibraryBtn" Content="🔙 Back to Library" Background="Transparent" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0" FontSize="20" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,15" Click="CloseOverlay_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="OverlayButtons_PreviewKeyDown"/>
 
-            <Button x:Name="BingeShowBtn" Content="🍿 Binge Watch" Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0" FontSize="18" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,20" Padding="15,8" Click="BingeShow_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="OverlayButtons_PreviewKeyDown">
-                <Button.Resources>
-                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
-                </Button.Resources>
-            </Button>
+                    <Button x:Name="BingeShowBtn" Content="🍿 Binge Watch" Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0" FontSize="18" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Margin="0,0,0,15" Padding="15,8" Click="BingeShow_Click" FocusVisualStyle="{StaticResource StandardFocusStyle}" PreviewKeyDown="OverlayButtons_PreviewKeyDown">
+                        <Button.Resources>
+                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
+                        </Button.Resources>
+                    </Button>
 
-            <Border CornerRadius="12" ClipToBounds="True" Margin="0,0,0,20">
-                <Image x:Name="OverlayShowPoster" Width="270" Height="400" Stretch="UniformToFill"/>
-            </Border>
+                    <!-- Scaled Poster (reclaims 100px vertical space) -->
+                    <Border CornerRadius="12" ClipToBounds="True" HorizontalAlignment="Left" Margin="0,0,0,15" Width="200" Height="300" Background="{DynamicResource CardBackgroundBrush}">
+                    <Image x:Name="OverlayShowPoster" Stretch="Uniform"/>
+                    </Border>
 
-                    <TextBlock x:Name="OverlayShowTitle" Text="Show Title" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="28" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,10"/>
-                    <TextBlock x:Name="OverlayShowSummary" Text="Summary will appear here..." Foreground="{DynamicResource SecondaryTextBrush}" FontSize="15" TextWrapping="Wrap" LineHeight="22" TextTrimming="CharacterEllipsis" MaxHeight="200"/>
-                </StackPanel>
-                <Border Grid.Column="1" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0" Margin="0,0,30,0" Padding="0,0,15,0" KeyboardNavigation.DirectionalNavigation="Continue">
-                    <ListBox x:Name="SeasonsList" ItemsSource="{Binding Seasons}" Grid.Column="0" Background="Transparent" BorderThickness="0" SelectionChanged="SeasonsList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden" Margin="0,0,20,0" Width="120" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <TextBlock x:Name="OverlayShowTitle" Text="Show Title" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="24" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <TextBlock x:Name="OverlayShowSummary" Text="Summary will appear here..." Foreground="{DynamicResource SecondaryTextBrush}" FontSize="14" TextWrapping="Wrap" LineHeight="20" TextTrimming="CharacterEllipsis" MaxHeight="80" Margin="0,0,0,15"/>
+
+                    <!-- Horizontal Cast & Crew Strip -->
+                    <TextBlock Text="Cast &amp; Crew" Foreground="{DynamicResource MutedTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+                    
+                    <ListBox x:Name="ShowCastList" Height="125" Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             Focusable="False" IsTabStop="False">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="15,10"/>
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,14,0"/>
+                                <EventSetter Event="PreviewKeyDown" Handler="ShowCastItem_PreviewKeyDown"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="CastFocusRing" BorderThickness="3" BorderBrush="Transparent" CornerRadius="12" Padding="3">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                    <Setter TargetName="CastFocusRing" Property="BorderBrush" Value="{DynamicResource PrimaryTextBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Width="75" HorizontalAlignment="Center">
+                                    <Border Width="60" Height="60" CornerRadius="30" Background="#1A1A1A" HorizontalAlignment="Center" Margin="0,0,0,6">
+                                        <Image Source="{Binding ImageUrl}" Stretch="UniformToFill">
+                                            <Image.Clip>
+                                                <EllipseGeometry Center="30,30" RadiusX="30" RadiusY="30"/>
+                                            </Image.Clip>
+                                        </Image>
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" MaxHeight="30" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Role}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" TextAlignment="Center" TextWrapping="Wrap" MaxHeight="26" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+
+                <!-- Column 1: Tightened Seasons Border -->
+                <Border Grid.Column="1" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0" Margin="0,0,15,0" Padding="0,0,10,0" KeyboardNavigation.DirectionalNavigation="Continue">
+                    <ListBox x:Name="SeasonsList" ItemsSource="{Binding Seasons}" Background="Transparent" BorderThickness="0" SelectionChanged="SeasonsList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden" KeyboardNavigation.DirectionalNavigation="Continue">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="10,10"/>
                                 <Setter Property="Margin" Value="0,0,0,5"/>
                                 <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
-                                <Setter Property="FontSize" Value="18"/>
+                                <Setter Property="FontSize" Value="17"/>
                                 <Setter Property="FontWeight" Value="SemiBold"/>
                                 <Setter Property="Cursor" Value="Hand"/>
                                 <Setter Property="FocusVisualStyle" Value="{StaticResource StandardFocusStyle}"/>

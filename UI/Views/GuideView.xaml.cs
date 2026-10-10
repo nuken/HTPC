@@ -41,6 +41,9 @@ public partial class GuideView : UserControl
 	
 	private readonly System.Windows.Threading.DispatcherTimer _channelEntryTimer;
     private string _channelEntryBuffer = "";
+	
+	private DateTime _gridStartTime = DateTime.MinValue;
+    private readonly DispatcherTimer _timeLineTimer;
     
     // --- Overlay Filter Variables ---
     private string _activeCollectionName = "All Channels";
@@ -71,6 +74,10 @@ public partial class GuideView : UserControl
         _autoRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(secondsUntilNextHalfHour) };
         _autoRefreshTimer.Tick += AutoRefreshTimer_Tick;
         _autoRefreshTimer.Start();
+		
+		_timeLineTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _timeLineTimer.Tick += (s, e) => UpdateTimeLinePosition();
+        _timeLineTimer.Start();
     }
     
     private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
@@ -854,6 +861,8 @@ public partial class GuideView : UserControl
         var headers = new List<string>();
         DateTime now = DateTime.Now;
         DateTime start = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute >= 30 ? 30 : 0, 0);
+        
+        _gridStartTime = start; // <-- NEW: Store the exact start time of the physical grid
 
         for (int i = 0; i < 10; i++)
         {
@@ -861,6 +870,30 @@ public partial class GuideView : UserControl
             start = start.AddMinutes(30);
         }
         TimeHeadersControl.ItemsSource = headers;
+        
+        UpdateTimeLinePosition(); // <-- NEW: Sync the line immediately 
+    }
+
+    // --- NEW: Time Line Math Engine ---
+    private void UpdateTimeLinePosition()
+    {
+        if (_gridStartTime == DateTime.MinValue || CurrentTimeLine == null) return;
+        
+        double minutesPassed = (DateTime.Now - _gridStartTime).TotalMinutes;
+        
+        // At 240px per 30 min, 1 minute = exactly 8 physical pixels
+        double offsetPixels = minutesPassed * 8.0; 
+        
+        // Ensure the line stays hidden if we view past/future blocks off-screen
+        if (offsetPixels >= 0 && offsetPixels <= (10 * 240)) 
+        {
+            CurrentTimeLine.Margin = new Thickness(offsetPixels, 0, 0, 0);
+            CurrentTimeLine.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            CurrentTimeLine.Visibility = Visibility.Collapsed;
+        }
     }
     
     // --- CUSTOM SORTING LOGIC ---

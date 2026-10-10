@@ -36,6 +36,7 @@ public partial class ShowsView : UserControl
     public ObservableCollection<MediaItem> ShowLibrary { get; set; } = new ObservableCollection<MediaItem>();
     public ObservableCollection<int> Seasons { get; set; } = new ObservableCollection<int>();
     public ObservableCollection<MediaItem> CurrentEpisodes { get; set; } = new ObservableCollection<MediaItem>();
+	public ObservableCollection<CastMember> ShowCredits { get; set; } = new ObservableCollection<CastMember>();
 
     private List<MediaItem> _allEpisodesForSelectedShow = new List<MediaItem>();
 
@@ -60,6 +61,7 @@ public partial class ShowsView : UserControl
         InitializeComponent();
         _libraryService = libraryService;
         _serverManager = serverManager;
+		ShowCastList.ItemsSource = ShowCredits;
         this.DataContext = this;
 
         _typingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
@@ -155,6 +157,49 @@ public partial class ShowsView : UserControl
                         menuItem.Visibility = episode.IsFavorite ? Visibility.Visible : Visibility.Collapsed;
                 }
             }
+        }
+    }
+	
+	private void ShowCastItem_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var command = InputMapper.GetCommand(e.Key);
+        var currentItem = sender as ListBoxItem;
+        if (currentItem == null) return;
+
+        int index = ShowCastList.ItemContainerGenerator.IndexFromContainer(currentItem);
+
+        if (command == HtpcCommand.Up)
+        {
+            BingeShowBtn.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Right)
+        {
+            // If on the last cast member, route over to SeasonsList
+            if (index == ShowCastList.Items.Count - 1)
+            {
+                if (SeasonsList.Items.Count > 0)
+                {
+                    int targetIndex = SeasonsList.SelectedIndex >= 0 ? SeasonsList.SelectedIndex : 0;
+                    var seasonItem = SeasonsList.ItemContainerGenerator.ContainerFromIndex(targetIndex) as UIElement;
+                    seasonItem?.Focus();
+                }
+                e.Handled = true;
+            }
+        }
+        else if (command == HtpcCommand.Left && index == 0)
+        {
+            e.Handled = true; // Cage focus on the left boundary
+        }
+        else if (command == HtpcCommand.Back)
+        {
+            CloseOverlay_Click(null!, null!);
+            ShowsGrid.Focus();
+            e.Handled = true;
+        }
+        else if (command == HtpcCommand.Select || e.Key == Key.Enter)
+        {
+            e.Handled = true; // No-op action on select
         }
     }
 
@@ -581,7 +626,9 @@ public partial class ShowsView : UserControl
             SeasonsList.SelectedIndex = -1;
             CurrentEpisodes.Clear();
             Seasons.Clear();
+            ShowCredits.Clear();
 
+            // Fetch Season Episodes
             _allEpisodesForSelectedShow = await _libraryService.GetEpisodesForShowAsync(show.Title) ?? new List<MediaItem>();
 
             if (_allEpisodesForSelectedShow.Any())
@@ -589,6 +636,90 @@ public partial class ShowsView : UserControl
                 var uniqueSeasons = _allEpisodesForSelectedShow.Select(ep => ep.SeasonNumber).Distinct().OrderBy(s => s).ToList();
                 foreach (var s in uniqueSeasons) Seasons.Add(s);
             }
+
+            // Fetch Show Group Metadata & Credits
+            _ = Task.Run(async () =>
+            {
+                var activeServer = _serverManager.GetActiveServer();
+                if (activeServer == null || string.IsNullOrWhiteSpace(show.Id)) return;
+
+                string url = $"http://{activeServer.IpAddress}:{activeServer.Port}/dvr/groups/{show.Id}?raw=false";
+                try
+                {
+                    using var client = new System.Net.Http.HttpClient();
+                    string json = await client.GetStringAsync(url);
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    var root = doc.RootElement;
+
+                    // --- NEW: Grab the high-res vertical TMDB poster ---
+                    string verticalPosterUrl = "";
+                    if (root.TryGetProperty("SeriesInfo", out var sInfo) && sInfo.TryGetProperty("TMDB", out var tmdb))
+                    {
+                        if (tmdb.TryGetProperty("PosterURL", out var pUrl) && pUrl.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            verticalPosterUrl = pUrl.GetString() ?? "";
+                        }
+                    }
+
+                    System.Text.Json.JsonElement creditsElem;
+                    bool hasCredits = root.TryGetProperty("Credits", out creditsElem) && creditsElem.ValueKind == System.Text.Json.JsonValueKind.Array;
+                    
+                    if (!hasCredits && root.TryGetProperty("SeriesInfo", out var seriesInfo) && seriesInfo.TryGetProperty("TMDB", out var seriesTmdb))
+                    {
+                        hasCredits = seriesTmdb.TryGetProperty("Credits", out creditsElem) && creditsElem.ValueKind == System.Text.Json.JsonValueKind.Array;
+                    }
+
+                    var parsedCredits = new List<CastMember>();
+                    if (hasCredits)
+                    {
+                        int count = 0;
+                        foreach (var credit in creditsElem.EnumerateArray())
+                        {
+                            if (count >= 15) break;
+
+                            string name = credit.TryGetProperty("Name", out var n) ? n.GetString() ?? "" : "";
+                            string character = credit.TryGetProperty("Character", out var c) ? c.GetString() ?? "" : "";
+                            string job = credit.TryGetProperty("Job", out var j) ? j.GetString() ?? "" : "";
+                            string img = credit.TryGetProperty("Image", out var i) ? i.GetString() ?? "" : "";
+
+                            if (!string.IsNullOrWhiteSpace(name))
+                            {
+                                parsedCredits.Add(new CastMember
+                                {
+                                    Name = name,
+                                    Role = !string.IsNullOrWhiteSpace(character) ? character : job,
+                                    ImageUrl = img
+                                });
+                                count++;
+                            }
+                        }
+                    }
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        // --- NEW: Swap to the beautiful vertical poster if we found one! ---
+                        if (!string.IsNullOrWhiteSpace(verticalPosterUrl))
+                        {
+                            try 
+                            {
+                                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                                bmp.BeginInit();
+                                bmp.UriSource = new Uri(verticalPosterUrl, UriKind.RelativeOrAbsolute);
+                                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; 
+                                bmp.EndInit();
+                                OverlayShowPoster.Source = bmp;
+                                OverlayShowPoster.Stretch = System.Windows.Media.Stretch.UniformToFill; // Safe to fill now!
+                            } catch { }
+                        }
+
+                        if (parsedCredits.Count > 0)
+                        {
+                            foreach (var person in parsedCredits) ShowCredits.Add(person);
+                        }
+                    });
+                }
+                catch { }
+            });
 
             EpisodesOverlay.Visibility = Visibility.Visible;
             if (Seasons.Count > 0) SeasonsList.SelectedIndex = 0;
@@ -607,8 +738,8 @@ public partial class ShowsView : UserControl
             MessageBox.Show($"Crash Prevented!\n\nError: {ex.Message}", "Debugging Info", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
-
-    private void SeasonsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    
+	private void SeasonsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         try
         {
@@ -647,10 +778,19 @@ public partial class ShowsView : UserControl
             e.Handled = true;
         }
        else if (command == HtpcCommand.Left)
+    {
+        if (ShowCastList.Items.Count > 0)
         {
-            BingeShowBtn.Focus(); 
-            e.Handled = true;
+            ShowCastList.UpdateLayout();
+            var lastCast = ShowCastList.ItemContainerGenerator.ContainerFromIndex(ShowCastList.Items.Count - 1) as UIElement;
+            lastCast?.Focus();
         }
+        else
+        {
+            BingeShowBtn.Focus();
+        }
+        e.Handled = true;
+    }
         else if (command == HtpcCommand.Back)
         {
             CloseOverlay_Click(null!, null!);
@@ -692,7 +832,13 @@ public partial class ShowsView : UserControl
         }
         else if (command == HtpcCommand.Down && sender == BingeShowBtn)
         {
-            e.Handled = true; 
+            if (ShowCastList.Items.Count > 0)
+            {
+                ShowCastList.UpdateLayout();
+                var firstCast = ShowCastList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+                firstCast?.Focus();
+            }
+            e.Handled = true;
         }
         else if (command == HtpcCommand.Up && sender == BackToLibraryBtn)
         {

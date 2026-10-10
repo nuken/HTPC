@@ -37,19 +37,19 @@ public class MpvPlaybackService : IDisposable
 	private CancellationTokenSource? _loadingWatchdogCts;
     private int _retryCount = 0;
     private const int MaxRetries = 2;
-    private const int LoadingTimeoutSeconds = 30;
+    private const int LoadingTimeoutSeconds = 60;
 	
 	// --- NEW: TUNER DIAGNOSTICS SWITCH ---
     private bool EnableTunerDiagnostics = false;
 
     private void LogTuner(string message)
+{
+    if (EnableTunerDiagnostics)
     {
-        if (EnableTunerDiagnostics)
-        {
-            // This will print directly to the command prompt terminal
-            Console.WriteLine($"[TUNER] {DateTime.Now:HH:mm:ss.fff} [Thread: {System.Threading.Thread.CurrentThread.ManagedThreadId}] {message}");
-        }
+        string logLine = $"[TUNER] {DateTime.Now:HH:mm:ss.fff} [Thread: {System.Threading.Thread.CurrentThread.ManagedThreadId}] {message}\n";
+        System.IO.File.AppendAllText("tuner_diagnostics.log", logLine);
     }
+}
 	private DateTime _lastPositionChangeTime = DateTime.UtcNow;
     private double _lastWatchdogPosition = -1;
 
@@ -112,6 +112,8 @@ public class MpvPlaybackService : IDisposable
         Libmpv.mpv_set_option_string(_mpvContext, "gpu-api", "d3d11");
         Libmpv.mpv_set_option_string(_mpvContext, "hwdec", "auto-copy");
         Libmpv.mpv_set_option_string(_mpvContext, "ytdl", "yes");
+		Libmpv.mpv_set_option_string(_mpvContext, "ytdl-format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best");
+		Libmpv.mpv_set_option_string(_mpvContext, "ytdl-raw-options", "extractor-args=youtube:player_client=tv,web");
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
         
         // 1. Enable disk caching so RAM is not exhausted
@@ -131,13 +133,13 @@ public class MpvPlaybackService : IDisposable
         // The lavf fastseek command ensures HLS playlists probe instantly without stalling
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-o", "fflags=+fastseek");
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-lavf-analyzeduration", "1.5");
-        Libmpv.mpv_set_option_string(_mpvContext, "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+       Libmpv.mpv_set_option_string(_mpvContext, "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36");
 
         // --- NEW: Aggressive Network Timeout Settings for HLS ---
         // Force the network connection to drop if the server takes longer than 5 seconds to reply
-        Libmpv.mpv_set_option_string(_mpvContext, "network-timeout", "20"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "network-timeout", "60"); 
         // Force HLS playlist parsing to timeout if the playlist stalls
-        Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=20000000"); 
+        Libmpv.mpv_set_option_string(_mpvContext, "stream-lavf-o", "timeout=60000000"); 
         // Stop MPV from hanging infinitely if the demuxer gets confused by broken timestamps
         Libmpv.mpv_set_option_string(_mpvContext, "demuxer-max-back-bytes", "500M"); // Increased to 500MB
         Libmpv.mpv_set_option_string(_mpvContext, "force-seekable", "yes");         // Force seek on Live TV
@@ -291,10 +293,51 @@ public class MpvPlaybackService : IDisposable
         }
         _loadingWatchdogCts = new CancellationTokenSource();
 
-        LogTuner($"Offloading native MPV loadfile command to background task...");
+       LogTuner($"Offloading native MPV loadfile command to background task...");
         
-        Task.Run(() =>
+        Task.Run(async () =>
         {
+            // 1. Manually resolve the local Pluto Bridge 302 Redirect to get the raw .m3u8 URL
+            if (streamUrl.Contains("/watch/vod/"))
+            {
+                try
+                {
+                    LogTuner("Resolving VOD HTTP 302 redirect manually...");
+                    var handler = new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false };
+                    using var client = new System.Net.Http.HttpClient(handler);
+                    
+                    var response = await client.GetAsync(streamUrl);
+                    if (response.StatusCode == System.Net.HttpStatusCode.Redirect || response.StatusCode == System.Net.HttpStatusCode.Found)
+                    {
+                        if (response.Headers.Location != null)
+                        {
+                            streamUrl = response.Headers.Location.ToString();
+                            LogTuner($"Extracted direct Pluto HLS URL: {streamUrl}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogTuner($"Failed to resolve VOD redirect: {ex.Message}");
+                }
+            }
+
+            // 2. Disable yt-dlp for native HLS streams
+            if (streamUrl.Contains("192.168.") || streamUrl.Contains("pluto.tv"))
+            {
+                Libmpv.mpv_set_property_string(_mpvContext, "ytdl", "no");
+                
+                // 3. Inject required CDN authentication headers to prevent 403 Forbidden drops
+                if (streamUrl.Contains("pluto.tv"))
+                {
+                    Libmpv.mpv_set_option_string(_mpvContext, "http-header-fields", "Origin: https://pluto.tv/,Referer: https://pluto.tv/");
+                }
+            }
+            else
+            {
+                Libmpv.mpv_set_property_string(_mpvContext, "ytdl", "yes");
+            }
+
             LogTuner($"Executing loadfile: {streamUrl}");
             Libmpv.mpv_command_string(_mpvContext, $"loadfile \"{streamUrl}\"");
 

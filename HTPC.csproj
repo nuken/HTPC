@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
-	<Version>1.5.3</Version>
+	<Version>1.5.4</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -38,9 +38,10 @@
   </ItemGroup>
   
  <ItemGroup>
-  <None Update="yt-dlp.exe">
+  <Content Include="yt-dlp.exe">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-  </None>
+    <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+  </Content>
 </ItemGroup>
   
   <ItemGroup>

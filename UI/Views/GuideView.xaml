@@ -323,6 +323,11 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+					<Border x:Name="CurrentTimeLine" Grid.RowSpan="2" Width="3" Background="#e65339" HorizontalAlignment="Left" Panel.ZIndex="50" Visibility="Collapsed">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#e65339" BlurRadius="4" ShadowDepth="0" Opacity="0.8"/>
+                        </Border.Effect>
+                    </Border>
                 </Grid>
             </ScrollViewer>
         </Grid>
