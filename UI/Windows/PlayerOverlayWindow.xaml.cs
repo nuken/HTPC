@@ -859,6 +859,8 @@ public partial class PlayerOverlayWindow : Window
         }
     }
     
+    private DispatcherTimer? _volumeSaveTimer;
+
     private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_mpvService != null)
@@ -867,11 +869,21 @@ public partial class PlayerOverlayWindow : Window
             _mpvService.SetVolume(newVolume);
             WakeUpUi();
 
-            // NEW: Save the volume so it survives a restart
-            var prefs = PreferencesManager.Load();
-            prefs.Volume = newVolume;
-            // Assuming your manager has a save method, it usually looks like this:
-            PreferencesManager.Save(prefs); 
+            // Debounce the disk save to prevent file locking
+            if (_volumeSaveTimer == null)
+            {
+                _volumeSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+                _volumeSaveTimer.Tick += (s, ev) => 
+                {
+                    _volumeSaveTimer.Stop();
+                    var prefs = PreferencesManager.Load();
+                    prefs.Volume = newVolume;
+                    PreferencesManager.Save(prefs);
+                };
+            }
+            
+            _volumeSaveTimer.Stop();
+            _volumeSaveTimer.Start();
         }
     }
 

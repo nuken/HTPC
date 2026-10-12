@@ -91,39 +91,82 @@ public class AppPreferences
 
 public static class PreferencesManager
 {
-    //private static readonly string SettingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "htpc_prefs.json");
-    private static readonly string SettingsFile = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath) ?? AppDomain.CurrentDomain.BaseDirectory, "htpc_prefs.json");
+    private static readonly object _lock = new object();
+    private static AppPreferences? _cachedPrefs = null;
+
+    private static readonly string SettingsFile = Path.Combine(
+        Path.GetDirectoryName(Environment.ProcessPath) ?? AppDomain.CurrentDomain.BaseDirectory, 
+        "htpc_prefs.json");
+
     public static AppPreferences Load()
     {
-        try
+        lock (_lock)
         {
-            if (File.Exists(SettingsFile))
+            // 1. Serve immediately from memory if already loaded
+            if (_cachedPrefs != null)
             {
-                var json = File.ReadAllText(SettingsFile);
-                return JsonSerializer.Deserialize<AppPreferences>(json) ?? new AppPreferences();
+                return _cachedPrefs;
             }
+
+            // 2. Initial load from disk
+            try
+            {
+                if (File.Exists(SettingsFile))
+                {
+                    var json = File.ReadAllText(SettingsFile);
+                    _cachedPrefs = JsonSerializer.Deserialize<AppPreferences>(json) ?? new AppPreferences();
+                    return _cachedPrefs;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PREFS] Failed to read settings file: {ex.Message}");
+            }
+
+            // 3. Fallback to default if file does not exist or failed initial parse
+            _cachedPrefs = new AppPreferences();
+            return _cachedPrefs;
         }
-        catch { }
-        return new AppPreferences(); // Defaults
     }
 
     public static void Save(AppPreferences prefs)
     {
-        try
+        lock (_lock)
         {
-            string json = JsonSerializer.Serialize(prefs, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(SettingsFile, json);
+            // 1. Keep memory state updated immediately
+            _cachedPrefs = prefs;
+
+            // 2. Persist safely to disk with an OS lock retry loop
+            int retries = 3;
+            while (retries > 0)
+            {
+                try
+                {
+                    string json = JsonSerializer.Serialize(prefs, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(SettingsFile, json);
+                    break; // Success, exit the retry loop
+                }
+                catch (IOException)
+                {
+                    retries--;
+                    if (retries == 0) Console.WriteLine("[PREFS] File is locked by OS. Save failed.");
+                    System.Threading.Thread.Sleep(100); // Wait 100ms for the OS/Antivirus to release the file
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[PREFS] Error writing settings to disk: {ex.Message}");
+                    break;
+                }
+            }
         }
-        catch { }
     }
-	
-	public static string NormalizeAdbUrl(string? input)
+
+    public static string NormalizeAdbUrl(string? input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
         
         string trimmed = input.Trim().TrimEnd('/');
         
-        // Prepend http:// if the user only entered IP and port (e.g. "192.168.86.64:8888")
         if (!trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
             !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
@@ -133,43 +176,53 @@ public static class PreferencesManager
         return trimmed;
     }
 
-
-    // Keeping your original method signatures so we don't break existing code
+    // Helper methods now operate safely against the synchronized memory cache
     public static string LoadMovieSort() => Load().MovieSort;
     public static string LoadGuideCollection() => Load().GuideCollection;
     
     public static void SaveMovieSort(string sortValue) 
     {
-        var prefs = Load();
-        prefs.MovieSort = sortValue;
-        Save(prefs);
+        lock (_lock)
+        {
+            var prefs = Load();
+            prefs.MovieSort = sortValue;
+            Save(prefs);
+        }
     }
 
     public static string LoadTheme() => Load().AppTheme;
 
     public static void SaveTheme(string themeValue)
     {
-        var prefs = Load();
-        prefs.AppTheme = themeValue;
-        Save(prefs);
+        lock (_lock)
+        {
+            var prefs = Load();
+            prefs.AppTheme = themeValue;
+            Save(prefs);
+        }
     }
 
-    // --- NEW: COLLECTION SAVING/LOADING ---
     public static string LoadCollectionSort() => Load().CollectionSort;
     
     public static void SaveCollectionSort(string sortValue) 
     {
-        var prefs = Load();
-        prefs.CollectionSort = sortValue;
-        Save(prefs);
+        lock (_lock)
+        {
+            var prefs = Load();
+            prefs.CollectionSort = sortValue;
+            Save(prefs);
+        }
     }
 
     public static string LoadCollectionOrder() => Load().CollectionOrder;
     
     public static void SaveCollectionOrder(string orderValue) 
     {
-        var prefs = Load();
-        prefs.CollectionOrder = orderValue;
-        Save(prefs);
+        lock (_lock)
+        {
+            var prefs = Load();
+            prefs.CollectionOrder = orderValue;
+            Save(prefs);
+        }
     }
 }
