@@ -115,6 +115,7 @@ public class MpvPlaybackService : IDisposable
 		Libmpv.mpv_set_option_string(_mpvContext, "ytdl-format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best");
 		Libmpv.mpv_set_option_string(_mpvContext, "ytdl-raw-options", "extractor-args=youtube:player_client=tv,web");
         Libmpv.mpv_set_option_string(_mpvContext, "cache", "yes");
+		Libmpv.mpv_set_option_string(_mpvContext, "hls-bitrate", "max");
         
         // 1. Enable disk caching so RAM is not exhausted
         Libmpv.mpv_set_option_string(_mpvContext, "cache-on-disk", "yes");
