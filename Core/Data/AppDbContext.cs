@@ -37,14 +37,16 @@ public class AppDbContext : DbContext
             );
         ");
 
-        // 2. Safely add DefaultCollectionId to ServerConfigs if upgrading from an older schema
-        try
+        // 2. Check if DefaultCollectionId exists before running ALTER TABLE so EF Core doesn't log EventId 20102
+        using var conn = Database.GetDbConnection();
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('ServerConfigs') WHERE name = 'DefaultCollectionId';";
+        bool columnExists = Convert.ToInt64(cmd.ExecuteScalar()) > 0;
+
+        if (!columnExists)
         {
             Database.ExecuteSqlRaw(@"ALTER TABLE ""ServerConfigs"" ADD COLUMN ""DefaultCollectionId"" TEXT NULL;");
-        }
-        catch
-        {
-            // Column already exists; ignore
         }
     }
 
