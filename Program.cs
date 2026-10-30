@@ -71,10 +71,10 @@ public class Program
         host.Start();
 
         using (var scope = host.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<HTPC.Core.Data.AppDbContext>();
-            db.Database.EnsureCreated();
-        }
+{
+    var db = scope.ServiceProvider.GetRequiredService<HTPC.Core.Data.AppDbContext>();
+    db.InitializeSchema();
+}
 
         var playerService = host.Services.GetRequiredService<MpvPlaybackService>();
 

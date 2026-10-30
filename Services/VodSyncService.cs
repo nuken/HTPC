@@ -34,7 +34,6 @@ public class VodSyncService
     private readonly HttpClient _httpClient;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<VodSyncService> _logger;
-    
 
     public VodSyncService(HttpClient httpClient, IServiceScopeFactory scopeFactory, ILogger<VodSyncService> logger)
     {
@@ -46,30 +45,28 @@ public class VodSyncService
         {
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
         }
-
-        
     }
 
     private void LogToFile(string message)
-{
-    _logger.LogInformation(message);
-}
+    {
+        _logger.LogInformation(message);
+    }
 
     public async Task SyncPlutoTvCatalogAsync()
     {
-        LogToFile("Starting direct PlutoForChannels VOD proxy sync...");
-
-        var prefs = PreferencesManager.Load();
-        string apiUrl = prefs.AdbTunerUrl; // We are repurposing this setting to hold the vod.json link
-
-        if (string.IsNullOrWhiteSpace(apiUrl) || !apiUrl.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            LogToFile("Failed: The AdbTunerUrl setting must point to the vod.json file.");
-            return;
-        }
-
         try
         {
+            LogToFile("Starting direct PlutoForChannels VOD proxy sync...");
+
+            var prefs = PreferencesManager.Load();
+            string? apiUrl = prefs?.AdbTunerUrl;
+
+            if (string.IsNullOrWhiteSpace(apiUrl) || !apiUrl.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                LogToFile("Failed: The AdbTunerUrl setting must point to the vod.json file.");
+                return;
+            }
+
             LogToFile($"Downloading VOD catalog from {apiUrl}...");
             var proxyItems = await _httpClient.GetFromJsonAsync<List<ProxyVodItem>>(apiUrl);
             
@@ -135,7 +132,7 @@ public class VodSyncService
                         Overview = item.Summary ?? "",
                         Genre = item.Genre ?? "Movies",
                         ProviderKey = "pluto",
-                        NativeDeepLink = item.VideoUrl, // Store the direct proxy HLS URL here!
+                        NativeDeepLink = item.VideoUrl,
                         IsActive = true,
                         LastVerified = DateTime.UtcNow
                     });
@@ -151,9 +148,9 @@ public class VodSyncService
         catch (Exception ex)
         {
             LogToFile($"FATAL EXCEPTION during proxy sync: {ex.Message}");
-            if (Application.Current != null)
+            if (Application.Current != null && Application.Current.Dispatcher != null)
             {
-                Application.Current.Dispatcher.Invoke(() =>
+                Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     MessageBox.Show($"The VOD Sync failed to download.\n\nError: {ex.Message}", "VOD Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });

@@ -8,17 +8,28 @@ namespace HTPC
     public partial class App : Application
     {
         // Give this a unique name so Windows knows exactly which app to track
-        private static Mutex _mutex = new Mutex(true, "HTPC_Unique_App_Mutex_Lock");
+        private static Mutex? _mutex;
 
-        protected override void OnStartup(StartupEventArgs e)
-        {
-            // 1. MUTEX LOCK: Check if another instance is already running
-            if (!_mutex.WaitOne(TimeSpan.Zero, true))
-            {
-                MessageBox.Show("The application is already running in the background.", "HTPC", MessageBoxButton.OK, MessageBoxImage.Information);
-                Current.Shutdown();
-                return;
-            }
+protected override void OnStartup(StartupEventArgs e)
+{
+    _mutex = new Mutex(false, "HTPC_Unique_App_Mutex_Lock");
+    bool hasHandle = false;
+    try
+    {
+        hasHandle = _mutex.WaitOne(TimeSpan.Zero, false);
+    }
+    catch (AbandonedMutexException)
+    {
+        // Previous instance crashed; we now own the mutex
+        hasHandle = true;
+    }
+
+    if (!hasHandle)
+    {
+        MessageBox.Show("The application is already running in the background.", "HTPC", MessageBoxButton.OK, MessageBoxImage.Information);
+        Environment.Exit(0);
+        return;
+    }
 
             // 2. Catch errors from background threads
             AppDomain.CurrentDomain.UnhandledException += (s, ex) =>
